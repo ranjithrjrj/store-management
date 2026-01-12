@@ -580,8 +580,6 @@ const SalesInvoice = () => {
           </div>
         </div>
       )}
-        </div>
-      </div>
     </div>
   );
 };
