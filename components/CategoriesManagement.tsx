@@ -187,18 +187,18 @@ const CategoriesManagement = () => {
   };
 
   const filteredCategories = categories.filter(cat => {
-    const matchesSearch = cat.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      (cat.description && cat.description.toLowerCase().includes(searchTerm.toLowerCase()));
-    
-    // Fixed: is_active is typed as boolean, so check directly
-    const isActive = cat.is_active === true;
-    const matchesActive = showInactive || isActive;
-    
-    return matchesSearch && matchesActive;
-  });
+  const matchesSearch = cat.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    (cat.description && cat.description.toLowerCase().includes(searchTerm.toLowerCase()));
+  
+  // Clean boolean check
+  const isActive = cat.is_active === true;
+  const matchesActive = showInactive || isActive;
+  
+  return matchesSearch && matchesActive;
+});
 
-  const activeCount = categories.filter(c => c.is_active === true).length;
-  const inactiveCount = categories.filter(c => c.is_active === false).length;
+  const activeCount = categories.filter(c => c.is_active).length;
+const inactiveCount = categories.filter(c => !c.is_active).length;
 
   if (error && !loading) {
     return (
@@ -291,7 +291,7 @@ const CategoriesManagement = () => {
               <div
                 key={category.id}
                 className={`p-4 hover:bg-gray-50 transition-colors ${!category.is_active ? 'opacity-60' : ''}`}
-              >
+>
                 <div className="flex items-start justify-between gap-4">
                   <div className="flex items-start gap-3 flex-1 min-w-0">
                     <div className={`p-2 ${theme.classes.bgPrimaryLight} rounded-lg flex-shrink-0`}>
