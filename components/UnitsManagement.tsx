@@ -37,6 +37,13 @@ const UnitsManagement = () => {
     is_active: true
   });
 
+  // Helper to normalize is_active from database
+  const normalizeBoolean = (value: boolean | string | null): boolean => {
+    if (value === true || value === 'true') return true;
+    if (value === false || value === 'false') return false;
+    return true; // Default to true if null or undefined
+  };
+
   useEffect(() => {
     loadUnits();
   }, []);
@@ -67,7 +74,7 @@ const UnitsManagement = () => {
     setFormData({
       name: unit.name,
       abbreviation: unit.abbreviation,
-      is_active: unit.is_active
+      is_active: normalizeBoolean(unit.is_active)
     });
     setShowModal(true);
   };

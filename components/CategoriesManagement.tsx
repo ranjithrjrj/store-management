@@ -36,6 +36,13 @@ const CategoriesManagement = () => {
     is_active: true
   });
 
+  // Helper to normalize is_active from database
+  const normalizeBoolean = (value: boolean | string | null): boolean => {
+    if (value === true || value === 'true') return true;
+    if (value === false || value === 'false') return false;
+    return true; // Default to true if null or undefined
+  };
+
   useEffect(() => {
     loadCategories();
   }, []);
@@ -72,7 +79,7 @@ const CategoriesManagement = () => {
     setFormData({
       name: category.name,
       description: category.description || '',
-      is_active: category.is_active
+      is_active: normalizeBoolean(category.is_active)
     });
     setShowModal(true);
   };

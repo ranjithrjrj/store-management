@@ -50,6 +50,13 @@ const CustomersManagement = () => {
     is_active: true
   });
 
+  // Helper to normalize is_active from database
+  const normalizeBoolean = (value: boolean | string | null): boolean => {
+    if (value === true || value === 'true') return true;
+    if (value === false || value === 'false') return false;
+    return true; // Default to true if null or undefined
+  };
+
   useEffect(() => {
     loadCustomers();
   }, []);
@@ -98,7 +105,7 @@ const CustomersManagement = () => {
       state: customer.state || 'Tamil Nadu',
       state_code: customer.state_code || '33',
       pincode: customer.pincode || '',
-      is_active: customer.is_active
+      is_active: normalizeBoolean(customer.is_active)
     });
     setShowModal(true);
   };

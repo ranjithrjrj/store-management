@@ -85,6 +85,13 @@ const ItemsManagement = () => {
     is_active: true
   });
 
+  // Helper to normalize is_active from database
+  const normalizeBoolean = (value: boolean | string | null): boolean => {
+    if (value === true || value === 'true') return true;
+    if (value === false || value === 'false') return false;
+    return true; // Default to true if null or undefined
+  };
+
   useEffect(() => {
     loadData();
   }, []);
@@ -143,7 +150,7 @@ const ItemsManagement = () => {
       wholesale_price: item.wholesale_price,
       discount_percent: item.discount_percent,
       min_stock_level: item.min_stock_level,
-      is_active: item.is_active
+      is_active: normalizeBoolean(item.is_active)
     });
     setShowModal(true);
     setOpenDropdown(null);

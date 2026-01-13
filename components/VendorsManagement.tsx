@@ -54,6 +54,13 @@ const VendorsManagement = () => {
     is_active: true
   });
 
+  // Helper to normalize is_active from database
+  const normalizeBoolean = (value: boolean | string | null): boolean => {
+    if (value === true || value === 'true') return true;
+    if (value === false || value === 'false') return false;
+    return true; // Default to true if null or undefined
+  };
+
   useEffect(() => {
     loadVendors();
   }, []);
@@ -106,7 +113,7 @@ const VendorsManagement = () => {
       state_code: vendor.state_code || '33',
       pincode: vendor.pincode || '',
       payment_terms: vendor.payment_terms || '',
-      is_active: vendor.is_active
+      is_active: normalizeBoolean(vendor.is_active)
     });
     setShowModal(true);
   };
