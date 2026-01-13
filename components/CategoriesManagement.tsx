@@ -12,7 +12,7 @@ type Category = {
   id: string;
   name: string;
   description?: string;
-  is_active: boolean;
+  is_active: boolean | string;
   created_at: string;
 };
 
@@ -190,15 +190,15 @@ const CategoriesManagement = () => {
     const matchesSearch = cat.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
       (cat.description && cat.description.toLowerCase().includes(searchTerm.toLowerCase()));
     
-    // Ensure is_active is treated as boolean
-    const isActive = cat.is_active === true || cat.is_active === 'true';
+    // Fixed: is_active is typed as boolean, so check directly
+    const isActive = cat.is_active === true;
     const matchesActive = showInactive || isActive;
     
     return matchesSearch && matchesActive;
   });
 
-  const activeCount = categories.filter(c => c.is_active === true || c.is_active === 'true').length;
-  const inactiveCount = categories.filter(c => c.is_active === false || c.is_active === 'false' || c.is_active === null).length;
+  const activeCount = categories.filter(c => c.is_active === true).length;
+  const inactiveCount = categories.filter(c => c.is_active === false).length;
 
   if (error && !loading) {
     return (
@@ -290,7 +290,7 @@ const CategoriesManagement = () => {
             {filteredCategories.map((category) => (
               <div
                 key={category.id}
-                className={`p-4 hover:bg-gray-50 transition-colors ${(category.is_active === false || category.is_active === 'false') ? 'opacity-60' : ''}`}
+                className={`p-4 hover:bg-gray-50 transition-colors ${!category.is_active ? 'opacity-60' : ''}`}
               >
                 <div className="flex items-start justify-between gap-4">
                   <div className="flex items-start gap-3 flex-1 min-w-0">
@@ -300,7 +300,7 @@ const CategoriesManagement = () => {
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 mb-1">
                         <h3 className="font-semibold text-gray-900">{category.name}</h3>
-                        {(category.is_active === false || category.is_active === 'false') && (
+                        {!category.is_active && (
                           <span className="text-xs px-2 py-0.5 bg-gray-200 text-gray-600 rounded">Inactive</span>
                         )}
                       </div>
@@ -318,13 +318,13 @@ const CategoriesManagement = () => {
                     <button
                       onClick={() => handleToggleActive(category.id, category.is_active, category.name)}
                       className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
-                        (category.is_active === true || category.is_active === 'true') ? theme.classes.bgPrimary : 'bg-gray-200'
+                        category.is_active ? theme.classes.bgPrimary : 'bg-gray-200'
                       }`}
-                      title={(category.is_active === true || category.is_active === 'true') ? 'Deactivate' : 'Activate'}
+                      title={category.is_active ? 'Deactivate' : 'Activate'}
                     >
                       <span
                         className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                          (category.is_active === true || category.is_active === 'true') ? 'translate-x-6' : 'translate-x-1'
+                          category.is_active ? 'translate-x-6' : 'translate-x-1'
                         }`}
                       />
                     </button>
