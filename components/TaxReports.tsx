@@ -298,7 +298,7 @@ const TaxReports = () => {
                 </p>
               </div>
               <div className="text-right">
-                <Badge variant={netGSTLiability >= 0 ? 'warning' : 'success'} size="lg">
+                <Badge variant={netGSTLiability >= 0 ? 'warning' : 'success'} size="md">
                   {netGSTLiability >= 0 ? 'Payable' : 'Refundable'}
                 </Badge>
                 <p className={`text-3xl font-bold mt-2 ${netGSTLiability >= 0 ? 'text-amber-600' : 'text-green-600'}`}>
