@@ -5,7 +5,7 @@
 import React, { useState, useEffect } from 'react';
 import { Package, Plus, Edit2, Trash2, X, Search } from 'lucide-react';
 import { itemsAPI, categoriesAPI, unitsAPI, supabase } from '@/lib/supabase';
-import { Button, Card, Input, Badge, EmptyState, LoadingSpinner, useToast } from '@/components/ui';
+import { Button, Card, Input, Badge, EmptyState, LoadingSpinner, ConfirmDialog, useToast } from '@/components/ui';
 import { useTheme } from '@/contexts/ThemeContext';
 
 type Item = {
