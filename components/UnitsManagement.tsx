@@ -4,9 +4,8 @@
 'use client';
 import React, { useState, useEffect } from 'react';
 import { Ruler, Plus, Edit2, Trash2, X, Search } from 'lucide-react';
-import { unitsAPI } from '@/lib/supabase';
-import { supabase } from '@/lib/supabase';
-import { Button, Card, Input, EmptyState, LoadingSpinner, ConfirmDialog, useToast } from '@/components/ui';
+import { supabase, unitsAPI } from '@/lib/supabase';
+import { Button, Card, Input, Badge, EmptyState, LoadingSpinner, ConfirmDialog, useToast } from '@/components/ui';
 import { useTheme } from '@/contexts/ThemeContext';
 
 type Unit = {
@@ -20,10 +19,12 @@ type Unit = {
 const UnitsManagement = () => {
   const { theme } = useTheme();
   const toast = useToast();
+  
   const [units, setUnits] = useState<Unit[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [showModal, setShowModal] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [showEditConfirm, setShowEditConfirm] = useState(false);
   const [showInactive, setShowInactive] = useState(false);
   const [editingUnit, setEditingUnit] = useState<Unit | null>(null);
   const [deletingUnit, setDeletingUnit] = useState<{ id: string; name: string } | null>(null);
@@ -52,6 +53,7 @@ const UnitsManagement = () => {
     try {
       setLoading(true);
       setError(null);
+
       const data = await unitsAPI.getAll();
       setUnits(data || []);
     } catch (err: any) {
@@ -80,30 +82,43 @@ const UnitsManagement = () => {
   };
 
   const handleSubmit = async () => {
+    if (!formData.name.trim()) {
+      toast.warning('Name required', 'Please enter a unit name.');
+      return;
+    }
+    if (!formData.abbreviation.trim()) {
+      toast.warning('Abbreviation required', 'Please enter an abbreviation.');
+      return;
+    }
+
+    // Show confirmation dialog
+    setShowEditConfirm(true);
+  };
+
+  const handleConfirmSubmit = async () => {
+    setShowEditConfirm(false);
     try {
       setSaving(true);
-      setError(null);
-
-      if (!formData.name.trim()) {
-        toast.warning('Name required', 'Please enter unit name.');
-        return;
-      }
-
-      if (!formData.abbreviation.trim()) {
-        toast.warning('Abbreviation required', 'Please enter unit abbreviation.');
-        return;
-      }
 
       if (editingUnit) {
-        await unitsAPI.update(editingUnit.id, formData as any);
+        await unitsAPI.update(editingUnit.id, {
+          name: formData.name.trim(),
+          abbreviation: formData.abbreviation.trim(),
+          is_active: formData.is_active
+        } as any);
         toast.success('Updated!', `Unit "${formData.name}" has been updated.`);
       } else {
-        await unitsAPI.create(formData as any);
-        toast.success('Created!', `Unit "${formData.name}" has been added.`);
+        await unitsAPI.create({
+          name: formData.name.trim(),
+          abbreviation: formData.abbreviation.trim(),
+          is_active: formData.is_active
+        } as any);
+        toast.success('Created!', `Unit "${formData.name}" has been created.`);
       }
 
       await loadUnits();
       setShowModal(false);
+      setFormData({ name: '', abbreviation: '', is_active: true });
     } catch (err: any) {
       console.error('Error saving unit:', err);
       toast.error('Failed to save', err.message || 'Could not save unit.');
@@ -121,19 +136,15 @@ const UnitsManagement = () => {
     if (!deletingUnit) return;
 
     try {
-      const { data: items, error: checkErr } = await supabase
+      // Check if unit is assigned to any items
+      const { data: items } = await supabase
         .from('items')
         .select('id')
         .eq('unit_id', deletingUnit.id)
         .limit(1);
 
-      if (checkErr) throw checkErr;
-
       if (items && items.length > 0) {
-        toast.warning(
-          'Cannot delete',
-          `Unit "${deletingUnit.name}" has items assigned. Please reassign them first.`
-        );
+        toast.warning('Cannot delete', 'This unit is assigned to one or more items.');
         setShowDeleteConfirm(false);
         setDeletingUnit(null);
         return;
@@ -141,7 +152,7 @@ const UnitsManagement = () => {
 
       await unitsAPI.delete(deletingUnit.id);
       await loadUnits();
-      toast.success('Deleted', `Unit "${deletingUnit.name}" has been removed.`);
+      toast.success('Deleted', `Unit "${deletingUnit.name}" has been deleted.`);
       setShowDeleteConfirm(false);
       setDeletingUnit(null);
     } catch (err: any) {
@@ -150,31 +161,13 @@ const UnitsManagement = () => {
     }
   };
 
-  const handleToggleActive = async (id: string, currentStatus: boolean | string | null, name: string) => {
-    try {
-      // Normalize the current status to boolean
-      const isCurrentlyActive = normalizeBoolean(currentStatus);
-      
-      await unitsAPI.update(id, { is_active: !isCurrentlyActive } as any);
-      await loadUnits();
-      toast.success(
-        !isCurrentlyActive ? 'Activated' : 'Deactivated',
-        `Unit "${name}" has been ${!isCurrentlyActive ? 'activated' : 'deactivated'}.`
-      );
-    } catch (err: any) {
-      console.error('Error updating status:', err);
-      toast.error('Failed to update', err.message || 'Could not update status.');
-    }
-  };
-
   const filteredUnits = units.filter(unit => {
     const matchesSearch = unit.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
       unit.abbreviation.toLowerCase().includes(searchTerm.toLowerCase());
     
-    // Ensure is_active is treated as boolean
     const isActive = unit.is_active === true || unit.is_active === 'true';
     const matchesActive = showInactive || isActive;
-    
+
     return matchesSearch && matchesActive;
   });
 
@@ -217,18 +210,18 @@ const UnitsManagement = () => {
 
       {/* Search & Filter */}
       <div className="grid grid-cols-1 md:grid-cols-12 gap-4">
-        <div className="md:col-span-9">
+        <div className="md:col-span-8">
           <Card padding="md">
             <Input
               leftIcon={<Search size={18} />}
-              placeholder="Search units..."
+              placeholder="Search units by name or abbreviation..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
             />
           </Card>
         </div>
         
-        <div className="md:col-span-3">
+        <div className="md:col-span-4">
           <Card padding="md">
             <label className="flex items-center gap-2 cursor-pointer">
               <input
@@ -237,7 +230,9 @@ const UnitsManagement = () => {
                 onChange={(e) => setShowInactive(e.target.checked)}
                 className={`rounded ${theme.classes.textPrimary}`}
               />
-              <span className="text-sm font-medium text-gray-700">Show Inactive ({inactiveCount})</span>
+              <span className="text-sm font-medium text-gray-700">
+                Show Inactive ({inactiveCount})
+              </span>
             </label>
           </Card>
         </div>
@@ -256,12 +251,12 @@ const UnitsManagement = () => {
             description={
               searchTerm
                 ? "Try adjusting your search terms"
-                : "Get started by creating your first unit"
+                : "Add your first unit to get started"
             }
             action={
               !searchTerm && (
                 <Button onClick={handleAddNew} variant="primary" icon={<Plus size={18} />}>
-                  Add Your First Unit
+                  Add First Unit
                 </Button>
               )
             }
@@ -273,52 +268,37 @@ const UnitsManagement = () => {
                 key={unit.id}
                 className={`p-4 hover:bg-gray-50 transition-colors ${(unit.is_active === false || unit.is_active === 'false') ? 'opacity-60' : ''}`}
               >
-                <div className="flex items-start justify-between gap-4">
-                  <div className="flex items-start gap-3 flex-1 min-w-0">
-                    <div className={`p-2 ${theme.classes.bgPrimaryLight} rounded-lg flex-shrink-0`}>
+                <div className="flex items-center justify-between gap-4">
+                  <div className="flex items-center gap-3 flex-1">
+                    <div className={`p-2 ${theme.classes.bgPrimaryLight} rounded-lg`}>
                       <Ruler size={20} className={theme.classes.textPrimary} />
                     </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 mb-1">
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2">
                         <h3 className="font-semibold text-gray-900">{unit.name}</h3>
-                        <span className="text-sm text-gray-500">({unit.abbreviation})</span>
+                        <Badge variant="neutral" size="sm">{unit.abbreviation}</Badge>
                         {(unit.is_active === false || unit.is_active === 'false') && (
-                          <span className="text-xs px-2 py-0.5 bg-gray-200 text-gray-600 rounded">Inactive</span>
+                          <Badge variant="neutral" size="sm">Inactive</Badge>
                         )}
                       </div>
-                      <p className="text-xs text-gray-500 mt-2">
+                      <p className="text-xs text-gray-500 mt-1">
                         Created {new Date(unit.created_at).toLocaleDateString()}
                       </p>
                     </div>
                   </div>
-                  
-                  <div className="flex items-center gap-3 flex-shrink-0">
-                    {/* Toggle Active/Inactive */}
-                    <button
-                      onClick={() => handleToggleActive(unit.id, unit.is_active, unit.name)}
-                      className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
-                        (unit.is_active === true || unit.is_active === 'true') ? theme.classes.bgPrimary : 'bg-gray-200'
-                      }`}
-                      title={(unit.is_active === true || unit.is_active === 'true') ? 'Deactivate' : 'Activate'}
-                    >
-                      <span
-                        className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                          (unit.is_active === true || unit.is_active === 'true') ? 'translate-x-6' : 'translate-x-1'
-                        }`}
-                      />
-                    </button>
 
+                  <div className="flex gap-2">
                     <button
                       onClick={() => handleEdit(unit)}
                       className={`${theme.classes.textPrimary} hover:${theme.classes.bgPrimaryLight} p-2 rounded-lg transition-colors`}
-                      title="Edit unit"
+                      title="Edit"
                     >
                       <Edit2 size={16} />
                     </button>
                     <button
                       onClick={() => handleDeleteClick(unit.id, unit.name)}
                       className="text-red-600 hover:bg-red-50 p-2 rounded-lg transition-colors"
-                      title="Delete unit"
+                      title="Delete"
                     >
                       <Trash2 size={16} />
                     </button>
@@ -333,8 +313,7 @@ const UnitsManagement = () => {
       {/* Stats */}
       {!loading && units.length > 0 && (
         <div className="text-sm text-gray-600">
-          Showing {filteredUnits.length} of {units.length} units • 
-          Active: {activeCount} • Inactive: {inactiveCount}
+          Showing {filteredUnits.length} of {units.length} units • Active: {activeCount} • Inactive: {inactiveCount}
         </div>
       )}
 
@@ -358,22 +337,23 @@ const UnitsManagement = () => {
                 value={formData.name}
                 onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                 required
+                leftIcon={<Ruler size={18} />}
               />
 
               <Input
                 label="Abbreviation"
-                placeholder="e.g., kg, L, pcs"
+                placeholder="e.g., kg, L, pc"
                 value={formData.abbreviation}
                 onChange={(e) => setFormData({ ...formData, abbreviation: e.target.value })}
                 required
-                helperText="Short form of the unit (2-10 characters)"
+                helperText="Short form used in displays"
               />
 
               <div className="pt-4 border-t border-gray-200">
                 <label className="flex items-center gap-2">
                   <input
                     type="checkbox"
-                    checked={formData.is_active}
+                    checked={normalizeBoolean(formData.is_active)}
                     onChange={(e) => setFormData({ ...formData, is_active: e.target.checked })}
                     className={`rounded ${theme.classes.textPrimary}`}
                   />
@@ -392,6 +372,22 @@ const UnitsManagement = () => {
             </div>
           </Card>
         </div>
+      )}
+
+      {/* Edit Confirmation */}
+      {showEditConfirm && (
+        <ConfirmDialog
+          isOpen={showEditConfirm}
+          onClose={() => setShowEditConfirm(false)}
+          onConfirm={handleConfirmSubmit}
+          title={editingUnit ? 'Update Unit' : 'Create Unit'}
+          message={editingUnit 
+            ? `Save changes to "${formData.name}"?` 
+            : `Create new unit "${formData.name}"?`}
+          confirmText={editingUnit ? 'Update' : 'Create'}
+          cancelText="Cancel"
+          variant="primary"
+        />
       )}
 
       {/* Delete Confirmation */}
