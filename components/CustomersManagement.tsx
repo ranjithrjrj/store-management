@@ -19,7 +19,7 @@ type Customer = {
   state?: string;
   state_code?: string;
   pincode?: string;
-  is_active: boolean;
+  is_active: boolean | string | null;
   created_at: string;
 };
 

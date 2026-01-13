@@ -13,7 +13,7 @@ type Unit = {
   id: string;
   name: string;
   abbreviation: string;
-  is_active: boolean;
+  is_active: boolean | string | null;
   created_at: string;
 };
 

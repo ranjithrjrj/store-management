@@ -21,7 +21,7 @@ type Item = {
   wholesale_price: number;
   discount_percent: number;
   min_stock_level: number;
-  is_active: boolean;
+  is_active: boolean | string | null;
   category?: { id: string; name: string };
   unit?: { id: string; name: string; abbreviation: string };
 };

@@ -21,7 +21,7 @@ type Vendor = {
   state_code?: string;
   pincode?: string;
   payment_terms?: string;
-  is_active: boolean;
+  is_active: boolean | string | null;
   created_at: string;
 };
 

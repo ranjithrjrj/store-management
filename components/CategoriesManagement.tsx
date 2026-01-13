@@ -12,7 +12,7 @@ type Category = {
   id: string;
   name: string;
   description?: string;
-  is_active: boolean;
+  is_active: boolean | string | null;
   created_at: string;
 };
 

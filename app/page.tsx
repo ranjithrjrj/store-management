@@ -1,11 +1,11 @@
 // FILE PATH: app/page.tsx
-// UPDATED VERSION - Fully organized dropdown menu structure
+// Modern navigation with theme integration and auto-closing dropdowns
 
 "use client"
 import React, { useState, useEffect } from 'react';
-import { LayoutDashboard, Package, ShoppingCart, FileText, Users, Settings, TrendingUp, Menu, X, ChevronDown, ChevronRight } from 'lucide-react';
+import { LayoutDashboard, Package, ShoppingCart, FileText, Users, Settings as SettingsIcon, TrendingUp, Menu, X, ChevronDown, ChevronRight, Store, MapPin } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
-import { ThemeProvider } from '@/contexts/ThemeContext';
+import { ThemeProvider, useTheme } from '@/contexts/ThemeContext';
 import { ToastProvider } from '@/components/ui';
 
 // Import all components
@@ -23,29 +23,34 @@ import VendorsManagement from '@/components/VendorsManagement';
 import CustomersManagement from '@/components/CustomersManagement';
 import Reports from '@/components/Reports';
 import TaxReports from '@/components/TaxReports';
-import SettingsComponent from '@/components/Settings';
+import Settings from '@/components/Settings';
 
 type Page = 'dashboard' | 'inventory' | 'items' | 'categories' | 'units' | 'purchase-order' | 'purchase-record' | 'sales' | 'returns' | 'expenses' | 'vendors' | 'customers' | 'reports' | 'tax-reports' | 'settings';
 
-const App = () => {
+const AppContent = () => {
+  const { theme } = useTheme();
   const [currentPage, setCurrentPage] = useState<Page>('dashboard');
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const [openSections, setOpenSections] = useState<string[]>([]); // Empty by default
-  const [storeName, setStoreName] = useState('Thirukumaran Angadi');
-  const [storeCity, setStoreCity] = useState('Mettupalayam, Tamil Nadu');
+  const [openSection, setOpenSection] = useState<string | null>(null); // Only one section open at a time
+  const [storeInfo, setStoreInfo] = useState({
+    name: 'Loading...',
+    address: '',
+    city: '',
+    state: ''
+  });
 
-  // Load store settings for header
+  // Load store settings
   useEffect(() => {
     loadStoreSettings();
   }, []);
 
-  // Auto-expand sections that contain the current page
+  // Auto-expand section containing current page
   useEffect(() => {
     menuItems.forEach((item: any) => {
       if (item.isSection && item.submenu) {
         const hasCurrentPage = item.submenu.some((sub: any) => sub.id === currentPage);
-        if (hasCurrentPage && !openSections.includes(item.id)) {
-          setOpenSections(prev => [...prev, item.id]);
+        if (hasCurrentPage) {
+          setOpenSection(item.id);
         }
       }
     });
@@ -55,24 +60,32 @@ const App = () => {
     try {
       const { data } = await supabase
         .from('store_settings')
-        .select('store_name, city, state')
+        .select('store_name, address, city, state')
         .limit(1);
       
       if (data && data.length > 0) {
         const settings = data[0];
-        setStoreName(settings.store_name || 'Thirukumaran Angadi');
-        const location = [settings.city, settings.state].filter(Boolean).join(', ');
-        if (location) setStoreCity(location);
+        setStoreInfo({
+          name: settings.store_name || 'Thirukumaran Angadi',
+          address: settings.address || '',
+          city: settings.city || '',
+          state: settings.state || ''
+        });
       }
     } catch (err) {
       console.error('Error loading store settings:', err);
+      setStoreInfo({
+        name: 'Thirukumaran Angadi',
+        address: '',
+        city: 'Mettupalayam',
+        state: 'Tamil Nadu'
+      });
     }
   }
 
   const menuItems = [
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
     
-    // Items Management Section
     { 
       id: 'items-section', 
       label: 'Items & Inventory', 
@@ -86,7 +99,6 @@ const App = () => {
       ]
     },
     
-    // Purchase Section
     { 
       id: 'purchase-section', 
       label: 'Purchase', 
@@ -98,7 +110,6 @@ const App = () => {
       ]
     },
     
-    // Sales Section
     { 
       id: 'sales-section', 
       label: 'Sales', 
@@ -112,7 +123,6 @@ const App = () => {
     
     { id: 'expenses', label: 'Expenses', icon: TrendingUp },
     
-    // User Management Section
     { 
       id: 'users-section', 
       label: 'User Management', 
@@ -124,164 +134,157 @@ const App = () => {
       ]
     },
     
-    // Reports Section
     { 
       id: 'reports-section', 
       label: 'Reports', 
-      icon: TrendingUp,
+      icon: FileText,
       isSection: true,
       submenu: [
-        { id: 'reports', label: 'Reports' },
-        { id: 'tax-reports', label: 'Tax Reports' }
+        { id: 'reports', label: 'Business Reports' },
+        { id: 'tax-reports', label: 'GST Tax Reports' }
       ]
     },
     
-    { id: 'settings', label: 'Settings', icon: Settings }
+    { id: 'settings', label: 'Settings', icon: SettingsIcon }
   ];
 
   const renderPage = () => {
     switch(currentPage) {
-      case 'dashboard':
-        return <Dashboard />;
-      case 'inventory':
-        return <Inventory />;
-      case 'items':
-        return <ItemsManagement />;
-      case 'categories':
-        return <CategoriesManagement />;
-      case 'units':
-        return <UnitsManagement />;
-      case 'purchase-order':
-        return <PurchaseOrders />;
-      case 'purchase-record':
-        return <PurchaseRecording />;
-      case 'sales':
-        return <SalesInvoice />;
-      case 'returns':
-        return <ReturnsManagement />;
-      case 'expenses':
-        return <ExpensesManagement />;
-      case 'vendors':
-        return <VendorsManagement />;
-      case 'customers':
-        return <CustomersManagement />;
-      case 'reports':
-        return <Reports />;
-      case 'tax-reports':
-        return <TaxReports />;
-      case 'settings':
-        return <SettingsComponent />;
-      default:
-        return <ComingSoon page={currentPage} />;
+      case 'dashboard': return <Dashboard />;
+      case 'inventory': return <Inventory />;
+      case 'items': return <ItemsManagement />;
+      case 'categories': return <CategoriesManagement />;
+      case 'units': return <UnitsManagement />;
+      case 'purchase-order': return <PurchaseOrders />;
+      case 'purchase-record': return <PurchaseRecording />;
+      case 'sales': return <SalesInvoice />;
+      case 'returns': return <ReturnsManagement />;
+      case 'expenses': return <ExpensesManagement />;
+      case 'vendors': return <VendorsManagement />;
+      case 'customers': return <CustomersManagement />;
+      case 'reports': return <Reports />;
+      case 'tax-reports': return <TaxReports />;
+      case 'settings': return <Settings />;
+      default: return <ComingSoon page={currentPage} />;
     }
   };
 
   const handlePageChange = (pageId: Page) => {
     setCurrentPage(pageId);
     setMobileMenuOpen(false);
-    
-    // Auto-expand the section that contains this page
-    menuItems.forEach((item: any) => {
-      if (item.isSection && item.submenu) {
-        const hasThisPage = item.submenu.some((sub: any) => sub.id === pageId);
-        if (hasThisPage && !openSections.includes(item.id)) {
-          setOpenSections([...openSections, item.id]);
-        }
-      }
-    });
   };
 
   const toggleSection = (sectionId: string) => {
-    setOpenSections(prev => 
-      prev.includes(sectionId) 
-        ? prev.filter(id => id !== sectionId)
-        : [...prev, sectionId]
-    );
+    // Auto-close: if clicking same section, close it; otherwise open new one
+    setOpenSection(prev => prev === sectionId ? null : sectionId);
   };
 
   const isSectionActive = (submenu: any[]) => {
     return submenu.some((sub: any) => currentPage === sub.id);
   };
 
+  const locationParts = [storeInfo.city, storeInfo.state].filter(Boolean);
+  const locationText = locationParts.length > 0 ? locationParts.join(', ') : 'India';
+
   return (
-    <ThemeProvider>
-      <ToastProvider>
-        <div className="flex h-screen bg-gray-50">
-      {/* Mobile menu button - Only shows when closed */}
+    <div className="flex h-screen bg-gray-50">
+      {/* Mobile menu button */}
       {!mobileMenuOpen && (
         <button
           onClick={() => setMobileMenuOpen(true)}
-          className="lg:hidden fixed top-4 left-4 z-50 p-2 bg-blue-600 text-white rounded-lg shadow-lg"
+          className={`lg:hidden fixed top-4 left-4 z-50 p-2 ${theme.classes.bgPrimary} text-white rounded-lg shadow-lg`}
         >
           <Menu size={24} />
         </button>
       )}
 
       {/* Sidebar */}
-      <aside className={`${mobileMenuOpen ? 'translate-x-0' : '-translate-x-full'} lg:translate-x-0 fixed lg:static inset-0 lg:inset-y-0 lg:w-64 z-40 w-full bg-white border-r border-gray-200 transition-transform duration-300 overflow-y-auto`}>
-        <div className="p-6">
-          <h1 className="text-xl font-bold text-blue-600">{storeName}</h1>
-          <p className="text-xs text-gray-500 mt-1">{storeCity}</p>
+      <aside className={`${
+        mobileMenuOpen ? 'translate-x-0' : '-translate-x-full'
+      } lg:translate-x-0 fixed lg:static inset-0 lg:inset-y-0 lg:w-72 z-40 w-full bg-white border-r border-gray-200 transition-transform duration-300 overflow-y-auto shadow-lg lg:shadow-none`}>
+        
+        {/* Store Header */}
+        <div className={`p-6 border-b border-gray-200 ${theme.classes.bgPrimaryLight}`}>
+          <div className="flex items-start gap-3">
+            <div className={`p-2.5 ${theme.classes.bgPrimary} rounded-lg flex-shrink-0`}>
+              <Store size={24} className="text-white" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <h1 className={`text-lg font-bold ${theme.classes.textPrimary} truncate`}>
+                {storeInfo.name}
+              </h1>
+              <div className="flex items-center gap-1.5 mt-1 text-xs text-gray-600">
+                <MapPin size={12} className="flex-shrink-0" />
+                <span className="truncate">{locationText}</span>
+              </div>
+            </div>
+          </div>
         </div>
-        <nav className="px-3 space-y-1 pb-24">{/* Added pb-24 for close button space */}
+
+        {/* Navigation */}
+        <nav className="px-3 py-4 space-y-1 pb-24">
           {menuItems.map((item: any) => {
             const Icon = item.icon;
             
-            // Section with submenu
             if (item.isSection) {
               const hasActiveSubmenu = isSectionActive(item.submenu);
-              const isOpen = openSections.includes(item.id);
+              const isOpen = openSection === item.id;
               
               return (
                 <div key={item.id}>
-                  {/* Section header */}
                   <button
                     onClick={() => toggleSection(item.id)}
-                    className={`w-full flex items-center justify-between px-3 py-2.5 text-sm font-medium rounded-lg transition-colors ${
+                    className={`w-full flex items-center justify-between px-3 py-2.5 text-sm font-medium rounded-lg transition-all ${
                       hasActiveSubmenu
-                        ? 'bg-blue-50 text-blue-700'
-                        : 'text-gray-700 hover:bg-gray-50'
+                        ? `${theme.classes.bgPrimaryLight} ${theme.classes.textPrimary}`
+                        : 'text-gray-700 hover:bg-gray-100'
                     }`}
                   >
                     <div className="flex items-center">
                       <Icon size={18} className="mr-3" />
                       {item.label}
                     </div>
-                    {isOpen ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
+                    <ChevronDown 
+                      size={16} 
+                      className={`transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`}
+                    />
                   </button>
                   
-                  {/* Submenu */}
-                  {isOpen && (
-                    <div className="ml-6 mt-1 space-y-1">
+                  {/* Submenu with smooth animation */}
+                  <div className={`overflow-hidden transition-all duration-200 ${
+                    isOpen ? 'max-h-96 opacity-100' : 'max-h-0 opacity-0'
+                  }`}>
+                    <div className="ml-6 mt-1 space-y-1 py-1">
                       {item.submenu.map((subItem: any) => (
                         <button
                           key={subItem.id}
                           onClick={() => handlePageChange(subItem.id as Page)}
-                          className={`w-full flex items-center px-3 py-2 text-sm rounded-lg transition-colors ${
+                          className={`w-full flex items-center px-3 py-2 text-sm rounded-lg transition-all ${
                             currentPage === subItem.id
-                              ? 'bg-blue-100 text-blue-700 font-medium'
-                              : 'text-gray-600 hover:bg-gray-50'
+                              ? `${theme.classes.bgPrimary} text-white font-medium shadow-sm`
+                              : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
                           }`}
                         >
-                          <div className="w-1.5 h-1.5 rounded-full bg-current mr-2"></div>
+                          <div className={`w-1.5 h-1.5 rounded-full mr-2 ${
+                            currentPage === subItem.id ? 'bg-white' : 'bg-gray-400'
+                          }`}></div>
                           {subItem.label}
                         </button>
                       ))}
                     </div>
-                  )}
+                  </div>
                 </div>
               );
             }
             
-            // Regular menu item
             return (
               <button
                 key={item.id}
                 onClick={() => handlePageChange(item.id as Page)}
-                className={`w-full flex items-center px-3 py-2.5 text-sm font-medium rounded-lg transition-colors ${
+                className={`w-full flex items-center px-3 py-2.5 text-sm font-medium rounded-lg transition-all ${
                   currentPage === item.id
-                    ? 'bg-blue-50 text-blue-700'
-                    : 'text-gray-700 hover:bg-gray-50'
+                    ? `${theme.classes.bgPrimaryLight} ${theme.classes.textPrimary}`
+                    : 'text-gray-700 hover:bg-gray-100'
                 }`}
               >
                 <Icon size={18} className="mr-3" />
@@ -291,7 +294,7 @@ const App = () => {
           })}
         </nav>
         
-        {/* Close button - Bottom right, mobile only */}
+        {/* Close button - Mobile only */}
         <div className="lg:hidden fixed bottom-6 right-6 z-50">
           <button
             onClick={() => setMobileMenuOpen(false)}
@@ -308,7 +311,23 @@ const App = () => {
           {renderPage()}
         </div>
       </main>
+
+      {/* Mobile overlay */}
+      {mobileMenuOpen && (
+        <div 
+          className="lg:hidden fixed inset-0 bg-black/20 backdrop-blur-sm z-30"
+          onClick={() => setMobileMenuOpen(false)}
+        />
+      )}
     </div>
+  );
+};
+
+const App = () => {
+  return (
+    <ThemeProvider>
+      <ToastProvider>
+        <AppContent />
       </ToastProvider>
     </ThemeProvider>
   );
