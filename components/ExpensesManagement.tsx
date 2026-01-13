@@ -88,10 +88,16 @@ const ExpensesManagement = () => {
 
   const handleEdit = (expense: Expense) => {
     setEditingExpense(expense);
+    
+    // Extract category string from object or use as-is if already string
+    const categoryValue = typeof expense.category === 'object' && expense.category !== null
+      ? expense.category.id
+      : expense.category || '';
+    
     setFormData({
       description: expense.description,
       amount: expense.amount,
-      category: expense.category,
+      category: categoryValue,
       expense_date: expense.expense_date,
       payment_method: expense.payment_method || 'Cash',
       notes: expense.notes || ''
