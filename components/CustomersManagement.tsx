@@ -1,10 +1,12 @@
 // FILE PATH: components/CustomersManagement.tsx
-// UPDATED VERSION - Uses real database data
+// Customers Management with new UI components and theme support
 
 'use client';
 import React, { useState, useEffect } from 'react';
 import { UserCircle, Plus, Edit2, Trash2, X, Search, Phone, Mail, MapPin } from 'lucide-react';
 import { customersAPI } from '@/lib/supabase';
+import { Button, Card, Input, Badge, EmptyState, LoadingSpinner, useToast } from '@/components/ui';
+import { useTheme } from '@/contexts/ThemeContext';
 
 type Customer = {
   id: string;
@@ -22,6 +24,8 @@ type Customer = {
 };
 
 const CustomersManagement = () => {
+  const { theme } = useTheme();
+  const toast = useToast();
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [showModal, setShowModal] = useState(false);
@@ -56,6 +60,7 @@ const CustomersManagement = () => {
     } catch (err: any) {
       console.error('Error loading customers:', err);
       setError(err.message || 'Failed to load customers');
+      toast.error('Failed to load', 'Could not load customers. Please refresh.');
     } finally {
       setLoading(false);
     }
@@ -101,40 +106,40 @@ const CustomersManagement = () => {
       setError(null);
 
       if (!formData.name?.trim()) {
-        alert('Please enter customer name');
+        toast.warning('Name required', 'Please enter customer name.');
         return;
       }
 
       if (editingCustomer) {
         await customersAPI.update(editingCustomer.id, formData as any);
-        alert('Customer updated successfully!');
+        toast.success('Updated!', `Customer "${formData.name}" has been updated.`);
       } else {
         await customersAPI.create(formData as any);
-        alert('Customer created successfully!');
+        toast.success('Created!', `Customer "${formData.name}" has been added.`);
       }
 
       await loadCustomers();
       setShowModal(false);
     } catch (err: any) {
       console.error('Error saving customer:', err);
-      alert('Failed to save customer: ' + err.message);
+      toast.error('Failed to save', err.message || 'Could not save customer.');
     } finally {
       setSaving(false);
     }
   };
 
   const handleDelete = async (id: string, name: string) => {
-    if (!confirm(`Are you sure you want to delete customer "${name}"?`)) {
+    if (!confirm(`Delete customer "${name}"?`)) {
       return;
     }
 
     try {
       await customersAPI.delete(id);
       await loadCustomers();
-      alert('Customer deleted successfully!');
+      toast.success('Deleted', `Customer "${name}" has been removed.`);
     } catch (err: any) {
       console.error('Error deleting customer:', err);
-      alert('Failed to delete customer: ' + err.message);
+      toast.error('Failed to delete', err.message || 'Could not delete customer.');
     }
   };
 
@@ -151,16 +156,18 @@ const CustomersManagement = () => {
           <h2 className="text-2xl font-bold text-gray-900">Customers Management</h2>
           <p className="text-gray-600 text-sm mt-1">Manage your customer database</p>
         </div>
-        <div className="bg-red-50 border border-red-200 rounded-lg p-6">
-          <h3 className="font-bold text-red-800 mb-2">Failed to Load Customers</h3>
-          <p className="text-red-600 text-sm">{error}</p>
-          <button
-            onClick={loadCustomers}
-            className="mt-4 bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700 text-sm"
-          >
-            Try Again
-          </button>
-        </div>
+        <Card>
+          <div className="text-center py-8">
+            <div className="text-red-600 mb-4">
+              <UserCircle size={48} className="mx-auto opacity-50" />
+            </div>
+            <h3 className="font-bold text-red-800 mb-2">Failed to Load Customers</h3>
+            <p className="text-red-600 text-sm mb-4">{error}</p>
+            <Button onClick={loadCustomers} variant="primary">
+              Try Again
+            </Button>
+          </div>
+        </Card>
       </div>
     );
   }
@@ -168,269 +175,242 @@ const CustomersManagement = () => {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h2 className="text-2xl font-bold text-gray-900">Customers Management</h2>
           <p className="text-gray-600 text-sm mt-1">Manage your customer database</p>
         </div>
-        <button
+        <Button
           onClick={handleAddNew}
-          disabled={loading}
-          className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 text-sm font-medium flex items-center gap-2 disabled:bg-gray-400"
+          variant="primary"
+          size="md"
+          icon={<Plus size={18} />}
         >
-          <Plus size={18} />
           Add Customer
-        </button>
+        </Button>
       </div>
 
-      {/* Search Bar */}
-      <div className="bg-white rounded-lg border border-gray-200 p-4">
-        <div className="relative">
-          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={20} />
-          <input
-            type="text"
-            placeholder="Search customers by name, phone, or GSTIN..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-          />
-        </div>
-      </div>
+      {/* Search */}
+      <Card padding="md">
+        <Input
+          leftIcon={<Search size={18} />}
+          placeholder="Search by name, phone, or GSTIN..."
+          value={searchTerm}
+          onChange={(e) => setSearchTerm(e.target.value)}
+        />
+      </Card>
 
       {/* Customers Grid */}
-      <div className="bg-white rounded-lg border border-gray-200">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         {loading ? (
-          <div className="p-8 text-center">
-            <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
-            <p className="text-gray-600 mt-2">Loading customers...</p>
+          <div className="col-span-full">
+            <Card>
+              <div className="py-12">
+                <LoadingSpinner size="lg" text="Loading customers..." />
+              </div>
+            </Card>
           </div>
         ) : filteredCustomers.length === 0 ? (
-          <div className="p-8 text-center">
-            {searchTerm ? (
-              <>
-                <p className="text-gray-600">No customers found matching "{searchTerm}"</p>
-                <button
-                  onClick={() => setSearchTerm('')}
-                  className="mt-2 text-blue-600 hover:text-blue-700 text-sm"
-                >
-                  Clear search
-                </button>
-              </>
-            ) : (
-              <>
-                <UserCircle size={48} className="mx-auto text-gray-400 mb-4" />
-                <p className="text-gray-600 mb-4">No customers yet</p>
-                <button
-                  onClick={handleAddNew}
-                  className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 text-sm"
-                >
-                  Add Your First Customer
-                </button>
-              </>
-            )}
+          <div className="col-span-full">
+            <Card>
+              <EmptyState
+                icon={<UserCircle size={64} />}
+                title={searchTerm ? "No customers found" : "No customers yet"}
+                description={
+                  searchTerm
+                    ? "Try adjusting your search terms"
+                    : "Get started by adding your first customer"
+                }
+                action={
+                  !searchTerm && (
+                    <Button onClick={handleAddNew} variant="primary" icon={<Plus size={18} />}>
+                      Add Your First Customer
+                    </Button>
+                  )
+                }
+              />
+            </Card>
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 p-6">
-            {filteredCustomers.map((customer) => (
-              <div
-                key={customer.id}
-                className="border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow"
-              >
-                <div className="flex justify-between items-start mb-3">
-                  <div className="flex-1">
-                    <h3 className="font-semibold text-gray-900">{customer.name}</h3>
+          filteredCustomers.map((customer) => (
+            <Card key={customer.id} hover padding="md">
+              <div className="space-y-3">
+                {/* Header */}
+                <div className="flex items-start justify-between">
+                  <div className="flex items-center gap-2 flex-1 min-w-0">
+                    <div className={`p-2 ${theme.classes.bgPrimaryLight} rounded-lg flex-shrink-0`}>
+                      <UserCircle size={20} className={theme.classes.textPrimary} />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <h3 className="font-semibold text-gray-900 truncate">{customer.name}</h3>
+                    </div>
                   </div>
-                  <div className="flex items-center gap-1">
-                    <button
-                      onClick={() => handleEdit(customer)}
-                      className="text-blue-600 hover:bg-blue-50 p-1 rounded"
-                      title="Edit"
-                    >
-                      <Edit2 size={16} />
-                    </button>
-                    <button
-                      onClick={() => handleDelete(customer.id, customer.name)}
-                      className="text-red-600 hover:bg-red-50 p-1 rounded"
-                      title="Delete"
-                    >
-                      <Trash2 size={16} />
-                    </button>
-                  </div>
+                  <Badge variant={customer.is_active ? 'success' : 'neutral'} size="sm">
+                    {customer.is_active ? 'Active' : 'Inactive'}
+                  </Badge>
                 </div>
 
-                <div className="space-y-2">
+                {/* Contact Info */}
+                <div className="space-y-2 text-sm">
                   {customer.phone && (
-                    <div className="flex items-center gap-2 text-sm text-gray-600">
-                      <Phone size={14} />
-                      <span>{customer.phone}</span>
+                    <div className="flex items-center gap-2 text-gray-600">
+                      <Phone size={14} className="flex-shrink-0" />
+                      <span className="truncate">{customer.phone}</span>
                     </div>
                   )}
                   {customer.email && (
-                    <div className="flex items-center gap-2 text-sm text-gray-600">
-                      <Mail size={14} />
+                    <div className="flex items-center gap-2 text-gray-600">
+                      <Mail size={14} className="flex-shrink-0" />
                       <span className="truncate">{customer.email}</span>
                     </div>
                   )}
-                  {customer.city && (
-                    <div className="flex items-center gap-2 text-sm text-gray-600">
-                      <MapPin size={14} />
-                      <span>{customer.city}, {customer.state}</span>
+                  {(customer.city || customer.state) && (
+                    <div className="flex items-center gap-2 text-gray-600">
+                      <MapPin size={14} className="flex-shrink-0" />
+                      <span className="truncate">
+                        {[customer.city, customer.state].filter(Boolean).join(', ')}
+                      </span>
                     </div>
                   )}
                   {customer.gstin && (
-                    <div className="mt-2">
-                      <span className="px-2 py-1 bg-green-100 text-green-800 rounded text-xs font-medium">
-                        GST: {customer.gstin}
-                      </span>
+                    <div className="text-xs text-gray-500">
+                      GSTIN: {customer.gstin}
                     </div>
                   )}
                 </div>
 
-                {!customer.is_active && (
-                  <div className="mt-3 pt-3 border-t border-gray-200">
-                    <span className="px-2 py-1 bg-red-100 text-red-800 rounded text-xs font-medium">
-                      Inactive
-                    </span>
-                  </div>
-                )}
+                {/* Actions */}
+                <div className="flex gap-2 pt-2 border-t border-gray-100">
+                  <button
+                    onClick={() => handleEdit(customer)}
+                    className={`flex-1 flex items-center justify-center gap-2 px-3 py-2 ${theme.classes.textPrimary} ${theme.classes.bgPrimaryLighter} rounded-lg hover:${theme.classes.bgPrimaryLight} transition-colors text-sm font-medium`}
+                  >
+                    <Edit2 size={14} />
+                    Edit
+                  </button>
+                  <button
+                    onClick={() => handleDelete(customer.id, customer.name)}
+                    className="flex-1 flex items-center justify-center gap-2 px-3 py-2 text-red-600 bg-red-50 rounded-lg hover:bg-red-100 transition-colors text-sm font-medium"
+                  >
+                    <Trash2 size={14} />
+                    Delete
+                  </button>
+                </div>
               </div>
-            ))}
-          </div>
+            </Card>
+          ))
         )}
       </div>
 
+      {/* Stats */}
+      {!loading && customers.length > 0 && (
+        <div className="text-sm text-gray-600">
+          Showing {filteredCustomers.length} of {customers.length} customers
+        </div>
+      )}
+
       {/* Add/Edit Modal */}
       {showModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50 overflow-y-auto">
-          <div className="bg-white rounded-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto">
-            <div className="sticky top-0 bg-white border-b border-gray-200 px-6 py-4 flex justify-between items-center">
-              <h3 className="text-lg font-semibold text-gray-900">
+        <div className="fixed inset-0 bg-black/20 backdrop-blur-sm flex items-center justify-center p-4 z-50 overflow-y-auto">
+          <Card className="w-full max-w-2xl my-8">
+            {/* Modal Header */}
+            <div className="flex items-center justify-between mb-6">
+              <h3 className="text-xl font-bold text-gray-900">
                 {editingCustomer ? 'Edit Customer' : 'Add New Customer'}
               </h3>
               <button
                 onClick={() => setShowModal(false)}
-                className="text-gray-400 hover:text-gray-600"
-                disabled={saving}
+                className="text-gray-400 hover:text-gray-600 transition-colors"
               >
                 <X size={24} />
               </button>
             </div>
 
-            <div className="p-6 space-y-4">
-              {/* Basic Information */}
-              <div>
-                <h4 className="font-medium text-gray-900 mb-3">Basic Information</h4>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div className="md:col-span-2">
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Customer Name <span className="text-red-500">*</span>
-                    </label>
-                    <input
-                      type="text"
-                      value={formData.name}
-                      onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                      placeholder="e.g., Lakshmi Store"
-                      required
-                      autoFocus
-                    />
-                  </div>
+            {/* Form */}
+            <div className="space-y-4">
+              {/* Basic Info */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="md:col-span-2">
+                  <Input
+                    label="Customer Name"
+                    placeholder="Enter customer name"
+                    value={formData.name}
+                    onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                    required
+                  />
+                </div>
 
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Phone</label>
-                    <input
-                      type="tel"
-                      value={formData.phone}
-                      onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                      placeholder="10 digits"
-                      maxLength={10}
-                    />
-                  </div>
+                <Input
+                  label="Phone"
+                  type="tel"
+                  placeholder="Enter phone number"
+                  value={formData.phone}
+                  onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+                  leftIcon={<Phone size={18} />}
+                />
 
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
-                    <input
-                      type="email"
-                      value={formData.email}
-                      onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                      placeholder="Optional"
-                    />
-                  </div>
+                <Input
+                  label="Email"
+                  type="email"
+                  placeholder="Enter email address"
+                  value={formData.email}
+                  onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                  leftIcon={<Mail size={18} />}
+                />
 
-                  <div className="md:col-span-2">
-                    <label className="block text-sm font-medium text-gray-700 mb-1">GSTIN</label>
-                    <input
-                      type="text"
-                      value={formData.gstin}
-                      onChange={(e) => setFormData({ ...formData, gstin: e.target.value.toUpperCase() })}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                      placeholder="15 characters (optional)"
-                      maxLength={15}
-                    />
-                  </div>
+                <div className="md:col-span-2">
+                  <Input
+                    label="GSTIN"
+                    placeholder="Enter GSTIN (optional)"
+                    value={formData.gstin}
+                    onChange={(e) => setFormData({ ...formData, gstin: e.target.value.toUpperCase() })}
+                    helperText="15-character GST Identification Number"
+                  />
                 </div>
               </div>
 
               {/* Address */}
               <div className="pt-4 border-t border-gray-200">
-                <h4 className="font-medium text-gray-900 mb-3">Address</h4>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div className="md:col-span-2">
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Street Address</label>
+                <h4 className="font-medium text-gray-900 mb-3">Address Details</h4>
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Address</label>
                     <textarea
                       value={formData.address}
                       onChange={(e) => setFormData({ ...formData, address: e.target.value })}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                       rows={2}
-                      placeholder="Optional"
+                      className={`w-full px-3 py-2 border border-gray-300 rounded-lg ${theme.classes.focusRing} focus:ring-2 focus:ring-opacity-20 focus:border-current transition-all`}
+                      placeholder="Street address"
                     />
                   </div>
 
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">City</label>
-                    <input
-                      type="text"
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <Input
+                      label="City"
+                      placeholder="Enter city"
                       value={formData.city}
                       onChange={(e) => setFormData({ ...formData, city: e.target.value })}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                      placeholder="Optional"
                     />
-                  </div>
 
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">State</label>
-                    <input
-                      type="text"
+                    <Input
+                      label="State"
+                      placeholder="Enter state"
                       value={formData.state}
                       onChange={(e) => setFormData({ ...formData, state: e.target.value })}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                      placeholder="e.g., Tamil Nadu"
                     />
-                  </div>
 
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">State Code</label>
-                    <input
-                      type="text"
+                    <Input
+                      label="State Code"
+                      placeholder="e.g., 33"
                       value={formData.state_code}
                       onChange={(e) => setFormData({ ...formData, state_code: e.target.value })}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                      placeholder="e.g., 33"
-                      maxLength={2}
                     />
-                  </div>
 
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Pincode</label>
-                    <input
-                      type="text"
+                    <Input
+                      label="Pincode"
+                      placeholder="Enter pincode"
                       value={formData.pincode}
                       onChange={(e) => setFormData({ ...formData, pincode: e.target.value })}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                      placeholder="6 digits"
-                      maxLength={6}
                     />
                   </div>
                 </div>
@@ -443,31 +423,33 @@ const CustomersManagement = () => {
                     type="checkbox"
                     checked={formData.is_active}
                     onChange={(e) => setFormData({ ...formData, is_active: e.target.checked })}
-                    className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                    className={`rounded ${theme.classes.textPrimary} ${theme.classes.focusRing}`}
                   />
-                  <span className="text-sm text-gray-700">Customer is active</span>
+                  <span className="text-sm font-medium text-gray-700">Active Customer</span>
                 </label>
               </div>
-
-              {/* Actions */}
-              <div className="flex gap-3 pt-4">
-                <button
-                  onClick={handleSubmit}
-                  disabled={saving || !formData.name?.trim()}
-                  className="flex-1 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 font-medium disabled:bg-gray-400 disabled:cursor-not-allowed"
-                >
-                  {saving ? 'Saving...' : (editingCustomer ? 'Update Customer' : 'Add Customer')}
-                </button>
-                <button
-                  onClick={() => setShowModal(false)}
-                  disabled={saving}
-                  className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 font-medium disabled:cursor-not-allowed"
-                >
-                  Cancel
-                </button>
-              </div>
             </div>
-          </div>
+
+            {/* Actions */}
+            <div className="flex gap-3 mt-6">
+              <Button
+                onClick={() => setShowModal(false)}
+                variant="secondary"
+                fullWidth
+                disabled={saving}
+              >
+                Cancel
+              </Button>
+              <Button
+                onClick={handleSubmit}
+                variant="primary"
+                fullWidth
+                loading={saving}
+              >
+                {editingCustomer ? 'Update Customer' : 'Create Customer'}
+              </Button>
+            </div>
+          </Card>
         </div>
       )}
     </div>

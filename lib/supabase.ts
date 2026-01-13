@@ -126,6 +126,58 @@ export const itemsAPI = {
 // INVENTORY API
 // ============================================================================
 export const inventoryAPI = {
+  // Get all inventory items with aggregated stock
+  async getAll() {
+    try {
+      const { data, error } = await supabase
+        .from('items')
+        .select(`
+          id,
+          name,
+          min_stock_level,
+          mrp,
+          retail_price,
+          wholesale_price,
+          category:categories(name),
+          unit:units(name, abbreviation)
+        `)
+        .eq('is_active', true);
+      
+      if (error) throw error;
+
+      // Get inventory batches to calculate current stock
+      const { data: batches, error: batchError } = await supabase
+        .from('inventory_batches')
+        .select('item_id, quantity');
+      
+      if (batchError) throw batchError;
+
+      // Aggregate stock by item
+      const stockByItem: Record<string, number> = {};
+      batches?.forEach(batch => {
+        stockByItem[batch.item_id] = (stockByItem[batch.item_id] || 0) + batch.quantity;
+      });
+
+      // Combine data
+      return data?.map(item => ({
+        id: item.id,
+        item_name: item.name,
+        category_name: item.category?.name || 'Uncategorized',
+        current_stock: stockByItem[item.id] || 0,
+        min_stock_level: item.min_stock_level || 0,
+        unit_name: item.unit?.name || '',
+        unit_abbr: item.unit?.abbreviation || '',
+        mrp: item.mrp,
+        retail_price: item.retail_price,
+        wholesale_price: item.wholesale_price,
+        total_value: (stockByItem[item.id] || 0) * item.retail_price
+      })) || [];
+    } catch (error) {
+      console.error('Error fetching inventory:', error);
+      throw error;
+    }
+  },
+
   // Get inventory summary
   async getSummary() {
     try {
@@ -511,6 +563,94 @@ export const settingsAPI = {
       return data;
     } catch (error) {
       console.error('Error updating settings:', error);
+      throw error;
+    }
+  }
+};
+
+// ============================================================================
+// DASHBOARD API
+// ============================================================================
+export const dashboardAPI = {
+  async getStats() {
+    try {
+      // Get revenue from sales
+      const { data: salesData, error: salesError } = await supabase
+        .from('sales_invoices')
+        .select('total_amount');
+      
+      if (salesError) throw salesError;
+      const totalRevenue = salesData?.reduce((sum, sale) => sum + (sale.total_amount || 0), 0) || 0;
+
+      // Get expenses
+      const { data: expensesData, error: expensesError } = await supabase
+        .from('expenses')
+        .select('amount');
+      
+      if (expensesError) throw expensesError;
+      const totalExpenses = expensesData?.reduce((sum, expense) => sum + (expense.amount || 0), 0) || 0;
+
+      // Get low stock count
+      const { data: lowStockData, error: lowStockError } = await supabase
+        .rpc('get_low_stock_items');
+      
+      const lowStockCount = lowStockData?.length || 0;
+
+      // Get customers count
+      const { count: customersCount } = await supabase
+        .from('customers')
+        .select('*', { count: 'exact', head: true })
+        .eq('is_active', true);
+
+      // Get vendors count
+      const { count: vendorsCount } = await supabase
+        .from('vendors')
+        .select('*', { count: 'exact', head: true })
+        .eq('is_active', true);
+
+      // Get recent sales (last 30 days)
+      const thirtyDaysAgo = new Date();
+      thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+      
+      const { data: recentSalesData } = await supabase
+        .from('sales_invoices')
+        .select('total_amount')
+        .gte('invoice_date', thirtyDaysAgo.toISOString().split('T')[0]);
+      
+      const recentSales = recentSalesData?.reduce((sum, sale) => sum + (sale.total_amount || 0), 0) || 0;
+
+      // Get recent purchases (last 30 days)
+      const { data: recentPurchasesData } = await supabase
+        .from('purchase_orders')
+        .select('total_amount')
+        .gte('order_date', thirtyDaysAgo.toISOString().split('T')[0]);
+      
+      const recentPurchases = recentPurchasesData?.reduce((sum, purchase) => sum + (purchase.total_amount || 0), 0) || 0;
+
+      return {
+        totalRevenue,
+        totalExpenses,
+        netProfit: totalRevenue - totalExpenses,
+        lowStockCount,
+        totalCustomers: customersCount || 0,
+        totalVendors: vendorsCount || 0,
+        recentSales,
+        recentPurchases,
+      };
+    } catch (error) {
+      console.error('Error fetching dashboard stats:', error);
+      throw error;
+    }
+  },
+
+  async getLowStock() {
+    try {
+      const { data, error } = await supabase.rpc('get_low_stock_items');
+      
+      if (error) throw error;
+      return data;
+    } catch (error) {
+      console.error('Error fetching low stock:', error);
       throw error;
     }
   }

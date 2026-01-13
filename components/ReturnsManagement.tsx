@@ -1,197 +1,213 @@
 // FILE PATH: components/ReturnsManagement.tsx
+// UPDATED VERSION - Uses real database data
 
-import React, { useState } from 'react';
-import { RotateCcw, Plus, Eye, CheckCircle, XCircle, Search, Filter, FileText, CreditCard } from 'lucide-react';
-
-type ReturnStatus = 'pending' | 'approved' | 'rejected' | 'completed';
-type RefundMethod = 'cash' | 'bank_transfer' | 'store_credit';
+'use client';
+import React, { useState, useEffect } from 'react';
+import { RotateCcw, Plus, Search, Calendar, DollarSign, CheckCircle, XCircle } from 'lucide-react';
+import { supabase } from '@/lib/supabase';
 
 type SalesReturn = {
   id: string;
   return_number: string;
-  original_invoice_number: string;
+  invoice_id?: string;
+  invoice_number?: string;
+  customer_name?: string;
   return_date: string;
-  customer_name: string;
-  customer_phone?: string;
-  return_reason: string;
-  total_amount: number;
-  refund_amount: number;
-  refund_method: RefundMethod;
-  refund_status: ReturnStatus;
-  items_count: number;
-  is_restockable: boolean;
-};
-
-type ReturnItem = {
-  id: string;
-  item_name: string;
-  quantity: number;
-  rate: number;
-  total_amount: number;
-  return_reason?: string;
-  is_restocked: boolean;
+  return_amount: number;
+  refund_method: string;
+  refund_status: 'pending' | 'completed' | 'rejected';
+  reason?: string;
+  notes?: string;
+  created_at: string;
 };
 
 const ReturnsManagement = () => {
+  const [returns, setReturns] = useState<SalesReturn[]>([]);
+  const [invoices, setInvoices] = useState<any[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
-  const [statusFilter, setStatusFilter] = useState<ReturnStatus | 'all'>('all');
-  const [dateRange, setDateRange] = useState({
-    from: new Date(new Date().setDate(1)).toISOString().split('T')[0],
-    to: new Date().toISOString().split('T')[0]
+  const [filterStatus, setFilterStatus] = useState<string>('all');
+  const [showModal, setShowModal] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  
+  const [formData, setFormData] = useState({
+    invoice_id: '',
+    return_date: new Date().toISOString().split('T')[0],
+    return_amount: 0,
+    refund_method: 'cash',
+    refund_status: 'pending' as 'pending' | 'completed' | 'rejected',
+    reason: '',
+    notes: ''
   });
-  const [showCreateModal, setShowCreateModal] = useState(false);
-  const [showViewModal, setShowViewModal] = useState(false);
-  const [selectedReturn, setSelectedReturn] = useState<SalesReturn | null>(null);
-  const [activeTab, setActiveTab] = useState<'returns' | 'credit-notes'>('returns');
 
-  // Mock data
-  const mockReturns: SalesReturn[] = [
-    {
-      id: '1',
-      return_number: 'RTN-202601-001',
-      original_invoice_number: 'INV-202601-045',
-      return_date: '2026-01-10',
-      customer_name: 'Ram Prasad',
-      customer_phone: '9876543210',
-      return_reason: 'Defective Product',
-      total_amount: 890,
-      refund_amount: 890,
+  useEffect(() => {
+    loadData();
+  }, []);
+
+  async function loadData() {
+    try {
+      setLoading(true);
+      setError(null);
+
+      // Load recent invoices (last 30 days)
+      const thirtyDaysAgo = new Date();
+      thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+      
+      const { data: invoicesData } = await supabase
+        .from('sales_invoices')
+        .select('id, invoice_number, customer_name, total_amount, invoice_date')
+        .gte('invoice_date', thirtyDaysAgo.toISOString().split('T')[0])
+        .order('invoice_date', { ascending: false });
+      
+      // Load returns
+      const { data: returnsData } = await supabase
+        .from('sales_returns')
+        .select('*')
+        .order('return_date', { ascending: false });
+      
+      setInvoices(invoicesData || []);
+      setReturns(returnsData || []);
+    } catch (err: any) {
+      console.error('Error loading data:', err);
+      setError(err.message || 'Failed to load data');
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  const handleAddNew = () => {
+    setFormData({
+      invoice_id: '',
+      return_date: new Date().toISOString().split('T')[0],
+      return_amount: 0,
       refund_method: 'cash',
-      refund_status: 'completed',
-      items_count: 2,
-      is_restockable: false
-    },
-    {
-      id: '2',
-      return_number: 'RTN-202601-002',
-      original_invoice_number: 'INV-202601-038',
-      return_date: '2026-01-09',
-      customer_name: 'Lakshmi Store',
-      customer_phone: '9876543211',
-      return_reason: 'Wrong Item Delivered',
-      total_amount: 2340,
-      refund_amount: 2340,
-      refund_method: 'store_credit',
-      refund_status: 'approved',
-      items_count: 3,
-      is_restockable: true
-    },
-    {
-      id: '3',
-      return_number: 'RTN-202601-003',
-      original_invoice_number: 'INV-202601-042',
-      return_date: '2026-01-08',
-      customer_name: 'Devi Traders',
-      return_reason: 'Quality Issue',
-      total_amount: 1250,
-      refund_amount: 1250,
-      refund_method: 'bank_transfer',
       refund_status: 'pending',
-      items_count: 4,
-      is_restockable: true
-    }
-  ];
-
-  const mockReturnItems: ReturnItem[] = [
-    {
-      id: '1',
-      item_name: 'Camphor Tablets',
-      quantity: 2,
-      rate: 45,
-      total_amount: 90,
-      return_reason: 'Product damaged',
-      is_restocked: false
-    },
-    {
-      id: '2',
-      item_name: 'Agarbatti - Rose',
-      quantity: 1,
-      rate: 30,
-      total_amount: 30,
-      is_restocked: false
-    }
-  ];
-
-  const mockCreditNotes = [
-    {
-      id: '1',
-      credit_note_number: 'CN-202601-001',
-      customer_name: 'Lakshmi Store',
-      issue_date: '2026-01-09',
-      amount: 2340,
-      balance_amount: 2340,
-      expiry_date: '2026-04-09',
-      status: 'active'
-    },
-    {
-      id: '2',
-      credit_note_number: 'CN-202601-002',
-      customer_name: 'Ram Prasad',
-      issue_date: '2026-01-05',
-      amount: 500,
-      balance_amount: 150,
-      expiry_date: '2026-04-05',
-      status: 'active'
-    }
-  ];
-
-  const [returns, setReturns] = useState(mockReturns);
-
-  const statusColors = {
-    pending: 'bg-yellow-100 text-yellow-800',
-    approved: 'bg-blue-100 text-blue-800',
-    rejected: 'bg-red-100 text-red-800',
-    completed: 'bg-green-100 text-green-800'
+      reason: '',
+      notes: ''
+    });
+    setShowModal(true);
   };
 
-  const refundMethodLabels = {
-    cash: 'Cash',
-    bank_transfer: 'Bank Transfer',
-    store_credit: 'Store Credit'
-  };
-
-  const handleViewReturn = (returnItem: SalesReturn) => {
-    setSelectedReturn(returnItem);
-    setShowViewModal(true);
-  };
-
-  const handleApproveReturn = (id: string) => {
-    if (confirm('Approve this return and process refund?')) {
-      setReturns(returns.map(r => 
-        r.id === id ? { ...r, refund_status: 'approved' } : r
-      ));
-      alert('Return approved! Refund will be processed.');
+  const handleInvoiceSelect = (invoiceId: string) => {
+    const invoice = invoices.find(inv => inv.id === invoiceId);
+    if (invoice) {
+      setFormData({
+        ...formData,
+        invoice_id: invoiceId,
+        return_amount: invoice.total_amount // Default to full amount
+      });
     }
   };
 
-  const handleRejectReturn = (id: string) => {
-    if (confirm('Reject this return request?')) {
-      setReturns(returns.map(r => 
-        r.id === id ? { ...r, refund_status: 'rejected' } : r
-      ));
+  const handleSubmit = async () => {
+    try {
+      setSaving(true);
+      setError(null);
+
+      if (!formData.return_amount || formData.return_amount <= 0) {
+        alert('Please enter return amount');
+        return;
+      }
+
+      const returnNumber = `RET-${Date.now()}`;
+      const invoice = invoices.find(inv => inv.id === formData.invoice_id);
+
+      const returnData = {
+        return_number: returnNumber,
+        invoice_id: formData.invoice_id || null,
+        invoice_number: invoice?.invoice_number || null,
+        customer_name: invoice?.customer_name || null,
+        return_date: formData.return_date,
+        return_amount: formData.return_amount,
+        refund_method: formData.refund_method,
+        refund_status: formData.refund_status,
+        reason: formData.reason || null,
+        notes: formData.notes || null
+      };
+
+      const { error: returnError } = await supabase
+        .from('sales_returns')
+        .insert(returnData);
+
+      if (returnError) throw returnError;
+
+      alert(`Return ${returnNumber} recorded successfully!`);
+      await loadData();
+      setShowModal(false);
+    } catch (err: any) {
+      console.error('Error saving return:', err);
+      alert('Failed to save return: ' + err.message);
+    } finally {
+      setSaving(false);
     }
   };
 
-  const handleCompleteReturn = (id: string) => {
-    if (confirm('Mark refund as completed?')) {
-      setReturns(returns.map(r => 
-        r.id === id ? { ...r, refund_status: 'completed' } : r
-      ));
+  const updateStatus = async (id: string, status: 'pending' | 'completed' | 'rejected') => {
+    try {
+      const { error } = await supabase
+        .from('sales_returns')
+        .update({ refund_status: status })
+        .eq('id', id);
+
+      if (error) throw error;
+
+      await loadData();
+      alert('Status updated successfully!');
+    } catch (err: any) {
+      console.error('Error updating status:', err);
+      alert('Failed to update status: ' + err.message);
     }
+  };
+
+  const getStatusBadge = (status: string) => {
+    const badges = {
+      pending: { color: 'bg-yellow-100 text-yellow-800', icon: Calendar, label: 'Pending' },
+      completed: { color: 'bg-green-100 text-green-800', icon: CheckCircle, label: 'Completed' },
+      rejected: { color: 'bg-red-100 text-red-800', icon: XCircle, label: 'Rejected' }
+    };
+    const badge = badges[status as keyof typeof badges];
+    const Icon = badge.icon;
+    return (
+      <span className={`inline-flex items-center gap-1 px-2 py-1 rounded text-xs font-medium ${badge.color}`}>
+        <Icon size={12} />
+        {badge.label}
+      </span>
+    );
   };
 
   const filteredReturns = returns.filter(ret => {
-    const matchesSearch = ret.return_number.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      ret.original_invoice_number.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      ret.customer_name.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesStatus = statusFilter === 'all' || ret.refund_status === statusFilter;
-    const matchesDate = ret.return_date >= dateRange.from && ret.return_date <= dateRange.to;
-    return matchesSearch && matchesStatus && matchesDate;
+    const matchesSearch = 
+      ret.return_number.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (ret.invoice_number && ret.invoice_number.toLowerCase().includes(searchTerm.toLowerCase())) ||
+      (ret.customer_name && ret.customer_name.toLowerCase().includes(searchTerm.toLowerCase()));
+    const matchesStatus = filterStatus === 'all' || ret.refund_status === filterStatus;
+    return matchesSearch && matchesStatus;
   });
 
-  const totalReturns = filteredReturns.reduce((sum, r) => sum + r.total_amount, 0);
-  const pendingReturns = filteredReturns.filter(r => r.refund_status === 'pending').length;
-  const completedReturns = filteredReturns.filter(r => r.refund_status === 'completed').length;
+  const totalPending = returns.filter(r => r.refund_status === 'pending').reduce((sum, r) => sum + r.return_amount, 0);
+  const totalCompleted = returns.filter(r => r.refund_status === 'completed').reduce((sum, r) => sum + r.return_amount, 0);
+
+  if (error && !loading) {
+    return (
+      <div className="space-y-6">
+        <div>
+          <h2 className="text-2xl font-bold text-gray-900">Returns & Refunds</h2>
+          <p className="text-gray-600 text-sm mt-1">Manage sales returns and refunds</p>
+        </div>
+        <div className="bg-red-50 border border-red-200 rounded-lg p-6">
+          <h3 className="font-bold text-red-800 mb-2">Failed to Load Returns</h3>
+          <p className="text-red-600 text-sm">{error}</p>
+          <button
+            onClick={loadData}
+            className="mt-4 bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700 text-sm"
+          >
+            Try Again
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -199,392 +215,288 @@ const ReturnsManagement = () => {
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
           <h2 className="text-2xl font-bold text-gray-900">Returns & Refunds</h2>
-          <p className="text-gray-600 text-sm mt-1">Manage product returns and customer refunds</p>
+          <p className="text-gray-600 text-sm mt-1">Manage sales returns and refunds</p>
         </div>
         <button
-          onClick={() => setShowCreateModal(true)}
-          className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 text-sm font-medium flex items-center gap-2"
+          onClick={handleAddNew}
+          disabled={loading}
+          className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 text-sm font-medium flex items-center gap-2 disabled:bg-gray-400"
         >
           <Plus size={18} />
-          Process Return
+          Record Return
         </button>
       </div>
 
-      {/* Tabs */}
-      <div className="border-b border-gray-200">
-        <div className="flex gap-4">
-          <button
-            onClick={() => setActiveTab('returns')}
-            className={`px-4 py-2 font-medium text-sm border-b-2 transition-colors ${
-              activeTab === 'returns'
-                ? 'border-blue-600 text-blue-600'
-                : 'border-transparent text-gray-600 hover:text-gray-900'
-            }`}
-          >
-            <RotateCcw size={16} className="inline mr-2" />
-            Returns
-          </button>
-          <button
-            onClick={() => setActiveTab('credit-notes')}
-            className={`px-4 py-2 font-medium text-sm border-b-2 transition-colors ${
-              activeTab === 'credit-notes'
-                ? 'border-blue-600 text-blue-600'
-                : 'border-transparent text-gray-600 hover:text-gray-900'
-            }`}
-          >
-            <CreditCard size={16} className="inline mr-2" />
-            Credit Notes
-          </button>
+      {/* Stats */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="bg-white rounded-lg border border-gray-200 p-6">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm text-gray-600 mb-1">Total Returns</p>
+              {loading ? (
+                <div className="h-8 w-16 bg-gray-200 rounded animate-pulse"></div>
+              ) : (
+                <p className="text-2xl font-bold text-gray-900">{returns.length}</p>
+              )}
+            </div>
+            <div className="p-3 rounded-lg bg-blue-50 text-blue-600">
+              <RotateCcw size={24} />
+            </div>
+          </div>
+        </div>
+
+        <div className="bg-white rounded-lg border border-yellow-200 p-6">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm text-gray-600 mb-1">Pending Refunds</p>
+              {loading ? (
+                <div className="h-8 w-24 bg-gray-200 rounded animate-pulse"></div>
+              ) : (
+                <p className="text-2xl font-bold text-yellow-700">₹{totalPending.toLocaleString('en-IN')}</p>
+              )}
+            </div>
+            <div className="p-3 rounded-lg bg-yellow-50 text-yellow-600">
+              <Calendar size={24} />
+            </div>
+          </div>
+        </div>
+
+        <div className="bg-white rounded-lg border border-green-200 p-6">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm text-gray-600 mb-1">Completed Refunds</p>
+              {loading ? (
+                <div className="h-8 w-24 bg-gray-200 rounded animate-pulse"></div>
+              ) : (
+                <p className="text-2xl font-bold text-green-700">₹{totalCompleted.toLocaleString('en-IN')}</p>
+              )}
+            </div>
+            <div className="p-3 rounded-lg bg-green-50 text-green-600">
+              <CheckCircle size={24} />
+            </div>
+          </div>
         </div>
       </div>
 
-      {activeTab === 'returns' ? (
-        <>
-          {/* Summary Cards */}
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-            <div className="bg-white border border-gray-200 rounded-lg p-4">
-              <p className="text-sm text-gray-600">Total Returns</p>
-              <p className="text-2xl font-bold text-red-600 mt-1">₹{totalReturns.toLocaleString('en-IN')}</p>
-            </div>
-            <div className="bg-white border border-gray-200 rounded-lg p-4">
-              <p className="text-sm text-gray-600">Returns Count</p>
-              <p className="text-2xl font-bold text-gray-900 mt-1">{filteredReturns.length}</p>
-            </div>
-            <div className="bg-white border border-gray-200 rounded-lg p-4">
-              <p className="text-sm text-gray-600">Pending Approval</p>
-              <p className="text-2xl font-bold text-yellow-600 mt-1">{pendingReturns}</p>
-            </div>
-            <div className="bg-white border border-gray-200 rounded-lg p-4">
-              <p className="text-sm text-gray-600">Completed</p>
-              <p className="text-2xl font-bold text-green-600 mt-1">{completedReturns}</p>
-            </div>
+      {/* Filters */}
+      <div className="bg-white rounded-lg border border-gray-200 p-4">
+        <div className="flex flex-col sm:flex-row gap-4">
+          <div className="flex-1 relative">
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={20} />
+            <input
+              type="text"
+              placeholder="Search returns..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            />
           </div>
+          <select
+            value={filterStatus}
+            onChange={(e) => setFilterStatus(e.target.value)}
+            className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+          >
+            <option value="all">All Status</option>
+            <option value="pending">Pending</option>
+            <option value="completed">Completed</option>
+            <option value="rejected">Rejected</option>
+          </select>
+        </div>
+      </div>
 
-          {/* Filters */}
-          <div className="bg-white rounded-lg border border-gray-200 p-4">
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-              <div className="md:col-span-1">
-                <div className="flex items-center gap-2">
-                  <Search size={20} className="text-gray-400" />
+      {/* Returns Table */}
+      <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
+        {loading ? (
+          <div className="p-8 text-center">
+            <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+            <p className="text-gray-600 mt-2">Loading returns...</p>
+          </div>
+        ) : filteredReturns.length === 0 ? (
+          <div className="p-8 text-center">
+            {searchTerm || filterStatus !== 'all' ? (
+              <>
+                <p className="text-gray-600">No returns found</p>
+                <button
+                  onClick={() => { setSearchTerm(''); setFilterStatus('all'); }}
+                  className="mt-2 text-blue-600 hover:text-blue-700 text-sm"
+                >
+                  Clear filters
+                </button>
+              </>
+            ) : (
+              <>
+                <RotateCcw size={48} className="mx-auto text-gray-400 mb-4" />
+                <p className="text-gray-600 mb-4">No returns recorded yet</p>
+                <button
+                  onClick={handleAddNew}
+                  className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 text-sm"
+                >
+                  Record Your First Return
+                </button>
+              </>
+            )}
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead className="bg-gray-50 border-b border-gray-200">
+                <tr>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Return #</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase hidden md:table-cell">Invoice #</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase hidden lg:table-cell">Customer</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Date</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Amount</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-200">
+                {filteredReturns.map((ret) => (
+                  <tr key={ret.id} className="hover:bg-gray-50">
+                    <td className="px-4 py-3 text-sm font-medium text-gray-900">{ret.return_number}</td>
+                    <td className="px-4 py-3 text-sm text-gray-600 hidden md:table-cell">
+                      {ret.invoice_number || '-'}
+                    </td>
+                    <td className="px-4 py-3 text-sm text-gray-600 hidden lg:table-cell">
+                      {ret.customer_name || 'Walk-in'}
+                    </td>
+                    <td className="px-4 py-3 text-sm text-gray-600">
+                      {new Date(ret.return_date).toLocaleDateString('en-IN')}
+                    </td>
+                    <td className="px-4 py-3 text-sm font-semibold text-red-600">
+                      ₹{ret.return_amount.toLocaleString('en-IN')}
+                    </td>
+                    <td className="px-4 py-3">{getStatusBadge(ret.refund_status)}</td>
+                    <td className="px-4 py-3">
+                      {ret.refund_status === 'pending' && (
+                        <div className="flex gap-1">
+                          <button
+                            onClick={() => updateStatus(ret.id, 'completed')}
+                            className="text-green-600 hover:bg-green-50 p-1 rounded text-xs"
+                            title="Mark as Completed"
+                          >
+                            <CheckCircle size={16} />
+                          </button>
+                          <button
+                            onClick={() => updateStatus(ret.id, 'rejected')}
+                            className="text-red-600 hover:bg-red-50 p-1 rounded text-xs"
+                            title="Mark as Rejected"
+                          >
+                            <XCircle size={16} />
+                          </button>
+                        </div>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
+      {/* Add Return Modal */}
+      {showModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-lg max-w-2xl w-full">
+            <div className="border-b border-gray-200 px-6 py-4 flex justify-between items-center">
+              <h3 className="text-lg font-semibold text-gray-900">Record Return</h3>
+              <button
+                onClick={() => setShowModal(false)}
+                className="text-gray-400 hover:text-gray-600"
+                disabled={saving}
+              >
+                <Plus size={24} className="rotate-45" />
+              </button>
+            </div>
+
+            <div className="p-6 space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Original Invoice (Optional)
+                  </label>
+                  <select
+                    value={formData.invoice_id}
+                    onChange={(e) => handleInvoiceSelect(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  >
+                    <option value="">Select invoice or leave blank</option>
+                    {invoices.map(inv => (
+                      <option key={inv.id} value={inv.id}>
+                        {inv.invoice_number} - {inv.customer_name || 'Walk-in'} - ₹{inv.total_amount}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Return Date <span className="text-red-500">*</span>
+                  </label>
                   <input
-                    type="text"
-                    placeholder="Search returns..."
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
-                    className="flex-1 px-3 py-2 border-0 focus:ring-0 focus:outline-none"
+                    type="date"
+                    value={formData.return_date}
+                    onChange={(e) => setFormData({ ...formData, return_date: e.target.value })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Return Amount (₹) <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    value={formData.return_amount}
+                    onChange={(e) => setFormData({ ...formData, return_amount: parseFloat(e.target.value) || 0 })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    placeholder="0.00"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Refund Method</label>
+                  <select
+                    value={formData.refund_method}
+                    onChange={(e) => setFormData({ ...formData, refund_method: e.target.value })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  >
+                    <option value="cash">Cash</option>
+                    <option value="card">Card</option>
+                    <option value="upi">UPI</option>
+                    <option value="credit_note">Credit Note</option>
+                  </select>
+                </div>
+
+                <div className="md:col-span-2">
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Reason</label>
+                  <textarea
+                    value={formData.reason}
+                    onChange={(e) => setFormData({ ...formData, reason: e.target.value })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    rows={2}
+                    placeholder="Reason for return"
                   />
                 </div>
               </div>
 
-              <div>
-                <select
-                  value={statusFilter}
-                  onChange={(e) => setStatusFilter(e.target.value as ReturnStatus | 'all')}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              <div className="flex gap-3 pt-4">
+                <button
+                  onClick={handleSubmit}
+                  disabled={saving || !formData.return_amount}
+                  className="flex-1 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 font-medium disabled:bg-gray-400"
                 >
-                  <option value="all">All Status</option>
-                  <option value="pending">Pending</option>
-                  <option value="approved">Approved</option>
-                  <option value="rejected">Rejected</option>
-                  <option value="completed">Completed</option>
-                </select>
-              </div>
-
-              <div>
-                <input
-                  type="date"
-                  value={dateRange.from}
-                  onChange={(e) => setDateRange({ ...dateRange, from: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                />
-              </div>
-
-              <div>
-                <input
-                  type="date"
-                  value={dateRange.to}
-                  onChange={(e) => setDateRange({ ...dateRange, to: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                />
-              </div>
-            </div>
-          </div>
-
-          {/* Returns Cards - Mobile */}
-          <div className="grid grid-cols-1 lg:hidden gap-4">
-            {filteredReturns.map((returnItem) => (
-              <div key={returnItem.id} className="bg-white rounded-lg border border-gray-200 p-4">
-                <div className="flex justify-between items-start mb-3">
-                  <div>
-                    <h3 className="font-semibold text-gray-900">{returnItem.return_number}</h3>
-                    <p className="text-sm text-gray-600">Invoice: {returnItem.original_invoice_number}</p>
-                    <p className="text-sm text-gray-600">{returnItem.customer_name}</p>
-                  </div>
-                  <span className={`px-2 py-1 text-xs font-medium rounded ${statusColors[returnItem.refund_status]}`}>
-                    {returnItem.refund_status.toUpperCase()}
-                  </span>
-                </div>
-
-                <div className="space-y-2 text-sm mb-3">
-                  <div className="flex justify-between">
-                    <span className="text-gray-600">Date:</span>
-                    <span className="font-medium text-gray-900">{new Date(returnItem.return_date).toLocaleDateString('en-IN')}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-gray-600">Reason:</span>
-                    <span className="text-gray-900">{returnItem.return_reason}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-gray-600">Amount:</span>
-                    <span className="font-bold text-red-600">₹{returnItem.total_amount.toLocaleString('en-IN')}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-gray-600">Refund Method:</span>
-                    <span className="text-gray-900">{refundMethodLabels[returnItem.refund_method]}</span>
-                  </div>
-                </div>
-
-                <div className="flex gap-2 pt-3 border-t border-gray-200">
-                  <button
-                    onClick={() => handleViewReturn(returnItem)}
-                    className="flex-1 bg-blue-50 text-blue-600 py-2 rounded-lg hover:bg-blue-100 text-sm font-medium flex items-center justify-center gap-2"
-                  >
-                    <Eye size={14} />
-                    View
-                  </button>
-                  {returnItem.refund_status === 'pending' && (
-                    <>
-                      <button
-                        onClick={() => handleApproveReturn(returnItem.id)}
-                        className="px-4 py-2 bg-green-50 text-green-600 rounded-lg hover:bg-green-100"
-                      >
-                        <CheckCircle size={14} />
-                      </button>
-                      <button
-                        onClick={() => handleRejectReturn(returnItem.id)}
-                        className="px-4 py-2 bg-red-50 text-red-600 rounded-lg hover:bg-red-100"
-                      >
-                        <XCircle size={14} />
-                      </button>
-                    </>
-                  )}
-                  {returnItem.refund_status === 'approved' && (
-                    <button
-                      onClick={() => handleCompleteReturn(returnItem.id)}
-                      className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 text-sm"
-                    >
-                      Complete
-                    </button>
-                  )}
-                </div>
-              </div>
-            ))}
-          </div>
-
-          {/* Returns Table - Desktop */}
-          <div className="hidden lg:block bg-white rounded-lg border border-gray-200 overflow-hidden">
-            <div className="overflow-x-auto">
-              <table className="w-full">
-                <thead className="bg-gray-50">
-                  <tr>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Return #</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Original Invoice</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Date</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Customer</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Reason</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Amount</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Refund Method</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-200">
-                  {filteredReturns.map((returnItem) => (
-                    <tr key={returnItem.id} className="hover:bg-gray-50">
-                      <td className="px-4 py-3 font-medium text-gray-900 text-sm">{returnItem.return_number}</td>
-                      <td className="px-4 py-3 text-sm text-gray-600">{returnItem.original_invoice_number}</td>
-                      <td className="px-4 py-3 text-sm text-gray-600">{new Date(returnItem.return_date).toLocaleDateString('en-IN')}</td>
-                      <td className="px-4 py-3 text-sm text-gray-900">{returnItem.customer_name}</td>
-                      <td className="px-4 py-3 text-sm text-gray-600">{returnItem.return_reason}</td>
-                      <td className="px-4 py-3 text-sm font-bold text-red-600">₹{returnItem.total_amount.toLocaleString('en-IN')}</td>
-                      <td className="px-4 py-3 text-sm text-gray-600">{refundMethodLabels[returnItem.refund_method]}</td>
-                      <td className="px-4 py-3">
-                        <span className={`px-2 py-1 text-xs font-medium rounded ${statusColors[returnItem.refund_status]}`}>
-                          {returnItem.refund_status.toUpperCase()}
-                        </span>
-                      </td>
-                      <td className="px-4 py-3">
-                        <div className="flex items-center gap-2">
-                          <button
-                            onClick={() => handleViewReturn(returnItem)}
-                            className="p-1 text-blue-600 hover:bg-blue-50 rounded"
-                            title="View Details"
-                          >
-                            <Eye size={16} />
-                          </button>
-                          {returnItem.refund_status === 'pending' && (
-                            <>
-                              <button
-                                onClick={() => handleApproveReturn(returnItem.id)}
-                                className="p-1 text-green-600 hover:bg-green-50 rounded"
-                                title="Approve"
-                              >
-                                <CheckCircle size={16} />
-                              </button>
-                              <button
-                                onClick={() => handleRejectReturn(returnItem.id)}
-                                className="p-1 text-red-600 hover:bg-red-50 rounded"
-                                title="Reject"
-                              >
-                                <XCircle size={16} />
-                              </button>
-                            </>
-                          )}
-                          {returnItem.refund_status === 'approved' && (
-                            <button
-                              onClick={() => handleCompleteReturn(returnItem.id)}
-                              className="px-2 py-1 bg-green-600 text-white rounded text-xs hover:bg-green-700"
-                            >
-                              Complete
-                            </button>
-                          )}
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        </>
-      ) : (
-        /* Credit Notes Tab */
-        <div className="space-y-4">
-          <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
-            <div className="overflow-x-auto">
-              <table className="w-full">
-                <thead className="bg-gray-50">
-                  <tr>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Credit Note #</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Customer</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Issue Date</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Amount</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Balance</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Expiry</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-200">
-                  {mockCreditNotes.map((cn) => (
-                    <tr key={cn.id} className="hover:bg-gray-50">
-                      <td className="px-4 py-3 font-medium text-gray-900 text-sm">{cn.credit_note_number}</td>
-                      <td className="px-4 py-3 text-sm text-gray-900">{cn.customer_name}</td>
-                      <td className="px-4 py-3 text-sm text-gray-600">{new Date(cn.issue_date).toLocaleDateString('en-IN')}</td>
-                      <td className="px-4 py-3 text-sm font-medium text-gray-900">₹{cn.amount.toLocaleString('en-IN')}</td>
-                      <td className="px-4 py-3 text-sm font-bold text-green-600">₹{cn.balance_amount.toLocaleString('en-IN')}</td>
-                      <td className="px-4 py-3 text-sm text-gray-600">{new Date(cn.expiry_date).toLocaleDateString('en-IN')}</td>
-                      <td className="px-4 py-3">
-                        <span className="px-2 py-1 text-xs font-medium rounded bg-green-100 text-green-800">
-                          {cn.status.toUpperCase()}
-                        </span>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* View Return Modal */}
-      {showViewModal && selectedReturn && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-lg max-w-3xl w-full max-h-[90vh] overflow-y-auto">
-            <div className="sticky top-0 bg-white border-b border-gray-200 px-6 py-4 flex justify-between items-center">
-              <div>
-                <h3 className="text-lg font-semibold text-gray-900">{selectedReturn.return_number}</h3>
-                <p className="text-sm text-gray-600">Return Details</p>
-              </div>
-              <button onClick={() => setShowViewModal(false)} className="text-gray-400 hover:text-gray-600">
-                <FileText size={24} />
-              </button>
-            </div>
-
-            <div className="p-6 space-y-6">
-              {/* Return Information */}
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                <div>
-                  <p className="text-sm text-gray-500">Original Invoice</p>
-                  <p className="font-medium text-gray-900">{selectedReturn.original_invoice_number}</p>
-                </div>
-                <div>
-                  <p className="text-sm text-gray-500">Return Date</p>
-                  <p className="font-medium text-gray-900">{new Date(selectedReturn.return_date).toLocaleDateString('en-IN')}</p>
-                </div>
-                <div>
-                  <p className="text-sm text-gray-500">Customer</p>
-                  <p className="font-medium text-gray-900">{selectedReturn.customer_name}</p>
-                </div>
-                <div>
-                  <p className="text-sm text-gray-500">Status</p>
-                  <span className={`inline-block px-2 py-1 text-xs font-medium rounded ${statusColors[selectedReturn.refund_status]}`}>
-                    {selectedReturn.refund_status.toUpperCase()}
-                  </span>
-                </div>
-              </div>
-
-              {/* Return Reason */}
-              <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
-                <p className="text-sm font-medium text-gray-900 mb-1">Return Reason</p>
-                <p className="text-sm text-gray-700">{selectedReturn.return_reason}</p>
-              </div>
-
-              {/* Returned Items */}
-              <div>
-                <h4 className="font-semibold text-gray-900 mb-3">Returned Items</h4>
-                <div className="border border-gray-200 rounded-lg overflow-hidden">
-                  <table className="w-full">
-                    <thead className="bg-gray-50">
-                      <tr>
-                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500">Item</th>
-                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500">Qty</th>
-                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500">Rate</th>
-                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500">Amount</th>
-                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500">Restocked</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-gray-200">
-                      {mockReturnItems.map((item) => (
-                        <tr key={item.id}>
-                          <td className="px-4 py-2 text-sm text-gray-900">{item.item_name}</td>
-                          <td className="px-4 py-2 text-sm text-gray-600">{item.quantity}</td>
-                          <td className="px-4 py-2 text-sm text-gray-600">₹{item.rate}</td>
-                          <td className="px-4 py-2 text-sm font-medium text-gray-900">₹{item.total_amount}</td>
-                          <td className="px-4 py-2">
-                            {item.is_restocked ? (
-                              <span className="px-2 py-1 text-xs bg-green-100 text-green-800 rounded">Yes</span>
-                            ) : (
-                              <span className="px-2 py-1 text-xs bg-gray-100 text-gray-800 rounded">No</span>
-                            )}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-
-              {/* Refund Details */}
-              <div className="border-t border-gray-200 pt-4">
-                <div className="flex justify-between items-center mb-2">
-                  <span className="text-gray-600">Total Return Amount:</span>
-                  <span className="font-bold text-red-600 text-xl">₹{selectedReturn.total_amount.toLocaleString('en-IN')}</span>
-                </div>
-                <div className="flex justify-between items-center">
-                  <span className="text-gray-600">Refund Method:</span>
-                  <span className="font-medium text-gray-900">{refundMethodLabels[selectedReturn.refund_method]}</span>
-                </div>
+                  {saving ? 'Recording...' : 'Record Return'}
+                </button>
+                <button
+                  onClick={() => setShowModal(false)}
+                  disabled={saving}
+                  className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50"
+                >
+                  Cancel
+                </button>
               </div>
             </div>
           </div>

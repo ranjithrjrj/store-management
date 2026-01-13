@@ -1,8 +1,9 @@
 // FILE PATH: components/SalesInvoice.tsx
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Plus, Trash2, Printer, Save, Eye } from 'lucide-react';
 import { printInvoice } from '@/lib/thermalPrinter';
+import { supabase } from '@/lib/supabase';
 
 type InvoiceItem = {
   id: string;
@@ -35,19 +36,49 @@ const SalesInvoice = () => {
     method: 'iframe' as 'browser' | 'iframe' | 'bluetooth' | 'preview'
   });
 
-  // Mock data
-  const mockCustomers = [
-    { id: '1', name: 'Lakshmi Store', phone: '9876543210', gstin: '33XXXXX1234X1Z1', state_code: '33' },
-    { id: '2', name: 'Ram Prasad', phone: '9876543211', gstin: '', state_code: '33' },
-    { id: '3', name: 'Mumbai Traders', phone: '9876543212', gstin: '27XXXXX5678X1Z2', state_code: '27' }
-  ];
+  // Real data from database
+  const [customers, setCustomers] = useState<any[]>([]);
+  const [availableItems, setAvailableItems] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  const mockItems = [
-    { id: '1', name: 'Camphor Tablets', retail_price: 45, gst_rate: 5 },
-    { id: '2', name: 'Agarbatti - Rose', retail_price: 30, gst_rate: 12 },
-    { id: '3', name: 'Brass Diya', retail_price: 250, gst_rate: 18 },
-    { id: '4', name: 'Kumkum Powder', retail_price: 20, gst_rate: 5 }
-  ];
+  // Load customers and items from database
+  useEffect(() => {
+    loadData();
+  }, []);
+
+  async function loadData() {
+    try {
+      setLoading(true);
+      
+      // Load customers
+      const { data: customersData } = await supabase
+        .from('customers')
+        .select('*')
+        .eq('is_active', true)
+        .order('name');
+      
+      // Load items with details
+      const { data: itemsData } = await supabase
+        .from('items')
+        .select(`
+          id,
+          name,
+          retail_price,
+          gst_rate,
+          category:categories(name),
+          unit:units(abbreviation)
+        `)
+        .eq('is_active', true)
+        .order('name');
+      
+      setCustomers(customersData || []);
+      setAvailableItems(itemsData || []);
+    } catch (error) {
+      console.error('Error loading data:', error);
+    } finally {
+      setLoading(false);
+    }
+  }
 
   const addItem = () => {
     const newItem: InvoiceItem = {
@@ -69,7 +100,7 @@ const SalesInvoice = () => {
         const updated = { ...item, [field]: value };
         
         if (field === 'item_id') {
-          const selectedItem = mockItems.find(i => i.id === value);
+          const selectedItem = availableItems.find(i => i.id === value);
           if (selectedItem) {
             updated.item_name = selectedItem.name;
             updated.rate = selectedItem.retail_price;
@@ -138,29 +169,106 @@ const SalesInvoice = () => {
   const totals = calculateTotals();
 
   const handleCustomerChange = (customerId: string) => {
-    const customer = mockCustomers.find(c => c.id === customerId);
+    const customer = customers.find(c => c.id === customerId);
     if (customer) {
       setFormData({
         ...formData,
         customer_id: customerId,
         customer_name: customer.name,
-        customer_phone: customer.phone,
-        customer_gstin: customer.gstin
+        customer_phone: customer.phone || '',
+        customer_gstin: customer.gstin || ''
       });
       setIsIntrastate(customer.state_code === '33');
     }
   };
 
-  const handleSave = () => {
-    // Save to Supabase
-    const invoiceData = {
-      ...formData,
-      items,
-      totals,
-      invoice_number: `INV-${Date.now()}`
-    };
-    console.log('Saving invoice:', invoiceData);
-    alert('Invoice saved successfully!');
+  const handleSave = async () => {
+    if (items.length === 0) {
+      alert('Please add at least one item');
+      return;
+    }
+
+    try {
+      // Generate invoice number
+      const invoiceNumber = `INV-${Date.now()}`;
+      
+      // Prepare invoice data
+      const invoiceData = {
+        invoice_number: invoiceNumber,
+        customer_id: customerType === 'registered' ? formData.customer_id : null,
+        customer_name: formData.customer_name || null,
+        customer_phone: formData.customer_phone || null,
+        customer_gstin: formData.customer_gstin || null,
+        customer_state_code: isIntrastate ? '33' : null,
+        invoice_date: formData.invoice_date,
+        subtotal: totals.subtotal,
+        discount_amount: totals.discountAmount,
+        cgst_amount: totals.cgst,
+        sgst_amount: totals.sgst,
+        igst_amount: totals.igst,
+        round_off: totals.roundOff,
+        total_amount: totals.total,
+        payment_method: formData.payment_method,
+        payment_status: 'paid',
+        notes: formData.notes
+      };
+
+      // Insert invoice
+      const { data: invoice, error: invoiceError } = await supabase
+        .from('sales_invoices')
+        .insert(invoiceData)
+        .select()
+        .single();
+
+      if (invoiceError) throw invoiceError;
+
+      // Insert invoice items
+      const invoiceItems = items.map(item => {
+        const discountAmount = (item.quantity * item.rate * item.discount_percent) / 100;
+        const taxableAmount = (item.quantity * item.rate) - discountAmount;
+        const gstAmount = (taxableAmount * item.gst_rate) / 100;
+        
+        return {
+          invoice_id: invoice.id,
+          item_id: item.item_id,
+          quantity: item.quantity,
+          rate: item.rate,
+          discount_percent: item.discount_percent,
+          discount_amount: discountAmount,
+          taxable_amount: taxableAmount,
+          gst_rate: item.gst_rate,
+          cgst_amount: isIntrastate ? gstAmount / 2 : 0,
+          sgst_amount: isIntrastate ? gstAmount / 2 : 0,
+          igst_amount: !isIntrastate ? gstAmount : 0,
+          total_amount: item.amount
+        };
+      });
+
+      const { error: itemsError } = await supabase
+        .from('sales_invoice_items')
+        .insert(invoiceItems);
+
+      if (itemsError) throw itemsError;
+
+      alert(`Invoice ${invoiceNumber} saved successfully!`);
+      
+      // Reset form
+      setItems([]);
+      setFormData({
+        customer_id: '',
+        customer_name: '',
+        customer_phone: '',
+        customer_gstin: '',
+        invoice_date: new Date().toISOString().split('T')[0],
+        payment_method: 'cash',
+        notes: ''
+      });
+      setCustomerType('walk-in');
+      
+    } catch (error: any) {
+      console.error('Error saving invoice:', error);
+      alert('Failed to save invoice: ' + error.message);
+    }
   };
 
   const handlePrint = async () => {
@@ -267,9 +375,10 @@ const SalesInvoice = () => {
                 value={formData.customer_id}
                 onChange={(e) => handleCustomerChange(e.target.value)}
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                disabled={loading}
               >
                 <option value="">Select customer</option>
-                {mockCustomers.map(customer => (
+                {customers.map(customer => (
                   <option key={customer.id} value={customer.id}>
                     {customer.name} {customer.phone && `- ${customer.phone}`}
                   </option>
@@ -356,6 +465,15 @@ const SalesInvoice = () => {
             </div>
           ) : (
             <div className="space-y-3">
+              {/* Header Row */}
+              <div className="grid grid-cols-2 md:grid-cols-6 gap-2 px-3 py-2 bg-gray-50 rounded-lg border border-gray-200">
+                <div className="col-span-2 text-xs font-semibold text-gray-600 uppercase">Item Name</div>
+                <div className="text-xs font-semibold text-gray-600 uppercase">Qty</div>
+                <div className="text-xs font-semibold text-gray-600 uppercase">Rate (₹)</div>
+                <div className="text-xs font-semibold text-gray-600 uppercase">Disc %</div>
+                <div className="text-xs font-semibold text-gray-600 uppercase">Amount</div>
+              </div>
+
               {items.map((item, index) => (
                 <div key={item.id} className="border border-gray-200 rounded-lg p-3">
                   <div className="flex justify-between items-center mb-2">
@@ -369,17 +487,53 @@ const SalesInvoice = () => {
                   </div>
 
                   <div className="grid grid-cols-2 md:grid-cols-6 gap-2">
-                    <div className="col-span-2">
-                      <select
-                        value={item.item_id}
-                        onChange={(e) => updateItem(item.id, 'item_id', e.target.value)}
+                    <div className="col-span-2 relative">
+                      <input
+                        type="text"
+                        value={item.item_name}
+                        onChange={(e) => {
+                          setItems(items.map(i => i.id === item.id ? {...i, item_name: e.target.value} : i));
+                        }}
+                        onFocus={() => {
+                          const dropdown = document.getElementById(`dropdown-${item.id}`);
+                          if (dropdown) dropdown.style.display = 'block';
+                        }}
+                        onBlur={() => {
+                          setTimeout(() => {
+                            const dropdown = document.getElementById(`dropdown-${item.id}`);
+                            if (dropdown) dropdown.style.display = 'none';
+                          }, 200);
+                        }}
+                        placeholder="Type to search..."
                         className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        disabled={loading}
+                      />
+                      <div
+                        id={`dropdown-${item.id}`}
+                        className="absolute z-50 w-full mt-1 bg-white border border-gray-300 rounded-lg shadow-lg max-h-48 overflow-y-auto hidden"
+                        style={{ display: 'none' }}
                       >
-                        <option value="">Select item</option>
-                        {mockItems.map(mockItem => (
-                          <option key={mockItem.id} value={mockItem.id}>{mockItem.name}</option>
-                        ))}
-                      </select>
+                        {availableItems
+                          .filter(i => i.name.toLowerCase().includes(item.item_name.toLowerCase()))
+                          .slice(0, 50)
+                          .map(availItem => (
+                            <div
+                              key={availItem.id}
+                              onMouseDown={() => {
+                                updateItem(item.id, 'item_id', availItem.id);
+                                const dropdown = document.getElementById(`dropdown-${item.id}`);
+                                if (dropdown) dropdown.style.display = 'none';
+                              }}
+                              className="px-3 py-2 hover:bg-blue-50 cursor-pointer text-sm border-b border-gray-100 last:border-0"
+                            >
+                              <div className="font-medium text-gray-900">{availItem.name}</div>
+                              <div className="text-xs text-gray-500">Rate: ₹{availItem.retail_price} | GST: {availItem.gst_rate}%</div>
+                            </div>
+                          ))}
+                        {availableItems.filter(i => i.name.toLowerCase().includes(item.item_name.toLowerCase())).length === 0 && (
+                          <div className="px-3 py-2 text-sm text-gray-500">No items found</div>
+                        )}
+                      </div>
                     </div>
 
                     <div>
@@ -422,6 +576,11 @@ const SalesInvoice = () => {
                         className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded bg-gray-50 font-medium"
                       />
                     </div>
+                  </div>
+
+                  {/* Show GST rate */}
+                  <div className="mt-2 text-right">
+                    <span className="text-xs text-gray-500">GST: {item.gst_rate}%</span>
                   </div>
                 </div>
               ))}

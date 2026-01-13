@@ -2,8 +2,11 @@
 // UPDATED VERSION - Fully organized dropdown menu structure
 
 "use client"
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { LayoutDashboard, Package, ShoppingCart, FileText, Users, Settings, TrendingUp, Menu, X, ChevronDown, ChevronRight } from 'lucide-react';
+import { supabase } from '@/lib/supabase';
+import { ThemeProvider } from '@/contexts/ThemeContext';
+import { ToastProvider } from '@/components/ui';
 
 // Import all components
 import Dashboard from '@/components/Dashboard';
@@ -20,13 +23,51 @@ import VendorsManagement from '@/components/VendorsManagement';
 import CustomersManagement from '@/components/CustomersManagement';
 import Reports from '@/components/Reports';
 import TaxReports from '@/components/TaxReports';
+import SettingsComponent from '@/components/Settings';
 
 type Page = 'dashboard' | 'inventory' | 'items' | 'categories' | 'units' | 'purchase-order' | 'purchase-record' | 'sales' | 'returns' | 'expenses' | 'vendors' | 'customers' | 'reports' | 'tax-reports' | 'settings';
 
 const App = () => {
   const [currentPage, setCurrentPage] = useState<Page>('dashboard');
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const [openSections, setOpenSections] = useState<string[]>(['items-section']); // Items open by default
+  const [openSections, setOpenSections] = useState<string[]>([]); // Empty by default
+  const [storeName, setStoreName] = useState('Thirukumaran Angadi');
+  const [storeCity, setStoreCity] = useState('Mettupalayam, Tamil Nadu');
+
+  // Load store settings for header
+  useEffect(() => {
+    loadStoreSettings();
+  }, []);
+
+  // Auto-expand sections that contain the current page
+  useEffect(() => {
+    menuItems.forEach((item: any) => {
+      if (item.isSection && item.submenu) {
+        const hasCurrentPage = item.submenu.some((sub: any) => sub.id === currentPage);
+        if (hasCurrentPage && !openSections.includes(item.id)) {
+          setOpenSections(prev => [...prev, item.id]);
+        }
+      }
+    });
+  }, [currentPage]);
+
+  async function loadStoreSettings() {
+    try {
+      const { data } = await supabase
+        .from('store_settings')
+        .select('store_name, city, state')
+        .limit(1);
+      
+      if (data && data.length > 0) {
+        const settings = data[0];
+        setStoreName(settings.store_name || 'Thirukumaran Angadi');
+        const location = [settings.city, settings.state].filter(Boolean).join(', ');
+        if (location) setStoreCity(location);
+      }
+    } catch (err) {
+      console.error('Error loading store settings:', err);
+    }
+  }
 
   const menuItems = [
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
@@ -129,7 +170,7 @@ const App = () => {
       case 'tax-reports':
         return <TaxReports />;
       case 'settings':
-        return <SettingsPage />;
+        return <SettingsComponent />;
       default:
         return <ComingSoon page={currentPage} />;
     }
@@ -138,6 +179,16 @@ const App = () => {
   const handlePageChange = (pageId: Page) => {
     setCurrentPage(pageId);
     setMobileMenuOpen(false);
+    
+    // Auto-expand the section that contains this page
+    menuItems.forEach((item: any) => {
+      if (item.isSection && item.submenu) {
+        const hasThisPage = item.submenu.some((sub: any) => sub.id === pageId);
+        if (hasThisPage && !openSections.includes(item.id)) {
+          setOpenSections([...openSections, item.id]);
+        }
+      }
+    });
   };
 
   const toggleSection = (sectionId: string) => {
@@ -153,29 +204,33 @@ const App = () => {
   };
 
   return (
-    <div className="flex h-screen bg-gray-50">
-      {/* Mobile menu button */}
-      <button
-        onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-        className="lg:hidden fixed top-4 left-4 z-50 p-2 bg-blue-600 text-white rounded-lg"
-      >
-        {mobileMenuOpen ? <X size={24} /> : <Menu size={24} />}
-      </button>
+    <ThemeProvider>
+      <ToastProvider>
+        <div className="flex h-screen bg-gray-50">
+      {/* Mobile menu button - Only shows when closed */}
+      {!mobileMenuOpen && (
+        <button
+          onClick={() => setMobileMenuOpen(true)}
+          className="lg:hidden fixed top-4 left-4 z-50 p-2 bg-blue-600 text-white rounded-lg shadow-lg"
+        >
+          <Menu size={24} />
+        </button>
+      )}
 
       {/* Sidebar */}
-      <aside className={`${mobileMenuOpen ? 'translate-x-0' : '-translate-x-full'} lg:translate-x-0 fixed lg:static inset-y-0 left-0 z-40 w-64 bg-white border-r border-gray-200 transition-transform duration-300 overflow-y-auto`}>
+      <aside className={`${mobileMenuOpen ? 'translate-x-0' : '-translate-x-full'} lg:translate-x-0 fixed lg:static inset-0 lg:inset-y-0 lg:w-64 z-40 w-full bg-white border-r border-gray-200 transition-transform duration-300 overflow-y-auto`}>
         <div className="p-6">
-          <h1 className="text-xl font-bold text-blue-600">திருக்குமரன் அங்காடி</h1>
-          <p className="text-xs text-gray-500 mt-1">Mettupalayam, Tamil Nadu</p>
+          <h1 className="text-xl font-bold text-blue-600">{storeName}</h1>
+          <p className="text-xs text-gray-500 mt-1">{storeCity}</p>
         </div>
-        <nav className="px-3 space-y-1 pb-6">
+        <nav className="px-3 space-y-1 pb-24">{/* Added pb-24 for close button space */}
           {menuItems.map((item: any) => {
             const Icon = item.icon;
             
             // Section with submenu
             if (item.isSection) {
               const hasActiveSubmenu = isSectionActive(item.submenu);
-              const isOpen = openSections.includes(item.id) || hasActiveSubmenu;
+              const isOpen = openSections.includes(item.id);
               
               return (
                 <div key={item.id}>
@@ -235,6 +290,16 @@ const App = () => {
             );
           })}
         </nav>
+        
+        {/* Close button - Bottom right, mobile only */}
+        <div className="lg:hidden fixed bottom-6 right-6 z-50">
+          <button
+            onClick={() => setMobileMenuOpen(false)}
+            className="p-4 bg-red-600 text-white rounded-full shadow-lg hover:bg-red-700 transition-colors"
+          >
+            <X size={24} />
+          </button>
+        </div>
       </aside>
 
       {/* Main content */}
@@ -244,46 +309,8 @@ const App = () => {
         </div>
       </main>
     </div>
-  );
-};
-
-// Settings Page Component
-const SettingsPage = () => {
-  return (
-    <div className="space-y-6">
-      <div>
-        <h2 className="text-2xl font-bold text-gray-900">Settings</h2>
-        <p className="text-gray-600 text-sm mt-1">Configure store details and preferences</p>
-      </div>
-
-      <div className="bg-white rounded-lg border border-gray-200 p-6">
-        <div className="space-y-6">
-          <div>
-            <h3 className="text-lg font-semibold text-gray-900 mb-4">Store Information</h3>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Store Name</label>
-                <input type="text" defaultValue="Thirukumaran Angadi" className="w-full px-3 py-2 border border-gray-300 rounded-lg" />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">GSTIN</label>
-                <input type="text" placeholder="33XXXXX1234X1ZX" className="w-full px-3 py-2 border border-gray-300 rounded-lg" />
-              </div>
-              <div className="md:col-span-2">
-                <label className="block text-sm font-medium text-gray-700 mb-1">Address</label>
-                <textarea rows={3} className="w-full px-3 py-2 border border-gray-300 rounded-lg" placeholder="Enter store address"></textarea>
-              </div>
-            </div>
-          </div>
-
-          <div className="pt-4">
-            <button className="bg-blue-600 text-white px-6 py-2 rounded-lg hover:bg-blue-700 font-medium">
-              Save Settings
-            </button>
-          </div>
-        </div>
-      </div>
-    </div>
+      </ToastProvider>
+    </ThemeProvider>
   );
 };
 
