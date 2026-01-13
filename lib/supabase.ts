@@ -156,19 +156,23 @@ export const inventoryAPI = {
       });
 
       // Combine data
-      return data?.map(item => ({
-        id: item.id,
-        item_name: item.name,
-        category_name: item.category?.name || 'Uncategorized',
-        current_stock: stockByItem[item.id] || 0,
-        min_stock_level: item.min_stock_level || 0,
-        unit_name: item.unit?.name || '',
-        unit_abbr: item.unit?.abbreviation || '',
-        mrp: item.mrp,
-        retail_price: item.retail_price,
-        wholesale_price: item.wholesale_price,
-        total_value: (stockByItem[item.id] || 0) * item.retail_price
-      })) || [];
+      return data?.map(item => {
+        const category = item.category as any;
+        const unit = item.unit as any;
+        return {
+          id: item.id,
+          item_name: item.name,
+          category_name: category?.name || 'Uncategorized',
+          current_stock: stockByItem[item.id] || 0,
+          min_stock_level: item.min_stock_level || 0,
+          unit_name: unit?.name || '',
+          unit_abbr: unit?.abbreviation || '',
+          mrp: item.mrp,
+          retail_price: item.retail_price,
+          wholesale_price: item.wholesale_price,
+          total_value: (stockByItem[item.id] || 0) * item.retail_price
+        };
+      }) || [];
     } catch (error) {
       console.error('Error fetching inventory:', error);
       throw error;
