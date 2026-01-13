@@ -11,8 +11,7 @@ import type {
   PurchaseOrder,
   SalesInvoice,
   StoreSettings,
-  Expense,
-  SalesReturn
+  Expense
 } from '@/types';
 
 // Validate environment variables
