@@ -526,6 +526,38 @@ export const expensesAPI = {
       console.error('Error fetching expenses:', error);
       throw error;
     }
+  },
+
+  async create(expenseData: any) {
+    const { data, error } = await supabase
+      .from('expenses')
+      .insert(expenseData)
+      .select()
+      .single();
+    
+    if (error) throw error;
+    return data;
+  },
+
+  async update(id: string, expenseData: any) {
+    const { data, error } = await supabase
+      .from('expenses')
+      .update(expenseData)
+      .eq('id', id)
+      .select()
+      .single();
+    
+    if (error) throw error;
+    return data;
+  },
+
+  async delete(id: string) {
+    const { error } = await supabase
+      .from('expenses')
+      .delete()
+      .eq('id', id);
+    
+    if (error) throw error;
   }
 };
 
