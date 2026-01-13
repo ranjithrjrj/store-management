@@ -48,6 +48,7 @@ const ItemsManagement = () => {
   const [showFilterModal, setShowFilterModal] = useState(false);
   const [showViewModal, setShowViewModal] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [showEditConfirm, setShowEditConfirm] = useState(false);
   const [editingItem, setEditingItem] = useState<Item | null>(null);
   const [viewingItem, setViewingItem] = useState<Item | null>(null);
   const [itemTransactions, setItemTransactions] = useState<{
@@ -231,24 +232,30 @@ const ItemsManagement = () => {
   };
 
   const handleSubmit = async () => {
+    if (!formData.name.trim()) {
+      toast.warning('Name required', 'Please enter item name.');
+      return;
+    }
+
+    if (!formData.category_id) {
+      toast.warning('Category required', 'Please select a category.');
+      return;
+    }
+
+    if (!formData.unit_id) {
+      toast.warning('Unit required', 'Please select a unit.');
+      return;
+    }
+
+    // Show confirmation dialog
+    setShowEditConfirm(true);
+  };
+
+  const handleConfirmSubmit = async () => {
+    setShowEditConfirm(false);
     try {
       setSaving(true);
       setError(null);
-
-      if (!formData.name.trim()) {
-        toast.warning('Name required', 'Please enter item name.');
-        return;
-      }
-
-      if (!formData.category_id) {
-        toast.warning('Category required', 'Please select a category.');
-        return;
-      }
-
-      if (!formData.unit_id) {
-        toast.warning('Unit required', 'Please select a unit.');
-        return;
-      }
 
       if (editingItem) {
         await itemsAPI.update(editingItem.id, formData as any);
@@ -785,7 +792,7 @@ const ItemsManagement = () => {
                 <label className="flex items-center gap-2">
                   <input
                     type="checkbox"
-                    checked={formData.is_active}
+                    checked={normalizeBoolean(formData.is_active)}
                     onChange={(e) => setFormData({ ...formData, is_active: e.target.checked })}
                     className={`rounded ${theme.classes.textPrimary}`}
                   />
@@ -823,8 +830,8 @@ const ItemsManagement = () => {
               <div>
                 <div className="flex items-center justify-between mb-4">
                   <h4 className="font-semibold text-gray-900">Basic Information</h4>
-                  <Badge variant={viewingItem.is_active ? 'success' : 'neutral'}>
-                    {viewingItem.is_active ? 'Active' : 'Inactive'}
+                  <Badge variant={normalizeBoolean(viewingItem.is_active) ? 'success' : 'neutral'}>
+                    {normalizeBoolean(viewingItem.is_active) ? 'Active' : 'Inactive'}
                   </Badge>
                 </div>
                 <div className="grid grid-cols-2 gap-4 text-sm">
@@ -1026,6 +1033,22 @@ const ItemsManagement = () => {
             </div>
           </Card>
         </div>
+      )}
+
+      {/* Edit Confirmation */}
+      {showEditConfirm && (
+        <ConfirmDialog
+          isOpen={showEditConfirm}
+          onClose={() => setShowEditConfirm(false)}
+          onConfirm={handleConfirmSubmit}
+          title={editingItem ? 'Update Item' : 'Create Item'}
+          message={editingItem 
+            ? `Save changes to "${formData.name}"?` 
+            : `Create new item "${formData.name}"?`}
+          confirmText={editingItem ? 'Update' : 'Create'}
+          cancelText="Cancel"
+          variant="primary"
+        />
       )}
 
       {/* Delete Confirmation Modal */}
