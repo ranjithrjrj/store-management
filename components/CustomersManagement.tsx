@@ -53,7 +53,7 @@ const CustomersManagement = () => {
   });
 
   // Helper to normalize is_active from database
-  const normalizeBoolean = (value: boolean | string | null): boolean => {
+  const normalizeBoolean = (value: boolean | string | null | undefined): boolean => {
     if (value === true || value === 'true') return true;
     if (value === false || value === 'false') return false;
     return true; // Default to true if null or undefined
