@@ -3,8 +3,8 @@
 
 'use client';
 import React, { useState, useEffect } from 'react';
-import { UserCircle, Plus, Edit2, Trash2, X, Search, Phone, Mail, MapPin } from 'lucide-react';
-import { customersAPI } from '@/lib/supabase';
+import { Users, Plus, Edit2, Trash2, X, Search, Phone, Mail, MapPin, FileText } from 'lucide-react';
+import { supabase, customersAPI } from '@/lib/supabase';
 import { Button, Card, Input, Badge, EmptyState, LoadingSpinner, ConfirmDialog, useToast } from '@/components/ui';
 import { useTheme } from '@/contexts/ThemeContext';
 
@@ -26,10 +26,12 @@ type Customer = {
 const CustomersManagement = () => {
   const { theme } = useTheme();
   const toast = useToast();
+  
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [showModal, setShowModal] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [showEditConfirm, setShowEditConfirm] = useState(false);
   const [showInactive, setShowInactive] = useState(false);
   const [editingCustomer, setEditingCustomer] = useState<Customer | null>(null);
   const [deletingCustomer, setDeletingCustomer] = useState<{ id: string; name: string } | null>(null);
@@ -65,6 +67,7 @@ const CustomersManagement = () => {
     try {
       setLoading(true);
       setError(null);
+
       const data = await customersAPI.getAll();
       setCustomers(data || []);
     } catch (err: any) {
@@ -111,25 +114,42 @@ const CustomersManagement = () => {
   };
 
   const handleSubmit = async () => {
+    if (!formData.name?.trim()) {
+      toast.warning('Name required', 'Please enter customer name.');
+      return;
+    }
+
+    // Show confirmation dialog
+    setShowEditConfirm(true);
+  };
+
+  const handleConfirmSubmit = async () => {
+    setShowEditConfirm(false);
     try {
       setSaving(true);
-      setError(null);
-
-      if (!formData.name?.trim()) {
-        toast.warning('Name required', 'Please enter customer name.');
-        return;
-      }
 
       if (editingCustomer) {
         await customersAPI.update(editingCustomer.id, formData as any);
         toast.success('Updated!', `Customer "${formData.name}" has been updated.`);
       } else {
         await customersAPI.create(formData as any);
-        toast.success('Created!', `Customer "${formData.name}" has been added.`);
+        toast.success('Created!', `Customer "${formData.name}" has been created.`);
       }
 
       await loadCustomers();
       setShowModal(false);
+      setFormData({
+        name: '',
+        phone: '',
+        email: '',
+        gstin: '',
+        address: '',
+        city: '',
+        state: 'Tamil Nadu',
+        state_code: '33',
+        pincode: '',
+        is_active: true
+      });
     } catch (err: any) {
       console.error('Error saving customer:', err);
       toast.error('Failed to save', err.message || 'Could not save customer.');
@@ -149,7 +169,7 @@ const CustomersManagement = () => {
     try {
       await customersAPI.delete(deletingCustomer.id);
       await loadCustomers();
-      toast.success('Deleted', `Customer "${deletingCustomer.name}" has been removed.`);
+      toast.success('Deleted', `Customer "${deletingCustomer.name}" has been deleted.`);
       setShowDeleteConfirm(false);
       setDeletingCustomer(null);
     } catch (err: any) {
@@ -158,32 +178,14 @@ const CustomersManagement = () => {
     }
   };
 
-  const handleToggleActive = async (id: string, currentStatus: boolean | string | null, name: string) => {
-    try {
-      // Normalize the current status to boolean
-      const isCurrentlyActive = normalizeBoolean(currentStatus);
-      
-      await customersAPI.update(id, { is_active: !isCurrentlyActive } as any);
-      await loadCustomers();
-      toast.success(
-        !isCurrentlyActive ? 'Activated' : 'Deactivated',
-        `Customer "${name}" has been ${!isCurrentlyActive ? 'activated' : 'deactivated'}.`
-      );
-    } catch (err: any) {
-      console.error('Error updating status:', err);
-      toast.error('Failed to update', err.message || 'Could not update status.');
-    }
-  };
-
   const filteredCustomers = customers.filter(customer => {
     const matchesSearch = customer.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
       (customer.phone && customer.phone.includes(searchTerm)) ||
-      (customer.gstin && customer.gstin.toLowerCase().includes(searchTerm.toLowerCase()));
+      (customer.email && customer.email.toLowerCase().includes(searchTerm.toLowerCase()));
     
-    // Ensure is_active is treated as boolean
     const isActive = customer.is_active === true || customer.is_active === 'true';
     const matchesActive = showInactive || isActive;
-    
+
     return matchesSearch && matchesActive;
   });
 
@@ -195,12 +197,12 @@ const CustomersManagement = () => {
       <div className="space-y-6">
         <div>
           <h2 className="text-2xl font-bold text-gray-900">Customers Management</h2>
-          <p className="text-gray-600 text-sm mt-1">Manage your customer database</p>
+          <p className="text-gray-600 text-sm mt-1">Manage customer information</p>
         </div>
         <Card>
           <div className="text-center py-8">
             <div className="text-red-600 mb-4">
-              <UserCircle size={48} className="mx-auto opacity-50" />
+              <Users size={48} className="mx-auto opacity-50" />
             </div>
             <h3 className="font-bold text-red-800 mb-2">Failed to Load Customers</h3>
             <p className="text-red-600 text-sm mb-4">{error}</p>
@@ -217,7 +219,7 @@ const CustomersManagement = () => {
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h2 className="text-2xl font-bold text-gray-900">Customers Management</h2>
-          <p className="text-gray-600 text-sm mt-1">Manage your customer database</p>
+          <p className="text-gray-600 text-sm mt-1">Manage customer information</p>
         </div>
         <Button onClick={handleAddNew} variant="primary" size="md" icon={<Plus size={18} />}>
           Add Customer
@@ -226,18 +228,18 @@ const CustomersManagement = () => {
 
       {/* Search & Filter */}
       <div className="grid grid-cols-1 md:grid-cols-12 gap-4">
-        <div className="md:col-span-9">
+        <div className="md:col-span-8">
           <Card padding="md">
             <Input
               leftIcon={<Search size={18} />}
-              placeholder="Search by name, phone, or GSTIN..."
+              placeholder="Search customers by name, phone, or email..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
             />
           </Card>
         </div>
         
-        <div className="md:col-span-3">
+        <div className="md:col-span-4">
           <Card padding="md">
             <label className="flex items-center gap-2 cursor-pointer">
               <input
@@ -246,144 +248,122 @@ const CustomersManagement = () => {
                 onChange={(e) => setShowInactive(e.target.checked)}
                 className={`rounded ${theme.classes.textPrimary}`}
               />
-              <span className="text-sm font-medium text-gray-700">Show Inactive ({inactiveCount})</span>
+              <span className="text-sm font-medium text-gray-700">
+                Show Inactive ({inactiveCount})
+              </span>
             </label>
           </Card>
         </div>
       </div>
 
-      {/* Customers Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+      {/* Customers List */}
+      <Card padding="none">
         {loading ? (
-          <div className="col-span-full">
-            <Card>
-              <div className="py-12">
-                <LoadingSpinner size="lg" text="Loading customers..." />
-              </div>
-            </Card>
+          <div className="p-12">
+            <LoadingSpinner size="lg" text="Loading customers..." />
           </div>
         ) : filteredCustomers.length === 0 ? (
-          <div className="col-span-full">
-            <Card>
-              <EmptyState
-                icon={<UserCircle size={64} />}
-                title={searchTerm ? "No customers found" : "No customers yet"}
-                description={
-                  searchTerm
-                    ? "Try adjusting your search terms"
-                    : "Get started by adding your first customer"
-                }
-                action={
-                  !searchTerm && (
-                    <Button onClick={handleAddNew} variant="primary" icon={<Plus size={18} />}>
-                      Add Your First Customer
-                    </Button>
-                  )
-                }
-              />
-            </Card>
-          </div>
+          <EmptyState
+            icon={<Users size={64} />}
+            title={searchTerm ? "No customers found" : "No customers yet"}
+            description={
+              searchTerm
+                ? "Try adjusting your search terms"
+                : "Add your first customer to get started"
+            }
+            action={
+              !searchTerm && (
+                <Button onClick={handleAddNew} variant="primary" icon={<Plus size={18} />}>
+                  Add First Customer
+                </Button>
+              )
+            }
+          />
         ) : (
-          filteredCustomers.map((customer) => (
-            <Card key={customer.id} hover padding="md" className={(customer.is_active === false || customer.is_active === 'false') ? 'opacity-60' : ''}>
-              <div className="space-y-3">
-                {/* Header */}
-                <div className="flex items-start justify-between">
-                  <div className="flex items-center gap-2 flex-1 min-w-0">
-                    <div className={`p-2 ${theme.classes.bgPrimaryLight} rounded-lg flex-shrink-0`}>
-                      <UserCircle size={20} className={theme.classes.textPrimary} />
-                    </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 p-4">
+            {filteredCustomers.map((customer) => (
+              <Card key={customer.id} hover padding="md" className={(customer.is_active === false || customer.is_active === 'false') ? 'opacity-60' : ''}>
+                <div className="space-y-3">
+                  {/* Header */}
+                  <div className="flex items-start justify-between gap-2">
                     <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2">
-                        <h3 className="font-semibold text-gray-900 truncate">{customer.name}</h3>
+                      <h3 className="font-semibold text-gray-900 truncate">{customer.name}</h3>
+                      <div className="flex items-center gap-2 mt-1">
                         {(customer.is_active === false || customer.is_active === 'false') && (
-                          <span className="text-xs px-2 py-0.5 bg-gray-200 text-gray-600 rounded flex-shrink-0">Inactive</span>
+                          <Badge variant="neutral" size="sm">Inactive</Badge>
                         )}
                       </div>
                     </div>
+                    <div>
+                      <Badge variant={(customer.is_active === true || customer.is_active === 'true') ? 'success' : 'neutral'} size="sm">
+                        {(customer.is_active === true || customer.is_active === 'true') ? 'Active' : 'Inactive'}
+                      </Badge>
+                    </div>
                   </div>
-                  <Badge variant={(customer.is_active === true || customer.is_active === 'true') ? 'success' : 'neutral'} size="sm">
-                    {(customer.is_active === true || customer.is_active === 'true') ? 'Active' : 'Inactive'}
-                  </Badge>
-                </div>
 
-                {/* Contact Info */}
-                <div className="space-y-2 text-sm">
-                  {customer.phone && (
-                    <div className="flex items-center gap-2 text-gray-600">
-                      <Phone size={14} className="flex-shrink-0" />
-                      <span className="truncate">{customer.phone}</span>
-                    </div>
-                  )}
-                  {customer.email && (
-                    <div className="flex items-center gap-2 text-gray-600">
-                      <Mail size={14} className="flex-shrink-0" />
-                      <span className="truncate">{customer.email}</span>
-                    </div>
-                  )}
-                  {(customer.city || customer.state) && (
-                    <div className="flex items-center gap-2 text-gray-600">
-                      <MapPin size={14} className="flex-shrink-0" />
-                      <span className="truncate">
-                        {[customer.city, customer.state].filter(Boolean).join(', ')}
-                      </span>
-                    </div>
-                  )}
-                  {customer.gstin && (
-                    <div className="text-xs text-gray-500">
-                      GSTIN: {customer.gstin}
-                    </div>
-                  )}
-                </div>
+                  {/* Contact Details */}
+                  <div className="space-y-2 text-sm text-gray-600">
+                    {customer.phone && (
+                      <div className="flex items-center gap-2">
+                        <Phone size={14} className="flex-shrink-0" />
+                        <span className="truncate">{customer.phone}</span>
+                      </div>
+                    )}
+                    {customer.email && (
+                      <div className="flex items-center gap-2">
+                        <Mail size={14} className="flex-shrink-0" />
+                        <span className="truncate">{customer.email}</span>
+                      </div>
+                    )}
+                    {(customer.city || customer.state) && (
+                      <div className="flex items-center gap-2">
+                        <MapPin size={14} className="flex-shrink-0" />
+                        <span className="truncate">{[customer.city, customer.state].filter(Boolean).join(', ')}</span>
+                      </div>
+                    )}
+                    {customer.gstin && (
+                      <div className="flex items-center gap-2">
+                        <FileText size={14} className="flex-shrink-0" />
+                        <span className="truncate font-mono text-xs">{customer.gstin}</span>
+                      </div>
+                    )}
+                  </div>
 
-                {/* Actions */}
-                <div className="flex gap-2 pt-2 border-t border-gray-100">
-                  <button
-                    onClick={() => handleToggleActive(customer.id, customer.is_active, customer.name)}
-                    className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
-                      (customer.is_active === true || customer.is_active === 'true') ? theme.classes.bgPrimary : 'bg-gray-200'
-                    }`}
-                    title={(customer.is_active === true || customer.is_active === 'true') ? 'Deactivate' : 'Activate'}
-                  >
-                    <span
-                      className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                        (customer.is_active === true || customer.is_active === 'true') ? 'translate-x-6' : 'translate-x-1'
-                      }`}
-                    />
-                  </button>
-                  <button
-                    onClick={() => handleEdit(customer)}
-                    className={`flex-1 flex items-center justify-center gap-2 px-3 py-2 ${theme.classes.textPrimary} ${theme.classes.bgPrimaryLighter} rounded-lg hover:${theme.classes.bgPrimaryLight} transition-colors text-sm font-medium`}
-                  >
-                    <Edit2 size={14} />
-                    Edit
-                  </button>
-                  <button
-                    onClick={() => handleDeleteClick(customer.id, customer.name)}
-                    className="flex-1 flex items-center justify-center gap-2 px-3 py-2 text-red-600 bg-red-50 rounded-lg hover:bg-red-100 transition-colors text-sm font-medium"
-                  >
-                    <Trash2 size={14} />
-                    Delete
-                  </button>
+                  {/* Actions */}
+                  <div className="flex gap-2 pt-2 border-t border-gray-100">
+                    <button
+                      onClick={() => handleEdit(customer)}
+                      className={`flex-1 flex items-center justify-center gap-2 px-3 py-2 ${theme.classes.textPrimary} ${theme.classes.bgPrimaryLighter} rounded-lg hover:${theme.classes.bgPrimaryLight} transition-colors text-sm font-medium`}
+                    >
+                      <Edit2 size={14} />
+                      Edit
+                    </button>
+                    <button
+                      onClick={() => handleDeleteClick(customer.id, customer.name)}
+                      className="flex-1 flex items-center justify-center gap-2 px-3 py-2 text-red-600 bg-red-50 rounded-lg hover:bg-red-100 transition-colors text-sm font-medium"
+                    >
+                      <Trash2 size={14} />
+                      Delete
+                    </button>
+                  </div>
                 </div>
-              </div>
-            </Card>
-          ))
+              </Card>
+            ))}
+          </div>
         )}
-      </div>
+      </Card>
 
       {/* Stats */}
       {!loading && customers.length > 0 && (
         <div className="text-sm text-gray-600">
-          Showing {filteredCustomers.length} of {customers.length} customers • 
-          Active: {activeCount} • Inactive: {inactiveCount}
+          Showing {filteredCustomers.length} of {customers.length} customers • Active: {activeCount} • Inactive: {inactiveCount}
         </div>
       )}
 
       {/* Add/Edit Modal */}
       {showModal && (
-        <div className="fixed inset-0 bg-black/20 backdrop-blur-sm flex items-center justify-center p-4 z-50 overflow-y-auto">
-          <Card className="w-full max-w-2xl my-8">
+        <div className="fixed inset-0 bg-black/20 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+          <Card className="w-full max-w-2xl max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between mb-6">
               <h3 className="text-xl font-bold text-gray-900">
                 {editingCustomer ? 'Edit Customer' : 'Add New Customer'}
@@ -394,18 +374,16 @@ const CustomersManagement = () => {
             </div>
 
             <div className="space-y-4">
-              {/* Basic Info */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="md:col-span-2">
-                  <Input
-                    label="Customer Name"
-                    placeholder="Enter customer name"
-                    value={formData.name}
-                    onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                    required
-                  />
-                </div>
+              <Input
+                label="Customer Name"
+                placeholder="Enter customer name"
+                value={formData.name}
+                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                required
+                leftIcon={<Users size={18} />}
+              />
 
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <Input
                   label="Phone"
                   type="tel"
@@ -423,71 +401,63 @@ const CustomersManagement = () => {
                   onChange={(e) => setFormData({ ...formData, email: e.target.value })}
                   leftIcon={<Mail size={18} />}
                 />
-
-                <div className="md:col-span-2">
-                  <Input
-                    label="GSTIN"
-                    placeholder="Enter GSTIN (optional)"
-                    value={formData.gstin}
-                    onChange={(e) => setFormData({ ...formData, gstin: e.target.value.toUpperCase() })}
-                    helperText="15-character GST Identification Number"
-                  />
-                </div>
               </div>
 
-              {/* Address */}
-              <div className="pt-4 border-t border-gray-200">
-                <h4 className="font-medium text-gray-900 mb-3">Address Details</h4>
-                <div className="space-y-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Address</label>
-                    <textarea
-                      value={formData.address}
-                      onChange={(e) => setFormData({ ...formData, address: e.target.value })}
-                      rows={2}
-                      className={`w-full px-3 py-2 border border-gray-300 rounded-lg ${theme.classes.focusRing} focus:ring-2 focus:ring-opacity-20 focus:border-current transition-all`}
-                      placeholder="Street address"
-                    />
-                  </div>
+              <Input
+                label="GSTIN (Optional)"
+                placeholder="Enter 15-character GSTIN"
+                value={formData.gstin}
+                onChange={(e) => setFormData({ ...formData, gstin: e.target.value.toUpperCase() })}
+                maxLength={15}
+              />
 
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <Input
-                      label="City"
-                      placeholder="Enter city"
-                      value={formData.city}
-                      onChange={(e) => setFormData({ ...formData, city: e.target.value })}
-                    />
-
-                    <Input
-                      label="State"
-                      placeholder="Enter state"
-                      value={formData.state}
-                      onChange={(e) => setFormData({ ...formData, state: e.target.value })}
-                    />
-
-                    <Input
-                      label="State Code"
-                      placeholder="e.g., 33"
-                      value={formData.state_code}
-                      onChange={(e) => setFormData({ ...formData, state_code: e.target.value })}
-                    />
-
-                    <Input
-                      label="Pincode"
-                      placeholder="Enter pincode"
-                      value={formData.pincode}
-                      onChange={(e) => setFormData({ ...formData, pincode: e.target.value })}
-                    />
-                  </div>
-                </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Address</label>
+                <textarea
+                  value={formData.address}
+                  onChange={(e) => setFormData({ ...formData, address: e.target.value })}
+                  rows={2}
+                  className={`w-full px-3 py-2 border border-gray-300 rounded-lg ${theme.classes.focusRing} focus:ring-2 focus:ring-opacity-20 transition-all`}
+                  placeholder="Enter street address"
+                />
               </div>
 
-              {/* Status */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <Input
+                  label="City"
+                  placeholder="Enter city"
+                  value={formData.city}
+                  onChange={(e) => setFormData({ ...formData, city: e.target.value })}
+                />
+
+                <Input
+                  label="State"
+                  placeholder="Enter state"
+                  value={formData.state}
+                  onChange={(e) => setFormData({ ...formData, state: e.target.value })}
+                />
+
+                <Input
+                  label="State Code"
+                  placeholder="e.g., 33"
+                  value={formData.state_code}
+                  onChange={(e) => setFormData({ ...formData, state_code: e.target.value })}
+                  helperText="2-digit GST state code"
+                />
+
+                <Input
+                  label="Pincode"
+                  placeholder="Enter pincode"
+                  value={formData.pincode}
+                  onChange={(e) => setFormData({ ...formData, pincode: e.target.value })}
+                />
+              </div>
+
               <div className="pt-4 border-t border-gray-200">
                 <label className="flex items-center gap-2">
                   <input
                     type="checkbox"
-                    checked={formData.is_active}
+                    checked={normalizeBoolean(formData.is_active)}
                     onChange={(e) => setFormData({ ...formData, is_active: e.target.checked })}
                     className={`rounded ${theme.classes.textPrimary} ${theme.classes.focusRing}`}
                   />
@@ -496,17 +466,32 @@ const CustomersManagement = () => {
               </div>
             </div>
 
-            {/* Actions */}
             <div className="flex gap-3 mt-6">
               <Button onClick={() => setShowModal(false)} variant="secondary" fullWidth disabled={saving}>
                 Cancel
               </Button>
               <Button onClick={handleSubmit} variant="primary" fullWidth loading={saving}>
-                {editingCustomer ? 'Update Customer' : 'Create Customer'}
+                {editingCustomer ? 'Update' : 'Create'}
               </Button>
             </div>
           </Card>
         </div>
+      )}
+
+      {/* Edit Confirmation */}
+      {showEditConfirm && (
+        <ConfirmDialog
+          isOpen={showEditConfirm}
+          onClose={() => setShowEditConfirm(false)}
+          onConfirm={handleConfirmSubmit}
+          title={editingCustomer ? 'Update Customer' : 'Create Customer'}
+          message={editingCustomer 
+            ? `Save changes to "${formData.name}"?` 
+            : `Create new customer "${formData.name}"?`}
+          confirmText={editingCustomer ? 'Update' : 'Create'}
+          cancelText="Cancel"
+          variant="primary"
+        />
       )}
 
       {/* Delete Confirmation */}
