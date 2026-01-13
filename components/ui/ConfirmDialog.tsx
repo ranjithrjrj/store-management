@@ -3,7 +3,7 @@
 
 import React from 'react';
 import { AlertTriangle, Trash2, Power } from 'lucide-react';
-import { Button } from './Button';
+import { Button, ButtonVariant } from './Button';
 import { Card } from './Card';
 
 type ConfirmDialogProps = {
@@ -30,6 +30,9 @@ export const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
   loading = false
 }) => {
   if (!isOpen) return null;
+
+  // Map ConfirmDialog variant to Button variant
+  const buttonVariant: ButtonVariant = variant === 'warning' ? 'primary' : variant;
 
   const icons = {
     danger: <Trash2 className="h-6 w-6 text-red-600" />,
@@ -63,7 +66,7 @@ export const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
             </Button>
             <Button
               onClick={onConfirm}
-              variant={variant}
+              variant={buttonVariant}
               fullWidth
               loading={loading}
             >
