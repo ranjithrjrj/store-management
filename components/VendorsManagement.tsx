@@ -166,13 +166,16 @@ const VendorsManagement = () => {
     }
   };
 
-  const handleToggleActive = async (id: string, currentStatus: boolean, name: string) => {
+  const handleToggleActive = async (id: string, currentStatus: boolean | string | null, name: string) => {
     try {
-      await vendorsAPI.update(id, { is_active: !currentStatus } as any);
+      // Normalize the current status to boolean
+      const isCurrentlyActive = normalizeBoolean(currentStatus);
+      
+      await vendorsAPI.update(id, { is_active: !isCurrentlyActive } as any);
       await loadVendors();
       toast.success(
-        !currentStatus ? 'Activated' : 'Deactivated',
-        `Vendor "${name}" has been ${!currentStatus ? 'activated' : 'deactivated'}.`
+        !isCurrentlyActive ? 'Activated' : 'Deactivated',
+        `Vendor "${name}" has been ${!isCurrentlyActive ? 'activated' : 'deactivated'}.`
       );
     } catch (err: any) {
       console.error('Error updating status:', err);
