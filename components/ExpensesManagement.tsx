@@ -12,7 +12,7 @@ type Expense = {
   id: string;
   description: string;
   amount: number;
-  category: string;
+  category: string | { id: string; name: string } | null;
   expense_date: string;
   payment_method?: string;
   notes?: string;
