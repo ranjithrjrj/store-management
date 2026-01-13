@@ -23,6 +23,7 @@ const CategoriesManagement = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [showModal, setShowModal] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [showEditConfirm, setShowEditConfirm] = useState(false);
   const [showInactive, setShowInactive] = useState(false);
   const [editingCategory, setEditingCategory] = useState<Category | null>(null);
   const [deletingCategory, setDeletingCategory] = useState<{ id: string; name: string } | null>(null);
@@ -85,6 +86,17 @@ const CategoriesManagement = () => {
   };
 
   const handleSubmit = async () => {
+    if (!formData.name.trim()) {
+      toast.warning('Name required', 'Please enter a category name.');
+      return;
+    }
+
+    // Show confirmation dialog
+    setShowEditConfirm(true);
+  };
+
+  const handleConfirmSubmit = async () => {
+    setShowEditConfirm(false);
     try {
       setSaving(true);
       setError(null);
@@ -170,29 +182,6 @@ const CategoriesManagement = () => {
     } catch (err: any) {
       console.error('Error deleting category:', err);
       toast.error('Failed to delete', err.message || 'Could not delete category.');
-    }
-  };
-
-  const handleToggleActive = async (id: string, currentStatus: boolean | string | null, name: string) => {
-    try {
-      // Normalize the current status to boolean
-      const isCurrentlyActive = normalizeBoolean(currentStatus);
-      
-      const { error: err } = await supabase
-        .from('categories')
-        .update({ is_active: !isCurrentlyActive })
-        .eq('id', id);
-
-      if (err) throw err;
-
-      await loadCategories();
-      toast.success(
-        !isCurrentlyActive ? 'Activated' : 'Deactivated',
-        `Category "${name}" has been ${!isCurrentlyActive ? 'activated' : 'deactivated'}.`
-      );
-    } catch (err: any) {
-      console.error('Error updating status:', err);
-      toast.error('Failed to update', err.message || 'Could not update status.');
     }
   };
 
@@ -324,21 +313,6 @@ const CategoriesManagement = () => {
                   </div>
                   
                   <div className="flex items-center gap-3 flex-shrink-0">
-                    {/* Toggle Active/Inactive */}
-                    <button
-                      onClick={() => handleToggleActive(category.id, category.is_active, category.name)}
-                      className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
-                        (category.is_active === true || category.is_active === 'true') ? theme.classes.bgPrimary : 'bg-gray-200'
-                      }`}
-                      title={(category.is_active === true || category.is_active === 'true') ? 'Deactivate' : 'Activate'}
-                    >
-                      <span
-                        className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                          (category.is_active === true || category.is_active === 'true') ? 'translate-x-6' : 'translate-x-1'
-                        }`}
-                      />
-                    </button>
-
                     <button
                       onClick={() => handleEdit(category)}
                       className={`${theme.classes.textPrimary} hover:${theme.classes.bgPrimaryLight} p-2 rounded-lg transition-colors`}
@@ -406,7 +380,7 @@ const CategoriesManagement = () => {
                 <label className="flex items-center gap-2">
                   <input
                     type="checkbox"
-                    checked={formData.is_active}
+                    checked={normalizeBoolean(formData.is_active)}
                     onChange={(e) => setFormData({ ...formData, is_active: e.target.checked })}
                     className={`rounded ${theme.classes.textPrimary}`}
                   />
@@ -425,6 +399,22 @@ const CategoriesManagement = () => {
             </div>
           </Card>
         </div>
+      )}
+
+      {/* Edit Confirmation */}
+      {showEditConfirm && (
+        <ConfirmDialog
+          isOpen={showEditConfirm}
+          onClose={() => setShowEditConfirm(false)}
+          onConfirm={handleConfirmSubmit}
+          title={editingCategory ? 'Update Category' : 'Create Category'}
+          message={editingCategory 
+            ? `Save changes to "${formData.name}"?` 
+            : `Create new category "${formData.name}"?`}
+          confirmText={editingCategory ? 'Update' : 'Create'}
+          cancelText="Cancel"
+          variant="primary"
+        />
       )}
 
       {/* Delete Confirmation */}
