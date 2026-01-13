@@ -173,19 +173,22 @@ const CategoriesManagement = () => {
     }
   };
 
-  const handleToggleActive = async (id: string, currentStatus: boolean, name: string) => {
+  const handleToggleActive = async (id: string, currentStatus: boolean | string | null, name: string) => {
     try {
+      // Normalize the current status to boolean
+      const isCurrentlyActive = normalizeBoolean(currentStatus);
+      
       const { error: err } = await supabase
         .from('categories')
-        .update({ is_active: !currentStatus })
+        .update({ is_active: !isCurrentlyActive })
         .eq('id', id);
 
       if (err) throw err;
 
       await loadCategories();
       toast.success(
-        !currentStatus ? 'Activated' : 'Deactivated',
-        `Category "${name}" has been ${!currentStatus ? 'activated' : 'deactivated'}.`
+        !isCurrentlyActive ? 'Activated' : 'Deactivated',
+        `Category "${name}" has been ${!isCurrentlyActive ? 'activated' : 'deactivated'}.`
       );
     } catch (err: any) {
       console.error('Error updating status:', err);
