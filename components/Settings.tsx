@@ -1,12 +1,12 @@
 // FILE PATH: components/Settings.tsx
-// Store settings management with database integration
+// Store settings management with new UI components
 
 'use client';
 import React, { useState, useEffect } from 'react';
-import { Settings as SettingsIcon, Save, Building2, Palette } from 'lucide-react';
+import { Settings as SettingsIcon, Save, Building2, Palette, Mail, Phone, MapPin } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { useTheme } from '@/contexts/ThemeContext';
-import { useToast } from '@/components/ui';
+import { Button, Card, Input, LoadingSpinner, useToast, Badge } from '@/components/ui';
 import { getThemeNames, ThemeName } from '@/lib/themes';
 
 type StoreSettings = {
@@ -23,12 +23,11 @@ type StoreSettings = {
 };
 
 const Settings = () => {
-  const { themeName, setTheme } = useTheme();
+  const { theme, themeName, setTheme } = useTheme();
   const toast = useToast();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [selectedTheme, setSelectedTheme] = useState<ThemeName>(themeName);
 
   const [formData, setFormData] = useState<StoreSettings>({
@@ -43,39 +42,6 @@ const Settings = () => {
     email: ''
   });
 
-  // Test function to diagnose database connection
-  const testDatabaseConnection = async () => {
-    console.log('=== MANUAL DATABASE TEST ===');
-    
-    try {
-      // Test 1: Simple query
-      console.log('Test 1: Simple SELECT *');
-      const { data: allData, error: allError } = await supabase
-        .from('store_settings')
-        .select('*');
-      
-      console.log('Raw response:', { data: allData, error: allError });
-      
-      if (allError) {
-        alert('❌ Database Error: ' + allError.message);
-        return;
-      }
-      
-      if (!allData || allData.length === 0) {
-        alert('❌ No data in table! Please insert data in Supabase.');
-        return;
-      }
-      
-      alert(`✅ SUCCESS! Found ${allData.length} row(s). Check console for full data.`);
-      console.log('All rows:', allData);
-      console.table(allData[0]);
-      
-    } catch (err: any) {
-      console.error('Test error:', err);
-      alert('❌ Test failed: ' + err.message);
-    }
-  };
-
   useEffect(() => {
     loadSettings();
   }, []);
@@ -85,23 +51,15 @@ const Settings = () => {
       setLoading(true);
       setError(null);
 
-      console.log('Loading settings from database...');
-      
       const { data, error: err } = await supabase
         .from('store_settings')
         .select('*')
         .limit(1);
 
-      console.log('Supabase response:', { data, error: err });
-
-      if (err) {
-        console.error('Database error:', err);
-        throw err;
-      }
+      if (err) throw err;
 
       if (data && data.length > 0) {
         const settings = data[0];
-        console.log('Loaded settings:', settings);
         setFormData({
           id: settings.id,
           store_name: settings.store_name || '',
@@ -114,12 +72,11 @@ const Settings = () => {
           phone: settings.phone || '',
           email: settings.email || ''
         });
-      } else {
-        console.log('No settings found in database - empty result');
       }
     } catch (err: any) {
       console.error('Error loading settings:', err);
       setError(err.message || 'Failed to load settings');
+      toast.error('Failed to load', 'Could not load store settings.');
     } finally {
       setLoading(false);
     }
@@ -129,10 +86,9 @@ const Settings = () => {
     try {
       setSaving(true);
       setError(null);
-      setSuccessMessage(null);
 
       if (!formData.store_name.trim()) {
-        toast.warning('Store name required', 'Please enter a store name before saving.');
+        toast.warning('Store name required', 'Please enter a store name.');
         return;
       }
 
@@ -149,56 +105,45 @@ const Settings = () => {
       };
 
       if (formData.id) {
-        // Update existing settings
-        console.log('Updating settings with ID:', formData.id);
-        const { data, error: err } = await supabase
+        const { error: err } = await supabase
           .from('store_settings')
           .update(settingsData)
-          .eq('id', formData.id)
-          .select();
+          .eq('id', formData.id);
 
-        if (err) {
-          console.error('Update error:', err);
-          throw err;
-        }
-        console.log('Update successful:', data);
+        if (err) throw err;
       } else {
-        // Insert new settings
-        console.log('Inserting new settings');
-        const { data, error: err } = await supabase
+        const { data: newSettings, error: err } = await supabase
           .from('store_settings')
           .insert(settingsData)
           .select()
           .single();
 
-        if (err) {
-          console.error('Insert error:', err);
-          throw err;
-        }
-        console.log('Insert successful:', data);
-        if (data) {
-          setFormData({ ...formData, id: data.id });
-        }
+        if (err) throw err;
+        setFormData({ ...formData, id: newSettings.id });
       }
 
-      toast.success('Settings saved!', 'Your store settings have been updated successfully.');
-      
-      // Update theme if changed
-      if (selectedTheme !== themeName) {
-        await setTheme(selectedTheme);
-        toast.info('Theme updated', `Switched to ${getThemeNames().find(t => t.name === selectedTheme)?.displayName}`);
-      }
-      
-      // Reload settings to confirm save
-      await loadSettings();
-      
+      toast.success('Settings saved!', 'Your store settings have been updated.');
     } catch (err: any) {
       console.error('Error saving settings:', err);
-      setError(err.message || 'Failed to save settings');
-      toast.error('Failed to save', err.message || 'Could not save settings. Please try again.');
+      toast.error('Failed to save', err.message || 'Could not save settings.');
     } finally {
       setSaving(false);
     }
+  };
+
+  const handleThemeChange = (newTheme: ThemeName) => {
+    setSelectedTheme(newTheme);
+    setTheme(newTheme);
+    toast.success('Theme changed', `Switched to ${newTheme} theme.`);
+  };
+
+  const availableThemes = getThemeNames();
+  const themeColors: Record<ThemeName, string> = {
+    emerald: '#10b981',
+    blue: '#3b82f6',
+    purple: '#a855f7',
+    teal: '#14b8a6',
+    slate: '#64748b'
   };
 
   if (error && !loading) {
@@ -208,16 +153,16 @@ const Settings = () => {
           <h2 className="text-2xl font-bold text-gray-900">Store Settings</h2>
           <p className="text-gray-600 text-sm mt-1">Configure your store information</p>
         </div>
-        <div className="bg-red-50 border border-red-200 rounded-lg p-6">
-          <h3 className="font-bold text-red-800 mb-2">Failed to Load Settings</h3>
-          <p className="text-red-600 text-sm">{error}</p>
-          <button
-            onClick={loadSettings}
-            className="mt-4 bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700 text-sm"
-          >
-            Try Again
-          </button>
-        </div>
+        <Card>
+          <div className="text-center py-8">
+            <div className="text-red-600 mb-4">
+              <SettingsIcon size={48} className="mx-auto opacity-50" />
+            </div>
+            <h3 className="font-bold text-red-800 mb-2">Failed to Load Settings</h3>
+            <p className="text-red-600 text-sm mb-4">{error}</p>
+            <Button onClick={loadSettings} variant="primary">Try Again</Button>
+          </div>
+        </Card>
       </div>
     );
   }
@@ -225,267 +170,175 @@ const Settings = () => {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h2 className="text-2xl font-bold text-gray-900">Store Settings</h2>
-          <p className="text-gray-600 text-sm mt-1">Configure your store information</p>
+          <p className="text-gray-600 text-sm mt-1">Configure your store information and preferences</p>
         </div>
-        <div className="flex items-center gap-3">
-          <button
-            onClick={testDatabaseConnection}
-            className="bg-yellow-600 text-white px-4 py-2 rounded-lg hover:bg-yellow-700 text-sm font-medium"
-          >
-            🔍 Test DB Connection
-          </button>
-          <SettingsIcon size={24} className="text-gray-400" />
-        </div>
+        <Button onClick={handleSave} variant="primary" size="md" icon={<Save size={18} />} loading={saving}>
+          Save Settings
+        </Button>
       </div>
 
-      {/* Success Message */}
-      {successMessage && (
-        <div className="bg-green-50 border border-green-200 rounded-lg p-4">
-          <p className="text-green-800 font-medium">{successMessage}</p>
-        </div>
-      )}
-
-      {/* Debug Info */}
-      {formData.id && (
-        <div className="bg-gray-50 border border-gray-200 rounded-lg p-3">
-          <p className="text-xs text-gray-600">
-            <strong>Settings ID:</strong> {formData.id}
-            <span className="ml-4">
-              <strong>Last Updated:</strong> {new Date().toLocaleString('en-IN')}
-            </span>
-          </p>
-        </div>
-      )}
-
-      {/* Settings Form */}
-      <div className="bg-white rounded-lg border border-gray-200 p-6">
-        {loading ? (
-          <div className="text-center py-12">
-            <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
-            <p className="text-gray-600 mt-4">Loading settings...</p>
+      {loading ? (
+        <Card>
+          <div className="py-12">
+            <LoadingSpinner size="lg" text="Loading settings..." />
           </div>
-        ) : (
-          <div className="space-y-6">
-            {/* Store Information */}
-            <div>
-              <div className="flex items-center gap-2 mb-4">
-                <Building2 size={20} className="text-blue-600" />
+        </Card>
+      ) : (
+        <>
+          {/* Theme Settings */}
+          <Card>
+            <div className="flex items-center gap-3 mb-4">
+              <div className={`p-2 ${theme.classes.bgPrimaryLight} rounded-lg`}>
+                <Palette size={24} className={theme.classes.textPrimary} />
+              </div>
+              <div>
+                <h3 className="text-lg font-semibold text-gray-900">Theme</h3>
+                <p className="text-sm text-gray-600">Choose your preferred color theme</p>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
+              {availableThemes.map((themeObj) => (
+                <button
+                  key={themeObj.name}
+                  onClick={() => handleThemeChange(themeObj.name)}
+                  className={`relative p-4 rounded-lg border-2 transition-all hover:scale-105 ${
+                    selectedTheme === themeObj.name
+                      ? 'border-current shadow-lg'
+                      : 'border-gray-200 hover:border-gray-300'
+                  }`}
+                  style={{
+                    borderColor: selectedTheme === themeObj.name ? themeColors[themeObj.name] : undefined
+                  }}
+                >
+                  <div
+                    className="w-full h-12 rounded-md mb-2"
+                    style={{ backgroundColor: themeColors[themeObj.name] }}
+                  />
+                  <p className="text-sm font-medium text-gray-900 capitalize">{themeObj.displayName}</p>
+                  {selectedTheme === themeObj.name && (
+                    <div className="absolute -top-2 -right-2">
+                      <Badge variant="success" size="sm">Active</Badge>
+                    </div>
+                  )}
+                </button>
+              ))}
+            </div>
+          </Card>
+
+          {/* Store Information */}
+          <Card>
+            <div className="flex items-center gap-3 mb-4">
+              <div className={`p-2 ${theme.classes.bgPrimaryLight} rounded-lg`}>
+                <Building2 size={24} className={theme.classes.textPrimary} />
+              </div>
+              <div>
                 <h3 className="text-lg font-semibold text-gray-900">Store Information</h3>
+                <p className="text-sm text-gray-600">Basic details about your store</p>
+              </div>
+            </div>
+
+            <div className="space-y-4">
+              <Input
+                label="Store Name"
+                placeholder="Enter store name"
+                value={formData.store_name}
+                onChange={(e) => setFormData({ ...formData, store_name: e.target.value })}
+                required
+                leftIcon={<Building2 size={18} />}
+              />
+
+              <Input
+                label="GSTIN"
+                placeholder="Enter GSTIN (15 characters)"
+                value={formData.gstin}
+                onChange={(e) => setFormData({ ...formData, gstin: e.target.value.toUpperCase() })}
+                helperText="15-character GST Identification Number"
+              />
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <Input
+                  label="Phone"
+                  type="tel"
+                  placeholder="Enter phone number"
+                  value={formData.phone}
+                  onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+                  leftIcon={<Phone size={18} />}
+                />
+
+                <Input
+                  label="Email"
+                  type="email"
+                  placeholder="Enter email address"
+                  value={formData.email}
+                  onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                  leftIcon={<Mail size={18} />}
+                />
+              </div>
+            </div>
+          </Card>
+
+          {/* Address Information */}
+          <Card>
+            <div className="flex items-center gap-3 mb-4">
+              <div className={`p-2 ${theme.classes.bgPrimaryLight} rounded-lg`}>
+                <MapPin size={24} className={theme.classes.textPrimary} />
+              </div>
+              <div>
+                <h3 className="text-lg font-semibold text-gray-900">Address</h3>
+                <p className="text-sm text-gray-600">Store location details</p>
+              </div>
+            </div>
+
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Street Address</label>
+                <textarea
+                  value={formData.address}
+                  onChange={(e) => setFormData({ ...formData, address: e.target.value })}
+                  rows={2}
+                  className={`w-full px-3 py-2 border border-gray-300 rounded-lg ${theme.classes.focusRing} focus:ring-2 focus:ring-opacity-20 transition-all`}
+                  placeholder="Enter street address"
+                />
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="md:col-span-2">
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Store Name <span className="text-red-500">*</span>
-                  </label>
-                  <input
-                    type="text"
-                    value={formData.store_name}
-                    onChange={(e) => setFormData({ ...formData, store_name: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    placeholder="e.g., Thirukumaran Angadi"
-                    required
-                  />
-                </div>
+                <Input
+                  label="City"
+                  placeholder="Enter city"
+                  value={formData.city}
+                  onChange={(e) => setFormData({ ...formData, city: e.target.value })}
+                />
 
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">GSTIN</label>
-                  <input
-                    type="text"
-                    value={formData.gstin}
-                    onChange={(e) => setFormData({ ...formData, gstin: e.target.value.toUpperCase() })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    placeholder="15 characters"
-                    maxLength={15}
-                  />
-                </div>
+                <Input
+                  label="State"
+                  placeholder="Enter state"
+                  value={formData.state}
+                  onChange={(e) => setFormData({ ...formData, state: e.target.value })}
+                />
 
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Phone</label>
-                  <input
-                    type="tel"
-                    value={formData.phone}
-                    onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    placeholder="10 digits"
-                    maxLength={10}
-                  />
-                </div>
+                <Input
+                  label="State Code"
+                  placeholder="e.g., 33"
+                  value={formData.state_code}
+                  onChange={(e) => setFormData({ ...formData, state_code: e.target.value })}
+                  helperText="2-digit GST state code"
+                />
 
-                <div className="md:col-span-2">
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
-                  <input
-                    type="email"
-                    value={formData.email}
-                    onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    placeholder="store@example.com"
-                  />
-                </div>
+                <Input
+                  label="Pincode"
+                  placeholder="Enter pincode"
+                  value={formData.pincode}
+                  onChange={(e) => setFormData({ ...formData, pincode: e.target.value })}
+                />
               </div>
             </div>
-
-            {/* Address */}
-            <div className="pt-6 border-t border-gray-200">
-              <h3 className="text-lg font-semibold text-gray-900 mb-4">Address</h3>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="md:col-span-2">
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Street Address</label>
-                  <textarea
-                    value={formData.address}
-                    onChange={(e) => setFormData({ ...formData, address: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    rows={2}
-                    placeholder="Street address"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">City</label>
-                  <input
-                    type="text"
-                    value={formData.city}
-                    onChange={(e) => setFormData({ ...formData, city: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    placeholder="e.g., Mettupalayam"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">State</label>
-                  <input
-                    type="text"
-                    value={formData.state}
-                    onChange={(e) => setFormData({ ...formData, state: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    placeholder="e.g., Tamil Nadu"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">State Code</label>
-                  <input
-                    type="text"
-                    value={formData.state_code}
-                    onChange={(e) => setFormData({ ...formData, state_code: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    placeholder="e.g., 33"
-                    maxLength={2}
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Pincode</label>
-                  <input
-                    type="text"
-                    value={formData.pincode}
-                    onChange={(e) => setFormData({ ...formData, pincode: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    placeholder="6 digits"
-                    maxLength={10}
-                  />
-                </div>
-              </div>
-            </div>
-
-            {/* Theme Selection */}
-            <div className="pt-6 border-t border-gray-200">
-              <div className="flex items-center gap-2 mb-4">
-                <Palette size={20} className="text-emerald-600" />
-                <h3 className="text-lg font-semibold text-gray-900">Color Theme</h3>
-              </div>
-
-              <p className="text-sm text-gray-600 mb-4">
-                Choose a color scheme for your application. The theme will apply to buttons, badges, and accents throughout the interface.
-              </p>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-                {getThemeNames().map((theme) => (
-                  <button
-                    key={theme.name}
-                    type="button"
-                    onClick={() => setSelectedTheme(theme.name)}
-                    className={`relative p-4 rounded-lg border-2 text-left transition-all ${
-                      selectedTheme === theme.name
-                        ? 'border-emerald-600 bg-emerald-50'
-                        : 'border-gray-200 hover:border-gray-300 bg-white'
-                    }`}
-                  >
-                    <div className="flex items-center justify-between mb-2">
-                      <h4 className="font-semibold text-gray-900">{theme.displayName}</h4>
-                      {selectedTheme === theme.name && (
-                        <div className="w-5 h-5 bg-emerald-600 rounded-full flex items-center justify-center">
-                          <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
-                          </svg>
-                        </div>
-                      )}
-                    </div>
-                    <p className="text-xs text-gray-600 mb-3">{theme.description}</p>
-                    {/* Color preview dots */}
-                    <div className="flex gap-2">
-                      {theme.name === 'emerald' && (
-                        <>
-                          <div className="w-6 h-6 rounded-full bg-emerald-600 border-2 border-white shadow"></div>
-                          <div className="w-6 h-6 rounded-full bg-orange-500 border-2 border-white shadow"></div>
-                        </>
-                      )}
-                      {theme.name === 'blue' && (
-                        <>
-                          <div className="w-6 h-6 rounded-full bg-blue-600 border-2 border-white shadow"></div>
-                          <div className="w-6 h-6 rounded-full bg-purple-500 border-2 border-white shadow"></div>
-                        </>
-                      )}
-                      {theme.name === 'purple' && (
-                        <>
-                          <div className="w-6 h-6 rounded-full bg-purple-600 border-2 border-white shadow"></div>
-                          <div className="w-6 h-6 rounded-full bg-pink-500 border-2 border-white shadow"></div>
-                        </>
-                      )}
-                      {theme.name === 'teal' && (
-                        <>
-                          <div className="w-6 h-6 rounded-full bg-teal-600 border-2 border-white shadow"></div>
-                          <div className="w-6 h-6 rounded-full bg-amber-500 border-2 border-white shadow"></div>
-                        </>
-                      )}
-                      {theme.name === 'slate' && (
-                        <>
-                          <div className="w-6 h-6 rounded-full bg-sky-600 border-2 border-white shadow"></div>
-                          <div className="w-6 h-6 rounded-full bg-rose-500 border-2 border-white shadow"></div>
-                        </>
-                      )}
-                    </div>
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* Save Button */}
-            <div className="pt-6 border-t border-gray-200 flex justify-end">
-              <button
-                onClick={handleSave}
-                disabled={saving || !formData.store_name.trim()}
-                className="bg-blue-600 text-white px-6 py-2 rounded-lg hover:bg-blue-700 font-medium disabled:bg-gray-400 disabled:cursor-not-allowed flex items-center gap-2"
-              >
-                <Save size={18} />
-                {saving ? 'Saving...' : 'Save Settings'}
-              </button>
-            </div>
-
-            {/* Info Note */}
-            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-              <p className="text-sm text-blue-800">
-                💡 <strong>Tip:</strong> These settings will be used in invoices, reports, and other documents. 
-                Make sure all information is accurate, especially the GSTIN for tax compliance.
-              </p>
-            </div>
-          </div>
-        )}
-      </div>
+          </Card>
+        </>
+      )}
     </div>
   );
 };

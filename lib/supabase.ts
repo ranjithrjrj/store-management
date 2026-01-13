@@ -39,7 +39,6 @@ export const itemsAPI = {
           category:categories(id, name),
           unit:units(id, name, abbreviation)
         `)
-        .eq('is_active', true)
         .order('name');
       
       if (error) throw error;
@@ -140,8 +139,7 @@ export const inventoryAPI = {
           wholesale_price,
           category:categories(name),
           unit:units(name, abbreviation)
-        `)
-        .eq('is_active', true);
+        `);
       
       if (error) throw error;
 
@@ -222,7 +220,6 @@ export const vendorsAPI = {
       const { data, error } = await supabase
         .from('vendors')
         .select('*')
-        .eq('is_active', true)
         .order('name');
       
       if (error) throw error;
@@ -294,7 +291,6 @@ export const customersAPI = {
       const { data, error } = await supabase
         .from('customers')
         .select('*')
-        .eq('is_active', true)
         .order('name');
       
       if (error) throw error;
@@ -451,6 +447,53 @@ export const unitsAPI = {
       console.error('Error fetching units:', error);
       throw error;
     }
+  },
+
+  async create(unit: { name: string; abbreviation: string; is_active?: boolean }) {
+    try {
+      const { data, error } = await supabase
+        .from('units')
+        .insert(unit)
+        .select()
+        .single();
+      
+      if (error) throw error;
+      return data;
+    } catch (error) {
+      console.error('Error creating unit:', error);
+      throw error;
+    }
+  },
+
+  async update(id: string, updates: Partial<{ name: string; abbreviation: string; is_active: boolean }>) {
+    try {
+      const { data, error } = await supabase
+        .from('units')
+        .update(updates)
+        .eq('id', id)
+        .select()
+        .single();
+      
+      if (error) throw error;
+      return data;
+    } catch (error) {
+      console.error('Error updating unit:', error);
+      throw error;
+    }
+  },
+
+  async delete(id: string) {
+    try {
+      const { error } = await supabase
+        .from('units')
+        .delete()
+        .eq('id', id);
+      
+      if (error) throw error;
+    } catch (error) {
+      console.error('Error deleting unit:', error);
+      throw error;
+    }
   }
 };
 
@@ -599,14 +642,12 @@ export const dashboardAPI = {
       // Get customers count
       const { count: customersCount } = await supabase
         .from('customers')
-        .select('*', { count: 'exact', head: true })
-        .eq('is_active', true);
+        .select('*', { count: 'exact', head: true });
 
       // Get vendors count
       const { count: vendorsCount } = await supabase
         .from('vendors')
-        .select('*', { count: 'exact', head: true })
-        .eq('is_active', true);
+        .select('*', { count: 'exact', head: true });
 
       // Get recent sales (last 30 days)
       const thirtyDaysAgo = new Date();

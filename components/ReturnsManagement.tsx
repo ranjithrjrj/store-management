@@ -1,10 +1,12 @@
 // FILE PATH: components/ReturnsManagement.tsx
-// UPDATED VERSION - Uses real database data
+// Returns Management with new UI components and theme support
 
 'use client';
 import React, { useState, useEffect } from 'react';
-import { RotateCcw, Plus, Search, Calendar, DollarSign, CheckCircle, XCircle } from 'lucide-react';
+import { RotateCcw, Plus, Search, Calendar, DollarSign, CheckCircle, XCircle, Edit2, Trash2, X } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
+import { Button, Card, Input, Badge, EmptyState, LoadingSpinner, ConfirmDialog, useToast } from '@/components/ui';
+import { useTheme } from '@/contexts/ThemeContext';
 
 type SalesReturn = {
   id: string;
@@ -22,11 +24,17 @@ type SalesReturn = {
 };
 
 const ReturnsManagement = () => {
+  const { theme } = useTheme();
+  const toast = useToast();
+  
   const [returns, setReturns] = useState<SalesReturn[]>([]);
   const [invoices, setInvoices] = useState<any[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterStatus, setFilterStatus] = useState<string>('all');
   const [showModal, setShowModal] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [editingReturn, setEditingReturn] = useState<SalesReturn | null>(null);
+  const [deletingReturn, setDeletingReturn] = useState<{ id: string; return_number: string } | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -50,7 +58,6 @@ const ReturnsManagement = () => {
       setLoading(true);
       setError(null);
 
-      // Load recent invoices (last 30 days)
       const thirtyDaysAgo = new Date();
       thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
       
@@ -60,7 +67,6 @@ const ReturnsManagement = () => {
         .gte('invoice_date', thirtyDaysAgo.toISOString().split('T')[0])
         .order('invoice_date', { ascending: false });
       
-      // Load returns
       const { data: returnsData } = await supabase
         .from('sales_returns')
         .select('*')
@@ -71,12 +77,14 @@ const ReturnsManagement = () => {
     } catch (err: any) {
       console.error('Error loading data:', err);
       setError(err.message || 'Failed to load data');
+      toast.error('Failed to load', 'Could not load returns data.');
     } finally {
       setLoading(false);
     }
   }
 
   const handleAddNew = () => {
+    setEditingReturn(null);
     setFormData({
       invoice_id: '',
       return_date: new Date().toISOString().split('T')[0],
@@ -89,13 +97,27 @@ const ReturnsManagement = () => {
     setShowModal(true);
   };
 
+  const handleEdit = (returnRecord: SalesReturn) => {
+    setEditingReturn(returnRecord);
+    setFormData({
+      invoice_id: returnRecord.invoice_id || '',
+      return_date: returnRecord.return_date,
+      return_amount: returnRecord.return_amount,
+      refund_method: returnRecord.refund_method,
+      refund_status: returnRecord.refund_status,
+      reason: returnRecord.reason || '',
+      notes: returnRecord.notes || ''
+    });
+    setShowModal(true);
+  };
+
   const handleInvoiceSelect = (invoiceId: string) => {
     const invoice = invoices.find(inv => inv.id === invoiceId);
     if (invoice) {
       setFormData({
         ...formData,
         invoice_id: invoiceId,
-        return_amount: invoice.total_amount // Default to full amount
+        return_amount: invoice.total_amount
       });
     }
   };
@@ -103,108 +125,119 @@ const ReturnsManagement = () => {
   const handleSubmit = async () => {
     try {
       setSaving(true);
-      setError(null);
 
-      if (!formData.return_amount || formData.return_amount <= 0) {
-        alert('Please enter return amount');
+      if (!formData.invoice_id) {
+        toast.warning('Invoice required', 'Please select an invoice.');
         return;
       }
 
-      const returnNumber = `RET-${Date.now()}`;
-      const invoice = invoices.find(inv => inv.id === formData.invoice_id);
+      if (formData.return_amount <= 0) {
+        toast.warning('Amount required', 'Please enter a valid return amount.');
+        return;
+      }
+
+      const selectedInvoice = invoices.find(inv => inv.id === formData.invoice_id);
+      const returnNumber = editingReturn 
+        ? editingReturn.return_number 
+        : `RET-${Date.now()}`;
 
       const returnData = {
         return_number: returnNumber,
-        invoice_id: formData.invoice_id || null,
-        invoice_number: invoice?.invoice_number || null,
-        customer_name: invoice?.customer_name || null,
+        invoice_id: formData.invoice_id,
+        invoice_number: selectedInvoice?.invoice_number,
+        customer_name: selectedInvoice?.customer_name,
         return_date: formData.return_date,
         return_amount: formData.return_amount,
         refund_method: formData.refund_method,
         refund_status: formData.refund_status,
-        reason: formData.reason || null,
-        notes: formData.notes || null
+        reason: formData.reason,
+        notes: formData.notes
       };
 
-      const { error: returnError } = await supabase
-        .from('sales_returns')
-        .insert(returnData);
+      if (editingReturn) {
+        const { error } = await supabase
+          .from('sales_returns')
+          .update(returnData)
+          .eq('id', editingReturn.id);
 
-      if (returnError) throw returnError;
+        if (error) throw error;
+        toast.success('Updated!', `Return ${returnNumber} has been updated.`);
+      } else {
+        const { error } = await supabase
+          .from('sales_returns')
+          .insert(returnData);
 
-      alert(`Return ${returnNumber} recorded successfully!`);
+        if (error) throw error;
+        toast.success('Created!', `Return ${returnNumber} has been recorded.`);
+      }
+
       await loadData();
       setShowModal(false);
     } catch (err: any) {
       console.error('Error saving return:', err);
-      alert('Failed to save return: ' + err.message);
+      toast.error('Failed to save', err.message || 'Could not save return.');
     } finally {
       setSaving(false);
     }
   };
 
-  const updateStatus = async (id: string, status: 'pending' | 'completed' | 'rejected') => {
+  const handleDeleteClick = (id: string, return_number: string) => {
+    setDeletingReturn({ id, return_number });
+    setShowDeleteConfirm(true);
+  };
+
+  const handleDeleteConfirm = async () => {
+    if (!deletingReturn) return;
+
     try {
       const { error } = await supabase
         .from('sales_returns')
-        .update({ refund_status: status })
-        .eq('id', id);
+        .delete()
+        .eq('id', deletingReturn.id);
 
       if (error) throw error;
 
       await loadData();
-      alert('Status updated successfully!');
+      toast.success('Deleted', `Return ${deletingReturn.return_number} has been removed.`);
+      setShowDeleteConfirm(false);
+      setDeletingReturn(null);
     } catch (err: any) {
-      console.error('Error updating status:', err);
-      alert('Failed to update status: ' + err.message);
+      console.error('Error deleting return:', err);
+      toast.error('Failed to delete', err.message || 'Could not delete return.');
     }
   };
 
-  const getStatusBadge = (status: string) => {
-    const badges = {
-      pending: { color: 'bg-yellow-100 text-yellow-800', icon: Calendar, label: 'Pending' },
-      completed: { color: 'bg-green-100 text-green-800', icon: CheckCircle, label: 'Completed' },
-      rejected: { color: 'bg-red-100 text-red-800', icon: XCircle, label: 'Rejected' }
-    };
-    const badge = badges[status as keyof typeof badges];
-    const Icon = badge.icon;
-    return (
-      <span className={`inline-flex items-center gap-1 px-2 py-1 rounded text-xs font-medium ${badge.color}`}>
-        <Icon size={12} />
-        {badge.label}
-      </span>
-    );
-  };
-
   const filteredReturns = returns.filter(ret => {
-    const matchesSearch = 
-      ret.return_number.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    const matchesSearch = ret.return_number.toLowerCase().includes(searchTerm.toLowerCase()) ||
       (ret.invoice_number && ret.invoice_number.toLowerCase().includes(searchTerm.toLowerCase())) ||
       (ret.customer_name && ret.customer_name.toLowerCase().includes(searchTerm.toLowerCase()));
+    
     const matchesStatus = filterStatus === 'all' || ret.refund_status === filterStatus;
+    
     return matchesSearch && matchesStatus;
   });
 
-  const totalPending = returns.filter(r => r.refund_status === 'pending').reduce((sum, r) => sum + r.return_amount, 0);
-  const totalCompleted = returns.filter(r => r.refund_status === 'completed').reduce((sum, r) => sum + r.return_amount, 0);
+  const totalReturns = filteredReturns.reduce((sum, ret) => sum + ret.return_amount, 0);
+  const pendingCount = returns.filter(r => r.refund_status === 'pending').length;
+  const completedCount = returns.filter(r => r.refund_status === 'completed').length;
 
   if (error && !loading) {
     return (
       <div className="space-y-6">
         <div>
-          <h2 className="text-2xl font-bold text-gray-900">Returns & Refunds</h2>
+          <h2 className="text-2xl font-bold text-gray-900">Returns Management</h2>
           <p className="text-gray-600 text-sm mt-1">Manage sales returns and refunds</p>
         </div>
-        <div className="bg-red-50 border border-red-200 rounded-lg p-6">
-          <h3 className="font-bold text-red-800 mb-2">Failed to Load Returns</h3>
-          <p className="text-red-600 text-sm">{error}</p>
-          <button
-            onClick={loadData}
-            className="mt-4 bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700 text-sm"
-          >
-            Try Again
-          </button>
-        </div>
+        <Card>
+          <div className="text-center py-8">
+            <div className="text-red-600 mb-4">
+              <RotateCcw size={48} className="mx-auto opacity-50" />
+            </div>
+            <h3 className="font-bold text-red-800 mb-2">Failed to Load Returns</h3>
+            <p className="text-red-600 text-sm mb-4">{error}</p>
+            <Button onClick={loadData} variant="primary">Try Again</Button>
+          </div>
+        </Card>
       </div>
     );
   }
@@ -212,295 +245,331 @@ const ReturnsManagement = () => {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h2 className="text-2xl font-bold text-gray-900">Returns & Refunds</h2>
+          <h2 className="text-2xl font-bold text-gray-900">Returns Management</h2>
           <p className="text-gray-600 text-sm mt-1">Manage sales returns and refunds</p>
         </div>
-        <button
-          onClick={handleAddNew}
-          disabled={loading}
-          className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 text-sm font-medium flex items-center gap-2 disabled:bg-gray-400"
-        >
-          <Plus size={18} />
+        <Button onClick={handleAddNew} variant="primary" size="md" icon={<Plus size={18} />}>
           Record Return
-        </button>
+        </Button>
       </div>
 
       {/* Stats */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <div className="bg-white rounded-lg border border-gray-200 p-6">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <Card padding="md">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm text-gray-600 mb-1">Total Returns</p>
-              {loading ? (
-                <div className="h-8 w-16 bg-gray-200 rounded animate-pulse"></div>
-              ) : (
-                <p className="text-2xl font-bold text-gray-900">{returns.length}</p>
-              )}
+              <p className="text-sm text-gray-600">Total Returns</p>
+              <p className="text-2xl font-bold text-gray-900">₹{totalReturns.toLocaleString()}</p>
             </div>
-            <div className="p-3 rounded-lg bg-blue-50 text-blue-600">
-              <RotateCcw size={24} />
+            <div className={`p-3 rounded-lg ${theme.classes.bgPrimaryLight}`}>
+              <RotateCcw size={24} className={theme.classes.textPrimary} />
             </div>
           </div>
-        </div>
+        </Card>
 
-        <div className="bg-white rounded-lg border border-yellow-200 p-6">
+        <Card padding="md">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm text-gray-600 mb-1">Pending Refunds</p>
-              {loading ? (
-                <div className="h-8 w-24 bg-gray-200 rounded animate-pulse"></div>
-              ) : (
-                <p className="text-2xl font-bold text-yellow-700">₹{totalPending.toLocaleString('en-IN')}</p>
-              )}
+              <p className="text-sm text-gray-600">Pending</p>
+              <p className="text-2xl font-bold text-amber-900">{pendingCount}</p>
             </div>
-            <div className="p-3 rounded-lg bg-yellow-50 text-yellow-600">
-              <Calendar size={24} />
+            <div className="p-3 rounded-lg bg-amber-100">
+              <XCircle size={24} className="text-amber-600" />
             </div>
           </div>
-        </div>
+        </Card>
 
-        <div className="bg-white rounded-lg border border-green-200 p-6">
+        <Card padding="md">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm text-gray-600 mb-1">Completed Refunds</p>
-              {loading ? (
-                <div className="h-8 w-24 bg-gray-200 rounded animate-pulse"></div>
-              ) : (
-                <p className="text-2xl font-bold text-green-700">₹{totalCompleted.toLocaleString('en-IN')}</p>
-              )}
+              <p className="text-sm text-gray-600">Completed</p>
+              <p className="text-2xl font-bold text-green-900">{completedCount}</p>
             </div>
-            <div className="p-3 rounded-lg bg-green-50 text-green-600">
-              <CheckCircle size={24} />
+            <div className="p-3 rounded-lg bg-green-100">
+              <CheckCircle size={24} className="text-green-600" />
             </div>
           </div>
-        </div>
+        </Card>
       </div>
 
-      {/* Filters */}
-      <div className="bg-white rounded-lg border border-gray-200 p-4">
-        <div className="flex flex-col sm:flex-row gap-4">
-          <div className="flex-1 relative">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={20} />
-            <input
-              type="text"
-              placeholder="Search returns..."
+      {/* Search & Filter */}
+      <div className="grid grid-cols-1 md:grid-cols-12 gap-4">
+        <div className="md:col-span-8">
+          <Card padding="md">
+            <Input
+              leftIcon={<Search size={18} />}
+              placeholder="Search by return number, invoice, or customer..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
             />
+          </Card>
+        </div>
+        
+        <div className="md:col-span-4">
+          <div className="flex gap-2 h-full">
+            <button
+              onClick={() => setFilterStatus('all')}
+              className={`flex-1 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+                filterStatus === 'all'
+                  ? `${theme.classes.bgPrimary} text-white`
+                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+              }`}
+            >
+              All
+            </button>
+            <button
+              onClick={() => setFilterStatus('pending')}
+              className={`flex-1 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+                filterStatus === 'pending'
+                  ? 'bg-amber-600 text-white'
+                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+              }`}
+            >
+              Pending
+            </button>
+            <button
+              onClick={() => setFilterStatus('completed')}
+              className={`flex-1 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+                filterStatus === 'completed'
+                  ? 'bg-green-600 text-white'
+                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+              }`}
+            >
+              Completed
+            </button>
           </div>
-          <select
-            value={filterStatus}
-            onChange={(e) => setFilterStatus(e.target.value)}
-            className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-          >
-            <option value="all">All Status</option>
-            <option value="pending">Pending</option>
-            <option value="completed">Completed</option>
-            <option value="rejected">Rejected</option>
-          </select>
         </div>
       </div>
 
-      {/* Returns Table */}
-      <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
+      {/* Returns List */}
+      <Card padding="none">
         {loading ? (
-          <div className="p-8 text-center">
-            <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
-            <p className="text-gray-600 mt-2">Loading returns...</p>
+          <div className="p-12">
+            <LoadingSpinner size="lg" text="Loading returns..." />
           </div>
         ) : filteredReturns.length === 0 ? (
-          <div className="p-8 text-center">
-            {searchTerm || filterStatus !== 'all' ? (
-              <>
-                <p className="text-gray-600">No returns found</p>
-                <button
-                  onClick={() => { setSearchTerm(''); setFilterStatus('all'); }}
-                  className="mt-2 text-blue-600 hover:text-blue-700 text-sm"
-                >
-                  Clear filters
-                </button>
-              </>
-            ) : (
-              <>
-                <RotateCcw size={48} className="mx-auto text-gray-400 mb-4" />
-                <p className="text-gray-600 mb-4">No returns recorded yet</p>
-                <button
-                  onClick={handleAddNew}
-                  className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 text-sm"
-                >
-                  Record Your First Return
-                </button>
-              </>
-            )}
-          </div>
+          <EmptyState
+            icon={<RotateCcw size={64} />}
+            title={searchTerm ? "No returns found" : "No returns yet"}
+            description={
+              searchTerm
+                ? "Try adjusting your search terms"
+                : "Returns will appear here when recorded"
+            }
+            action={
+              !searchTerm && (
+                <Button onClick={handleAddNew} variant="primary" icon={<Plus size={18} />}>
+                  Record First Return
+                </Button>
+              )
+            }
+          />
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead className="bg-gray-50 border-b border-gray-200">
-                <tr>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Return #</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase hidden md:table-cell">Invoice #</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase hidden lg:table-cell">Customer</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Date</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Amount</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-200">
-                {filteredReturns.map((ret) => (
-                  <tr key={ret.id} className="hover:bg-gray-50">
-                    <td className="px-4 py-3 text-sm font-medium text-gray-900">{ret.return_number}</td>
-                    <td className="px-4 py-3 text-sm text-gray-600 hidden md:table-cell">
-                      {ret.invoice_number || '-'}
-                    </td>
-                    <td className="px-4 py-3 text-sm text-gray-600 hidden lg:table-cell">
-                      {ret.customer_name || 'Walk-in'}
-                    </td>
-                    <td className="px-4 py-3 text-sm text-gray-600">
-                      {new Date(ret.return_date).toLocaleDateString('en-IN')}
-                    </td>
-                    <td className="px-4 py-3 text-sm font-semibold text-red-600">
-                      ₹{ret.return_amount.toLocaleString('en-IN')}
-                    </td>
-                    <td className="px-4 py-3">{getStatusBadge(ret.refund_status)}</td>
-                    <td className="px-4 py-3">
-                      {ret.refund_status === 'pending' && (
-                        <div className="flex gap-1">
-                          <button
-                            onClick={() => updateStatus(ret.id, 'completed')}
-                            className="text-green-600 hover:bg-green-50 p-1 rounded text-xs"
-                            title="Mark as Completed"
-                          >
-                            <CheckCircle size={16} />
-                          </button>
-                          <button
-                            onClick={() => updateStatus(ret.id, 'rejected')}
-                            className="text-red-600 hover:bg-red-50 p-1 rounded text-xs"
-                            title="Mark as Rejected"
-                          >
-                            <XCircle size={16} />
-                          </button>
+          <div className="divide-y divide-gray-200">
+            {filteredReturns.map((returnRecord) => (
+              <div key={returnRecord.id} className="p-4 hover:bg-gray-50 transition-colors">
+                <div className="flex items-start justify-between gap-4">
+                  <div className="flex items-start gap-3 flex-1 min-w-0">
+                    <div className={`p-2 ${theme.classes.bgPrimaryLight} rounded-lg flex-shrink-0`}>
+                      <RotateCcw size={20} className={theme.classes.textPrimary} />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 mb-1">
+                        <h3 className="font-semibold text-gray-900">{returnRecord.return_number}</h3>
+                        <Badge
+                          variant={
+                            returnRecord.refund_status === 'completed' ? 'success' :
+                            returnRecord.refund_status === 'pending' ? 'warning' : 'danger'
+                          }
+                          size="sm"
+                        >
+                          {returnRecord.refund_status}
+                        </Badge>
+                      </div>
+                      <div className="text-sm text-gray-600 space-y-1">
+                        {returnRecord.invoice_number && (
+                          <p>Invoice: {returnRecord.invoice_number}</p>
+                        )}
+                        {returnRecord.customer_name && (
+                          <p>Customer: {returnRecord.customer_name}</p>
+                        )}
+                        <div className="flex items-center gap-2">
+                          <Calendar size={14} />
+                          <span>{new Date(returnRecord.return_date).toLocaleDateString()}</span>
                         </div>
-                      )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+                        {returnRecord.reason && (
+                          <p className="text-gray-500 italic">Reason: {returnRecord.reason}</p>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                  
+                  <div className="flex items-center gap-3 flex-shrink-0">
+                    <div className="text-right">
+                      <p className="text-lg font-bold text-gray-900">₹{returnRecord.return_amount.toLocaleString()}</p>
+                      <p className="text-xs text-gray-500">{returnRecord.refund_method}</p>
+                    </div>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => handleEdit(returnRecord)}
+                        className={`${theme.classes.textPrimary} hover:${theme.classes.bgPrimaryLight} p-2 rounded-lg transition-colors`}
+                        title="Edit"
+                      >
+                        <Edit2 size={16} />
+                      </button>
+                      <button
+                        onClick={() => handleDeleteClick(returnRecord.id, returnRecord.return_number)}
+                        className="text-red-600 hover:bg-red-50 p-2 rounded-lg transition-colors"
+                        title="Delete"
+                      >
+                        <Trash2 size={16} />
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            ))}
           </div>
         )}
-      </div>
+      </Card>
 
-      {/* Add Return Modal */}
+      {/* Stats */}
+      {!loading && returns.length > 0 && (
+        <div className="text-sm text-gray-600">
+          Showing {filteredReturns.length} of {returns.length} returns
+        </div>
+      )}
+
+      {/* Add/Edit Modal */}
       {showModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-lg max-w-2xl w-full">
-            <div className="border-b border-gray-200 px-6 py-4 flex justify-between items-center">
-              <h3 className="text-lg font-semibold text-gray-900">Record Return</h3>
-              <button
-                onClick={() => setShowModal(false)}
-                className="text-gray-400 hover:text-gray-600"
-                disabled={saving}
-              >
-                <Plus size={24} className="rotate-45" />
+        <div className="fixed inset-0 bg-black/20 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+          <Card className="w-full max-w-2xl">
+            <div className="flex items-center justify-between mb-6">
+              <h3 className="text-xl font-bold text-gray-900">
+                {editingReturn ? 'Edit Return' : 'Record New Return'}
+              </h3>
+              <button onClick={() => setShowModal(false)} className="text-gray-400 hover:text-gray-600 transition-colors">
+                <X size={24} />
               </button>
             </div>
 
-            <div className="p-6 space-y-4">
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Invoice <span className="text-red-500">*</span>
+                </label>
+                <select
+                  value={formData.invoice_id}
+                  onChange={(e) => handleInvoiceSelect(e.target.value)}
+                  className={`w-full px-3 py-2 border border-gray-300 rounded-lg ${theme.classes.focusRing} focus:ring-2 focus:ring-opacity-20 transition-all`}
+                  disabled={!!editingReturn}
+                >
+                  <option value="">Select invoice</option>
+                  {invoices.map(inv => (
+                    <option key={inv.id} value={inv.id}>
+                      {inv.invoice_number} - {inv.customer_name} - ₹{inv.total_amount}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Original Invoice (Optional)
-                  </label>
-                  <select
-                    value={formData.invoice_id}
-                    onChange={(e) => handleInvoiceSelect(e.target.value)}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  >
-                    <option value="">Select invoice or leave blank</option>
-                    {invoices.map(inv => (
-                      <option key={inv.id} value={inv.id}>
-                        {inv.invoice_number} - {inv.customer_name || 'Walk-in'} - ₹{inv.total_amount}
-                      </option>
-                    ))}
-                  </select>
-                </div>
+                <Input
+                  label="Return Date"
+                  type="date"
+                  value={formData.return_date}
+                  onChange={(e) => setFormData({ ...formData, return_date: e.target.value })}
+                  required
+                  leftIcon={<Calendar size={18} />}
+                />
 
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Return Date <span className="text-red-500">*</span>
-                  </label>
-                  <input
-                    type="date"
-                    value={formData.return_date}
-                    onChange={(e) => setFormData({ ...formData, return_date: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Return Amount (₹) <span className="text-red-500">*</span>
-                  </label>
-                  <input
-                    type="number"
-                    step="0.01"
-                    value={formData.return_amount}
-                    onChange={(e) => setFormData({ ...formData, return_amount: parseFloat(e.target.value) || 0 })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    placeholder="0.00"
-                  />
-                </div>
+                <Input
+                  label="Return Amount"
+                  type="number"
+                  step="0.01"
+                  placeholder="0.00"
+                  value={formData.return_amount || ''}
+                  onChange={(e) => setFormData({ ...formData, return_amount: parseFloat(e.target.value) || 0 })}
+                  required
+                  leftIcon={<DollarSign size={18} />}
+                />
 
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Refund Method</label>
                   <select
                     value={formData.refund_method}
                     onChange={(e) => setFormData({ ...formData, refund_method: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    className={`w-full px-3 py-2 border border-gray-300 rounded-lg ${theme.classes.focusRing} focus:ring-2 focus:ring-opacity-20 transition-all`}
                   >
                     <option value="cash">Cash</option>
                     <option value="card">Card</option>
                     <option value="upi">UPI</option>
-                    <option value="credit_note">Credit Note</option>
+                    <option value="bank_transfer">Bank Transfer</option>
                   </select>
                 </div>
 
-                <div className="md:col-span-2">
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Reason</label>
-                  <textarea
-                    value={formData.reason}
-                    onChange={(e) => setFormData({ ...formData, reason: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    rows={2}
-                    placeholder="Reason for return"
-                  />
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Refund Status</label>
+                  <select
+                    value={formData.refund_status}
+                    onChange={(e) => setFormData({ ...formData, refund_status: e.target.value as any })}
+                    className={`w-full px-3 py-2 border border-gray-300 rounded-lg ${theme.classes.focusRing} focus:ring-2 focus:ring-opacity-20 transition-all`}
+                  >
+                    <option value="pending">Pending</option>
+                    <option value="completed">Completed</option>
+                    <option value="rejected">Rejected</option>
+                  </select>
                 </div>
               </div>
 
-              <div className="flex gap-3 pt-4">
-                <button
-                  onClick={handleSubmit}
-                  disabled={saving || !formData.return_amount}
-                  className="flex-1 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 font-medium disabled:bg-gray-400"
-                >
-                  {saving ? 'Recording...' : 'Record Return'}
-                </button>
-                <button
-                  onClick={() => setShowModal(false)}
-                  disabled={saving}
-                  className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50"
-                >
-                  Cancel
-                </button>
+              <Input
+                label="Reason"
+                placeholder="Reason for return"
+                value={formData.reason}
+                onChange={(e) => setFormData({ ...formData, reason: e.target.value })}
+              />
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Notes</label>
+                <textarea
+                  value={formData.notes}
+                  onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
+                  rows={3}
+                  className={`w-full px-3 py-2 border border-gray-300 rounded-lg ${theme.classes.focusRing} focus:ring-2 focus:ring-opacity-20 transition-all`}
+                  placeholder="Additional notes (optional)"
+                />
               </div>
             </div>
-          </div>
+
+            <div className="flex gap-3 mt-6">
+              <Button onClick={() => setShowModal(false)} variant="secondary" fullWidth disabled={saving}>
+                Cancel
+              </Button>
+              <Button onClick={handleSubmit} variant="primary" fullWidth loading={saving}>
+                {editingReturn ? 'Update Return' : 'Record Return'}
+              </Button>
+            </div>
+          </Card>
         </div>
+      )}
+
+      {/* Delete Confirmation */}
+      {showDeleteConfirm && deletingReturn && (
+        <ConfirmDialog
+          isOpen={showDeleteConfirm}
+          onClose={() => {
+            setShowDeleteConfirm(false);
+            setDeletingReturn(null);
+          }}
+          onConfirm={handleDeleteConfirm}
+          title="Delete Return"
+          message={`Are you sure you want to delete return "${deletingReturn.return_number}"? This action cannot be undone.`}
+          confirmText="Delete"
+          cancelText="Cancel"
+          variant="danger"
+        />
       )}
     </div>
   );

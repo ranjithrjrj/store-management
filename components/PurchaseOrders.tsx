@@ -1,10 +1,12 @@
 // FILE PATH: components/PurchaseOrders.tsx
-// UPDATED VERSION - Uses real database data
+// Purchase Orders Management with new UI components and ConfirmDialog
 
 'use client';
 import React, { useState, useEffect } from 'react';
-import { ShoppingCart, Plus, Edit2, Trash2, X, Search, CheckCircle, Clock, XCircle } from 'lucide-react';
+import { ShoppingCart, Plus, Edit2, Trash2, X, Search, CheckCircle, Clock, XCircle, Package } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
+import { Button, Card, Input, Badge, EmptyState, LoadingSpinner, ConfirmDialog, useToast } from '@/components/ui';
+import { useTheme } from '@/contexts/ThemeContext';
 
 type POItem = {
   id: string;
@@ -35,13 +37,17 @@ type PurchaseOrder = {
 };
 
 const PurchaseOrders = () => {
+  const { theme } = useTheme();
+  const toast = useToast();
   const [orders, setOrders] = useState<PurchaseOrder[]>([]);
   const [vendors, setVendors] = useState<any[]>([]);
   const [availableItems, setAvailableItems] = useState<any[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterStatus, setFilterStatus] = useState<string>('all');
   const [showModal, setShowModal] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [editingPO, setEditingPO] = useState<PurchaseOrder | null>(null);
+  const [deletingPO, setDeletingPO] = useState<{ id: string; po_number: string } | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -94,6 +100,7 @@ const PurchaseOrders = () => {
     } catch (err: any) {
       console.error('Error loading data:', err);
       setError(err.message || 'Failed to load data');
+      toast.error('Failed to load', 'Could not load purchase orders.');
     } finally {
       setLoading(false);
     }
@@ -239,7 +246,7 @@ const PurchaseOrders = () => {
       setError(null);
 
       if (!formData.vendor_id || items.length === 0) {
-        alert('Please select vendor and add items');
+        toast.warning('Missing information', 'Please select vendor and add items');
         return;
       }
 
@@ -289,7 +296,7 @@ const PurchaseOrders = () => {
 
         if (itemsError) throw itemsError;
 
-        alert(`Purchase Order ${editingPO.po_number} updated successfully!`);
+        toast.success('Updated!', `Purchase Order ${editingPO.po_number} has been updated.`);
       } else {
         // CREATE new PO
         const poNumber = `PO-${Date.now()}`;
@@ -333,52 +340,53 @@ const PurchaseOrders = () => {
 
         if (itemsError) throw itemsError;
 
-        alert(`Purchase Order ${poNumber} created successfully!`);
+        toast.success('Created!', `Purchase Order ${poNumber} has been created.`);
       }
 
       await loadData();
       setShowModal(false);
     } catch (err: any) {
       console.error('Error saving PO:', err);
-      alert('Failed to save PO: ' + err.message);
+      toast.error('Failed to save', err.message || 'Could not save purchase order.');
     } finally {
       setSaving(false);
     }
   };
 
-  const handleDelete = async (id: string, poNumber: string) => {
-    if (!confirm(`Delete PO ${poNumber}?`)) return;
+  const handleDeleteClick = (id: string, poNumber: string) => {
+    setDeletingPO({ id, po_number: poNumber });
+    setShowDeleteConfirm(true);
+  };
+
+  const handleDeleteConfirm = async () => {
+    if (!deletingPO) return;
 
     try {
       const { error } = await supabase
         .from('purchase_orders')
         .delete()
-        .eq('id', id);
+        .eq('id', deletingPO.id);
 
       if (error) throw error;
       await loadData();
-      alert('PO deleted successfully!');
+      toast.success('Deleted', `PO ${deletingPO.po_number} has been deleted.`);
+      setShowDeleteConfirm(false);
+      setDeletingPO(null);
     } catch (err: any) {
       console.error('Error deleting PO:', err);
-      alert('Failed to delete PO: ' + err.message);
+      toast.error('Failed to delete', err.message || 'Could not delete purchase order.');
     }
   };
 
   const getStatusBadge = (status: string) => {
-    const badges = {
-      pending: { color: 'bg-yellow-100 text-yellow-800', icon: Clock, label: 'Pending' },
-      partial: { color: 'bg-blue-100 text-blue-800', icon: ShoppingCart, label: 'Partial' },
-      received: { color: 'bg-green-100 text-green-800', icon: CheckCircle, label: 'Received' },
-      cancelled: { color: 'bg-red-100 text-red-800', icon: XCircle, label: 'Cancelled' }
+    const statusMap = {
+      pending: { variant: 'warning' as const, label: 'Pending' },
+      partial: { variant: 'primary' as const, label: 'Partial' },
+      received: { variant: 'success' as const, label: 'Received' },
+      cancelled: { variant: 'danger' as const, label: 'Cancelled' }
     };
-    const badge = badges[status as keyof typeof badges];
-    const Icon = badge.icon;
-    return (
-      <span className={`inline-flex items-center gap-1 px-2 py-1 rounded text-xs font-medium ${badge.color}`}>
-        <Icon size={12} />
-        {badge.label}
-      </span>
-    );
+    const config = statusMap[status as keyof typeof statusMap] || { variant: 'neutral' as const, label: status };
+    return <Badge variant={config.variant} size="sm">{config.label}</Badge>;
   };
 
   const filteredOrders = orders.filter(order => {
@@ -396,16 +404,16 @@ const PurchaseOrders = () => {
           <h2 className="text-2xl font-bold text-gray-900">Purchase Orders</h2>
           <p className="text-gray-600 text-sm mt-1">Manage purchase orders from vendors</p>
         </div>
-        <div className="bg-red-50 border border-red-200 rounded-lg p-6">
-          <h3 className="font-bold text-red-800 mb-2">Failed to Load Orders</h3>
-          <p className="text-red-600 text-sm">{error}</p>
-          <button
-            onClick={loadData}
-            className="mt-4 bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700 text-sm"
-          >
-            Try Again
-          </button>
-        </div>
+        <Card>
+          <div className="text-center py-8">
+            <div className="text-red-600 mb-4">
+              <ShoppingCart size={48} className="mx-auto opacity-50" />
+            </div>
+            <h3 className="font-bold text-red-800 mb-2">Failed to Load Orders</h3>
+            <p className="text-red-600 text-sm mb-4">{error}</p>
+            <Button onClick={loadData} variant="primary">Try Again</Button>
+          </div>
+        </Card>
       </div>
     );
   }
@@ -420,33 +428,32 @@ const PurchaseOrders = () => {
           <h2 className="text-2xl font-bold text-gray-900">Purchase Orders</h2>
           <p className="text-gray-600 text-sm mt-1">Manage purchase orders from vendors</p>
         </div>
-        <button
+        <Button
           onClick={handleAddNew}
           disabled={loading}
-          className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 text-sm font-medium flex items-center gap-2 disabled:bg-gray-400"
+          variant="primary"
+          size="md"
+          icon={<Plus size={18} />}
         >
-          <Plus size={18} />
           Create PO
-        </button>
+        </Button>
       </div>
 
       {/* Filters */}
-      <div className="bg-white rounded-lg border border-gray-200 p-4">
+      <Card padding="md">
         <div className="flex flex-col sm:flex-row gap-4">
-          <div className="flex-1 relative">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={20} />
-            <input
-              type="text"
+          <div className="flex-1">
+            <Input
+              leftIcon={<Search size={18} />}
               placeholder="Search POs..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
             />
           </div>
           <select
             value={filterStatus}
             onChange={(e) => setFilterStatus(e.target.value)}
-            className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            className={`px-3 py-2 border border-gray-300 rounded-lg ${theme.classes.focusRing} focus:ring-2 focus:ring-opacity-20 transition-all`}
           >
             <option value="all">All Status</option>
             <option value="pending">Pending</option>
@@ -455,40 +462,31 @@ const PurchaseOrders = () => {
             <option value="cancelled">Cancelled</option>
           </select>
         </div>
-      </div>
+      </Card>
 
       {/* Orders Table */}
-      <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
+      <Card padding="none">
         {loading ? (
-          <div className="p-8 text-center">
-            <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
-            <p className="text-gray-600 mt-2">Loading orders...</p>
+          <div className="p-12">
+            <LoadingSpinner size="lg" text="Loading orders..." />
           </div>
         ) : filteredOrders.length === 0 ? (
-          <div className="p-8 text-center">
-            {searchTerm || filterStatus !== 'all' ? (
-              <>
-                <p className="text-gray-600">No orders found</p>
-                <button
-                  onClick={() => { setSearchTerm(''); setFilterStatus('all'); }}
-                  className="mt-2 text-blue-600 hover:text-blue-700 text-sm"
-                >
-                  Clear filters
-                </button>
-              </>
-            ) : (
-              <>
-                <ShoppingCart size={48} className="mx-auto text-gray-400 mb-4" />
-                <p className="text-gray-600 mb-4">No purchase orders yet</p>
-                <button
-                  onClick={handleAddNew}
-                  className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 text-sm"
-                >
+          <EmptyState
+            icon={<ShoppingCart size={64} />}
+            title={searchTerm || filterStatus !== 'all' ? "No orders found" : "No purchase orders yet"}
+            description={
+              searchTerm || filterStatus !== 'all'
+                ? "Try adjusting your filters"
+                : "Get started by creating your first purchase order"
+            }
+            action={
+              !searchTerm && filterStatus === 'all' && (
+                <Button onClick={handleAddNew} variant="primary" icon={<Plus size={18} />}>
                   Create Your First PO
-                </button>
-              </>
-            )}
-          </div>
+                </Button>
+              )
+            }
+          />
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full">
@@ -525,14 +523,14 @@ const PurchaseOrders = () => {
                       <div className="flex items-center gap-2">
                         <button
                           onClick={() => handleEdit(order)}
-                          className="text-blue-600 hover:bg-blue-50 p-1 rounded"
+                          className={`${theme.classes.textPrimary} hover:${theme.classes.bgPrimaryLight} p-2 rounded-lg transition-colors`}
                           title="Edit"
                         >
                           <Edit2 size={16} />
                         </button>
                         <button
-                          onClick={() => handleDelete(order.id, order.po_number)}
-                          className="text-red-600 hover:bg-red-50 p-1 rounded"
+                          onClick={() => handleDeleteClick(order.id, order.po_number)}
+                          className="text-red-600 hover:bg-red-50 p-2 rounded-lg transition-colors"
                           title="Delete"
                         >
                           <Trash2 size={16} />
@@ -545,11 +543,28 @@ const PurchaseOrders = () => {
             </table>
           </div>
         )}
-      </div>
+      </Card>
+
+      {/* Delete Confirmation */}
+      {showDeleteConfirm && deletingPO && (
+        <ConfirmDialog
+          isOpen={showDeleteConfirm}
+          onClose={() => {
+            setShowDeleteConfirm(false);
+            setDeletingPO(null);
+          }}
+          onConfirm={handleDeleteConfirm}
+          title="Delete Purchase Order"
+          message={`Are you sure you want to delete PO ${deletingPO.po_number}? This action cannot be undone.`}
+          confirmText="Delete"
+          cancelText="Cancel"
+          variant="danger"
+        />
+      )}
 
       {/* Create PO Modal */}
       {showModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50 overflow-y-auto">
+        <div className="fixed inset-0 bg-black/20 backdrop-blur-sm flex items-center justify-center p-4 z-50 overflow-y-auto">
           <div className="bg-white rounded-lg max-w-4xl w-full max-h-[90vh] overflow-y-auto">
             <div className="sticky top-0 bg-white border-b border-gray-200 px-6 py-4 flex justify-between items-center">
               <h3 className="text-lg font-semibold text-gray-900">
@@ -663,7 +678,7 @@ const PurchaseOrders = () => {
                             {/* Custom Dropdown */}
                             <div
                               id={`dropdown-${item.id}`}
-                              className="absolute z-50 w-full mt-1 bg-white border border-gray-300 rounded-lg shadow-lg max-h-48 overflow-y-auto hidden"
+                              className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-lg shadow-lg max-h-48 overflow-y-auto hidden"
                               style={{ display: 'none' }}
                             >
                               {availableItems
@@ -672,7 +687,7 @@ const PurchaseOrders = () => {
                                 .map(availItem => (
                                   <div
                                     key={availItem.id}
-                                    onMouseDown={() => {
+                                    onClick={() => {
                                       updateItem(item.id, 'item_id', availItem.id);
                                       const dropdown = document.getElementById(`dropdown-${item.id}`);
                                       if (dropdown) dropdown.style.display = 'none';

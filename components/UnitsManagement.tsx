@@ -1,30 +1,40 @@
 // FILE PATH: components/UnitsManagement.tsx
-// Units Management with real database integration
+// Units Management with ConfirmDialog and active/inactive filtering
 
 'use client';
 import React, { useState, useEffect } from 'react';
 import { Ruler, Plus, Edit2, Trash2, X, Search } from 'lucide-react';
+import { unitsAPI } from '@/lib/supabase';
 import { supabase } from '@/lib/supabase';
+import { Button, Card, Input, EmptyState, LoadingSpinner, ConfirmDialog, useToast } from '@/components/ui';
+import { useTheme } from '@/contexts/ThemeContext';
 
 type Unit = {
   id: string;
   name: string;
   abbreviation: string;
+  is_active: boolean;
   created_at: string;
 };
 
 const UnitsManagement = () => {
+  const { theme } = useTheme();
+  const toast = useToast();
   const [units, setUnits] = useState<Unit[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [showModal, setShowModal] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [showInactive, setShowInactive] = useState(false);
   const [editingUnit, setEditingUnit] = useState<Unit | null>(null);
+  const [deletingUnit, setDeletingUnit] = useState<{ id: string; name: string } | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   
   const [formData, setFormData] = useState({
     name: '',
-    abbreviation: ''
+    abbreviation: '',
+    is_active: true
   });
 
   useEffect(() => {
@@ -35,17 +45,12 @@ const UnitsManagement = () => {
     try {
       setLoading(true);
       setError(null);
-
-      const { data, error: err } = await supabase
-        .from('units')
-        .select('*')
-        .order('name');
-
-      if (err) throw err;
+      const data = await unitsAPI.getAll();
       setUnits(data || []);
     } catch (err: any) {
       console.error('Error loading units:', err);
       setError(err.message || 'Failed to load units');
+      toast.error('Failed to load', 'Could not load units. Please refresh.');
     } finally {
       setLoading(false);
     }
@@ -53,7 +58,7 @@ const UnitsManagement = () => {
 
   const handleAddNew = () => {
     setEditingUnit(null);
-    setFormData({ name: '', abbreviation: '' });
+    setFormData({ name: '', abbreviation: '', is_active: true });
     setShowModal(true);
   };
 
@@ -61,7 +66,8 @@ const UnitsManagement = () => {
     setEditingUnit(unit);
     setFormData({
       name: unit.name,
-      abbreviation: unit.abbreviation
+      abbreviation: unit.abbreviation,
+      is_active: unit.is_active
     });
     setShowModal(true);
   };
@@ -71,108 +77,117 @@ const UnitsManagement = () => {
       setSaving(true);
       setError(null);
 
-      if (!formData.name.trim() || !formData.abbreviation.trim()) {
-        alert('Please fill in all required fields');
+      if (!formData.name.trim()) {
+        toast.warning('Name required', 'Please enter unit name.');
+        return;
+      }
+
+      if (!formData.abbreviation.trim()) {
+        toast.warning('Abbreviation required', 'Please enter unit abbreviation.');
         return;
       }
 
       if (editingUnit) {
-        // Update existing unit
-        const { error: err } = await supabase
-          .from('units')
-          .update({
-            name: formData.name.trim(),
-            abbreviation: formData.abbreviation.trim().toLowerCase()
-          })
-          .eq('id', editingUnit.id);
-
-        if (err) throw err;
-        alert('Unit updated successfully!');
+        await unitsAPI.update(editingUnit.id, formData as any);
+        toast.success('Updated!', `Unit "${formData.name}" has been updated.`);
       } else {
-        // Create new unit
-        const { error: err } = await supabase
-          .from('units')
-          .insert({
-            name: formData.name.trim(),
-            abbreviation: formData.abbreviation.trim().toLowerCase()
-          });
-
-        if (err) throw err;
-        alert('Unit created successfully!');
+        await unitsAPI.create(formData as any);
+        toast.success('Created!', `Unit "${formData.name}" has been added.`);
       }
 
       await loadUnits();
       setShowModal(false);
     } catch (err: any) {
       console.error('Error saving unit:', err);
-      if (err.message.includes('duplicate') || err.code === '23505') {
-        alert('A unit with this abbreviation already exists. Please use a different abbreviation.');
-      } else {
-        alert('Failed to save unit: ' + err.message);
-      }
+      toast.error('Failed to save', err.message || 'Could not save unit.');
     } finally {
       setSaving(false);
     }
   };
 
-  const handleDelete = async (id: string, name: string) => {
-    // Check if unit has items
+  const handleDeleteClick = (id: string, name: string) => {
+    setDeletingUnit({ id, name });
+    setShowDeleteConfirm(true);
+  };
+
+  const handleDeleteConfirm = async () => {
+    if (!deletingUnit) return;
+
     try {
       const { data: items, error: checkErr } = await supabase
         .from('items')
         .select('id')
-        .eq('unit_id', id)
+        .eq('unit_id', deletingUnit.id)
         .limit(1);
 
       if (checkErr) throw checkErr;
 
       if (items && items.length > 0) {
-        alert(`Cannot delete unit "${name}" because it has items assigned to it. Please reassign or delete those items first.`);
+        toast.warning(
+          'Cannot delete',
+          `Unit "${deletingUnit.name}" has items assigned. Please reassign them first.`
+        );
+        setShowDeleteConfirm(false);
+        setDeletingUnit(null);
         return;
       }
 
-      if (!confirm(`Are you sure you want to delete the unit "${name}"?`)) {
-        return;
-      }
-
-      const { error: err } = await supabase
-        .from('units')
-        .delete()
-        .eq('id', id);
-
-      if (err) throw err;
-
+      await unitsAPI.delete(deletingUnit.id);
       await loadUnits();
-      alert('Unit deleted successfully!');
+      toast.success('Deleted', `Unit "${deletingUnit.name}" has been removed.`);
+      setShowDeleteConfirm(false);
+      setDeletingUnit(null);
     } catch (err: any) {
       console.error('Error deleting unit:', err);
-      alert('Failed to delete unit: ' + err.message);
+      toast.error('Failed to delete', err.message || 'Could not delete unit.');
     }
   };
 
-  const filteredUnits = units.filter(unit =>
-    unit.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    unit.abbreviation.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  const handleToggleActive = async (id: string, currentStatus: boolean, name: string) => {
+    try {
+      await unitsAPI.update(id, { is_active: !currentStatus } as any);
+      await loadUnits();
+      toast.success(
+        !currentStatus ? 'Activated' : 'Deactivated',
+        `Unit "${name}" has been ${!currentStatus ? 'activated' : 'deactivated'}.`
+      );
+    } catch (err: any) {
+      console.error('Error updating status:', err);
+      toast.error('Failed to update', err.message || 'Could not update status.');
+    }
+  };
 
-  // Show error state
+  const filteredUnits = units.filter(unit => {
+    const matchesSearch = unit.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      unit.abbreviation.toLowerCase().includes(searchTerm.toLowerCase());
+    
+    // Ensure is_active is treated as boolean
+    const isActive = unit.is_active === true || unit.is_active === 'true';
+    const matchesActive = showInactive || isActive;
+    
+    return matchesSearch && matchesActive;
+  });
+
+  const activeCount = units.filter(u => u.is_active === true || u.is_active === 'true').length;
+  const inactiveCount = units.filter(u => u.is_active === false || u.is_active === 'false' || u.is_active === null).length;
+
   if (error && !loading) {
     return (
       <div className="space-y-6">
         <div>
           <h2 className="text-2xl font-bold text-gray-900">Units Management</h2>
-          <p className="text-gray-600 text-sm mt-1">Manage measurement units for your items</p>
+          <p className="text-gray-600 text-sm mt-1">Manage measurement units</p>
         </div>
-        <div className="bg-red-50 border border-red-200 rounded-lg p-6">
-          <h3 className="font-bold text-red-800 mb-2">Failed to Load Units</h3>
-          <p className="text-red-600 text-sm">{error}</p>
-          <button
-            onClick={loadUnits}
-            className="mt-4 bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700 text-sm"
-          >
-            Try Again
-          </button>
-        </div>
+        <Card>
+          <div className="text-center py-8">
+            <div className="text-red-600 mb-4">
+              <Ruler size={48} className="mx-auto opacity-50" />
+            </div>
+            <h3 className="font-bold text-red-800 mb-2">Failed to Load Units</h3>
+            <p className="text-red-600 text-sm mb-4">{error}</p>
+            <Button onClick={loadUnits} variant="primary">Try Again</Button>
+          </div>
+        </Card>
       </div>
     );
   }
@@ -180,193 +195,210 @@ const UnitsManagement = () => {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h2 className="text-2xl font-bold text-gray-900">Units Management</h2>
-          <p className="text-gray-600 text-sm mt-1">Manage measurement units for your items</p>
+          <p className="text-gray-600 text-sm mt-1">Manage measurement units</p>
         </div>
-        <button
-          onClick={handleAddNew}
-          disabled={loading}
-          className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 text-sm font-medium flex items-center gap-2 disabled:bg-gray-400"
-        >
-          <Plus size={18} />
+        <Button onClick={handleAddNew} variant="primary" size="md" icon={<Plus size={18} />}>
           Add Unit
-        </button>
+        </Button>
       </div>
 
-      {/* Search Bar */}
-      <div className="bg-white rounded-lg border border-gray-200 p-4">
-        <div className="relative">
-          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={20} />
-          <input
-            type="text"
-            placeholder="Search units..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-          />
+      {/* Search & Filter */}
+      <div className="grid grid-cols-1 md:grid-cols-12 gap-4">
+        <div className="md:col-span-9">
+          <Card padding="md">
+            <Input
+              leftIcon={<Search size={18} />}
+              placeholder="Search units..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+            />
+          </Card>
+        </div>
+        
+        <div className="md:col-span-3">
+          <Card padding="md">
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={showInactive}
+                onChange={(e) => setShowInactive(e.target.checked)}
+                className={`rounded ${theme.classes.textPrimary}`}
+              />
+              <span className="text-sm font-medium text-gray-700">Show Inactive ({inactiveCount})</span>
+            </label>
+          </Card>
         </div>
       </div>
 
-      {/* Units Table */}
-      <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
+      {/* Units List */}
+      <Card padding="none">
         {loading ? (
-          <div className="p-8 text-center">
-            <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
-            <p className="text-gray-600 mt-2">Loading units...</p>
+          <div className="p-12">
+            <LoadingSpinner size="lg" text="Loading units..." />
           </div>
         ) : filteredUnits.length === 0 ? (
-          <div className="p-8 text-center">
-            {searchTerm ? (
-              <>
-                <p className="text-gray-600">No units found matching "{searchTerm}"</p>
-                <button
-                  onClick={() => setSearchTerm('')}
-                  className="mt-2 text-blue-600 hover:text-blue-700 text-sm"
-                >
-                  Clear search
-                </button>
-              </>
-            ) : (
-              <>
-                <Ruler size={48} className="mx-auto text-gray-400 mb-4" />
-                <p className="text-gray-600 mb-4">No units yet</p>
-                <button
-                  onClick={handleAddNew}
-                  className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 text-sm"
-                >
+          <EmptyState
+            icon={<Ruler size={64} />}
+            title={searchTerm ? "No units found" : "No units yet"}
+            description={
+              searchTerm
+                ? "Try adjusting your search terms"
+                : "Get started by creating your first unit"
+            }
+            action={
+              !searchTerm && (
+                <Button onClick={handleAddNew} variant="primary" icon={<Plus size={18} />}>
                   Add Your First Unit
-                </button>
-              </>
-            )}
-          </div>
+                </Button>
+              )
+            }
+          />
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead className="bg-gray-50 border-b border-gray-200">
-                <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Unit Name</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Abbreviation</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Created</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-200">
-                {filteredUnits.map((unit) => (
-                  <tr key={unit.id} className="hover:bg-gray-50">
-                    <td className="px-6 py-4">
-                      <div className="flex items-center gap-2">
-                        <Ruler size={16} className="text-blue-600" />
-                        <span className="font-medium text-gray-900">{unit.name}</span>
+          <div className="divide-y divide-gray-200">
+            {filteredUnits.map((unit) => (
+              <div
+                key={unit.id}
+                className={`p-4 hover:bg-gray-50 transition-colors ${(unit.is_active === false || unit.is_active === 'false') ? 'opacity-60' : ''}`}
+              >
+                <div className="flex items-start justify-between gap-4">
+                  <div className="flex items-start gap-3 flex-1 min-w-0">
+                    <div className={`p-2 ${theme.classes.bgPrimaryLight} rounded-lg flex-shrink-0`}>
+                      <Ruler size={20} className={theme.classes.textPrimary} />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 mb-1">
+                        <h3 className="font-semibold text-gray-900">{unit.name}</h3>
+                        <span className="text-sm text-gray-500">({unit.abbreviation})</span>
+                        {(unit.is_active === false || unit.is_active === 'false') && (
+                          <span className="text-xs px-2 py-0.5 bg-gray-200 text-gray-600 rounded">Inactive</span>
+                        )}
                       </div>
-                    </td>
-                    <td className="px-6 py-4">
-                      <span className="px-2 py-1 bg-blue-100 text-blue-800 rounded text-sm font-medium">
-                        {unit.abbreviation}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 text-sm text-gray-600">
-                      {new Date(unit.created_at).toLocaleDateString('en-IN')}
-                    </td>
-                    <td className="px-6 py-4">
-                      <div className="flex items-center gap-2">
-                        <button
-                          onClick={() => handleEdit(unit)}
-                          className="text-blue-600 hover:bg-blue-50 p-1 rounded"
-                          title="Edit"
-                        >
-                          <Edit2 size={16} />
-                        </button>
-                        <button
-                          onClick={() => handleDelete(unit.id, unit.name)}
-                          className="text-red-600 hover:bg-red-50 p-1 rounded"
-                          title="Delete"
-                        >
-                          <Trash2 size={16} />
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+                      <p className="text-xs text-gray-500 mt-2">
+                        Created {new Date(unit.created_at).toLocaleDateString()}
+                      </p>
+                    </div>
+                  </div>
+                  
+                  <div className="flex items-center gap-3 flex-shrink-0">
+                    {/* Toggle Active/Inactive */}
+                    <button
+                      onClick={() => handleToggleActive(unit.id, unit.is_active, unit.name)}
+                      className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                        (unit.is_active === true || unit.is_active === 'true') ? theme.classes.bgPrimary : 'bg-gray-200'
+                      }`}
+                      title={(unit.is_active === true || unit.is_active === 'true') ? 'Deactivate' : 'Activate'}
+                    >
+                      <span
+                        className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                          (unit.is_active === true || unit.is_active === 'true') ? 'translate-x-6' : 'translate-x-1'
+                        }`}
+                      />
+                    </button>
+
+                    <button
+                      onClick={() => handleEdit(unit)}
+                      className={`${theme.classes.textPrimary} hover:${theme.classes.bgPrimaryLight} p-2 rounded-lg transition-colors`}
+                      title="Edit unit"
+                    >
+                      <Edit2 size={16} />
+                    </button>
+                    <button
+                      onClick={() => handleDeleteClick(unit.id, unit.name)}
+                      className="text-red-600 hover:bg-red-50 p-2 rounded-lg transition-colors"
+                      title="Delete unit"
+                    >
+                      <Trash2 size={16} />
+                    </button>
+                  </div>
+                </div>
+              </div>
+            ))}
           </div>
         )}
-      </div>
+      </Card>
+
+      {/* Stats */}
+      {!loading && units.length > 0 && (
+        <div className="text-sm text-gray-600">
+          Showing {filteredUnits.length} of {units.length} units • 
+          Active: {activeCount} • Inactive: {inactiveCount}
+        </div>
+      )}
 
       {/* Add/Edit Modal */}
       {showModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-lg max-w-md w-full">
-            <div className="border-b border-gray-200 px-6 py-4 flex justify-between items-center">
-              <h3 className="text-lg font-semibold text-gray-900">
+        <div className="fixed inset-0 bg-black/20 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+          <Card className="w-full max-w-md">
+            <div className="flex items-center justify-between mb-6">
+              <h3 className="text-xl font-bold text-gray-900">
                 {editingUnit ? 'Edit Unit' : 'Add New Unit'}
               </h3>
-              <button
-                onClick={() => setShowModal(false)}
-                className="text-gray-400 hover:text-gray-600"
-                disabled={saving}
-              >
+              <button onClick={() => setShowModal(false)} className="text-gray-400 hover:text-gray-600 transition-colors">
                 <X size={24} />
               </button>
             </div>
 
-            <div className="p-6 space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Unit Name <span className="text-red-500">*</span>
-                </label>
-                <input
-                  type="text"
-                  value={formData.name}
-                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  placeholder="e.g., Pieces, Kilograms, Liters"
-                  maxLength={50}
-                  required
-                  autoFocus
-                />
-              </div>
+            <div className="space-y-4">
+              <Input
+                label="Unit Name"
+                placeholder="e.g., Kilogram, Liter, Piece"
+                value={formData.name}
+                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                required
+              />
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Abbreviation <span className="text-red-500">*</span>
-                </label>
-                <input
-                  type="text"
-                  value={formData.abbreviation}
-                  onChange={(e) => setFormData({ ...formData, abbreviation: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  placeholder="e.g., pcs, kg, ltr"
-                  maxLength={10}
-                  required
-                />
-                <p className="text-xs text-gray-500 mt-1">
-                  Short form (e.g., pcs, kg, ltr, box, pkt)
-                </p>
-              </div>
+              <Input
+                label="Abbreviation"
+                placeholder="e.g., kg, L, pcs"
+                value={formData.abbreviation}
+                onChange={(e) => setFormData({ ...formData, abbreviation: e.target.value })}
+                required
+                helperText="Short form of the unit (2-10 characters)"
+              />
 
-              {/* Actions */}
-              <div className="flex gap-3 pt-4">
-                <button
-                  onClick={handleSubmit}
-                  disabled={saving || !formData.name.trim() || !formData.abbreviation.trim()}
-                  className="flex-1 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 font-medium disabled:bg-gray-400 disabled:cursor-not-allowed"
-                >
-                  {saving ? 'Saving...' : (editingUnit ? 'Update Unit' : 'Add Unit')}
-                </button>
-                <button
-                  onClick={() => setShowModal(false)}
-                  disabled={saving}
-                  className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 font-medium disabled:cursor-not-allowed"
-                >
-                  Cancel
-                </button>
+              <div className="pt-4 border-t border-gray-200">
+                <label className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    checked={formData.is_active}
+                    onChange={(e) => setFormData({ ...formData, is_active: e.target.checked })}
+                    className={`rounded ${theme.classes.textPrimary}`}
+                  />
+                  <span className="text-sm font-medium text-gray-700">Active Unit</span>
+                </label>
               </div>
             </div>
-          </div>
+
+            <div className="flex gap-3 mt-6">
+              <Button onClick={() => setShowModal(false)} variant="secondary" fullWidth disabled={saving}>
+                Cancel
+              </Button>
+              <Button onClick={handleSubmit} variant="primary" fullWidth loading={saving}>
+                {editingUnit ? 'Update' : 'Create'}
+              </Button>
+            </div>
+          </Card>
         </div>
+      )}
+
+      {/* Delete Confirmation */}
+      {showDeleteConfirm && deletingUnit && (
+        <ConfirmDialog
+          isOpen={showDeleteConfirm}
+          onClose={() => {
+            setShowDeleteConfirm(false);
+            setDeletingUnit(null);
+          }}
+          onConfirm={handleDeleteConfirm}
+          title="Delete Unit"
+          message={`Are you sure you want to delete "${deletingUnit.name}"? This action cannot be undone.`}
+          confirmText="Delete"
+          cancelText="Cancel"
+          variant="danger"
+        />
       )}
     </div>
   );

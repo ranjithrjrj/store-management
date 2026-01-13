@@ -1,13 +1,18 @@
 // FILE PATH: components/TaxReports.tsx
-// GST Tax Reports for compliance
+// GST Tax Reports with new UI components and theme support
 
 'use client';
 import React, { useState, useEffect } from 'react';
-import { FileText, Download, Calendar } from 'lucide-react';
+import { FileText, Download, Calendar, TrendingUp, TrendingDown, DollarSign, Users } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
+import { Button, Card, Input, Badge, LoadingSpinner, useToast } from '@/components/ui';
+import { useTheme } from '@/contexts/ThemeContext';
 
 const TaxReports = () => {
-  const [month, setMonth] = useState(new Date().toISOString().slice(0, 7)); // YYYY-MM format
+  const { theme } = useTheme();
+  const toast = useToast();
+  
+  const [month, setMonth] = useState(new Date().toISOString().slice(0, 7));
   const [salesData, setSalesData] = useState<any[]>([]);
   const [purchaseData, setPurchaseData] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -24,9 +29,9 @@ const TaxReports = () => {
 
       const [year, monthNum] = month.split('-');
       const startDate = `${year}-${monthNum}-01`;
-      const endDate = new Date(parseInt(year), parseInt(monthNum), 0).toISOString().split('T')[0];
+      const lastDay = new Date(parseInt(year), parseInt(monthNum), 0).getDate();
+      const endDate = `${year}-${monthNum}-${lastDay}`;
 
-      // Load sales
       const { data: sales } = await supabase
         .from('sales_invoices')
         .select(`
@@ -34,7 +39,6 @@ const TaxReports = () => {
           invoice_date,
           customer_name,
           customer_gstin,
-          customer_state_code,
           subtotal,
           cgst_amount,
           sgst_amount,
@@ -45,14 +49,12 @@ const TaxReports = () => {
         .lte('invoice_date', endDate)
         .order('invoice_date');
 
-      // Load purchases
       const { data: purchases } = await supabase
-        .from('purchase_records')
+        .from('purchase_recordings')
         .select(`
-          record_number,
           invoice_number,
           invoice_date,
-          vendor:vendors(name, gstin, state_code),
+          vendor_name,
           subtotal,
           cgst_amount,
           sgst_amount,
@@ -68,87 +70,104 @@ const TaxReports = () => {
     } catch (err: any) {
       console.error('Error loading tax data:', err);
       setError(err.message || 'Failed to load tax data');
+      toast.error('Failed to load', 'Could not load tax reports.');
     } finally {
       setLoading(false);
     }
   }
 
-  // Calculate totals
   const salesTotals = {
     b2b: salesData.filter(s => s.customer_gstin).length,
     b2c: salesData.filter(s => !s.customer_gstin).length,
-    intrastate: salesData.filter(s => s.customer_state_code === '33').length,
-    interstate: salesData.filter(s => s.customer_state_code && s.customer_state_code !== '33').length,
-    taxable: salesData.reduce((sum, s) => sum + s.subtotal, 0),
+    taxable: salesData.reduce((sum, s) => sum + (s.subtotal || 0), 0),
     cgst: salesData.reduce((sum, s) => sum + (s.cgst_amount || 0), 0),
     sgst: salesData.reduce((sum, s) => sum + (s.sgst_amount || 0), 0),
     igst: salesData.reduce((sum, s) => sum + (s.igst_amount || 0), 0),
-    total: salesData.reduce((sum, s) => sum + s.total_amount, 0)
+    total: salesData.reduce((sum, s) => sum + (s.total_amount || 0), 0)
   };
 
   const purchaseTotals = {
-    registered: purchaseData.filter(p => p.vendor?.gstin).length,
-    unregistered: purchaseData.filter(p => !p.vendor?.gstin).length,
-    intrastate: purchaseData.filter(p => p.vendor?.state_code === '33').length,
-    interstate: purchaseData.filter(p => p.vendor?.state_code && p.vendor?.state_code !== '33').length,
-    taxable: purchaseData.reduce((sum, p) => sum + p.subtotal, 0),
+    count: purchaseData.length,
+    taxable: purchaseData.reduce((sum, p) => sum + (p.subtotal || 0), 0),
     cgst: purchaseData.reduce((sum, p) => sum + (p.cgst_amount || 0), 0),
     sgst: purchaseData.reduce((sum, p) => sum + (p.sgst_amount || 0), 0),
     igst: purchaseData.reduce((sum, p) => sum + (p.igst_amount || 0), 0),
-    total: purchaseData.reduce((sum, p) => sum + p.total_amount, 0)
+    total: purchaseData.reduce((sum, p) => sum + (p.total_amount || 0), 0)
   };
 
-  const netGST = {
-    cgst: salesTotals.cgst - purchaseTotals.cgst,
-    sgst: salesTotals.sgst - purchaseTotals.sgst,
-    igst: salesTotals.igst - purchaseTotals.igst
-  };
+  const totalSalesGST = salesTotals.cgst + salesTotals.sgst + salesTotals.igst;
+  const totalPurchaseGST = purchaseTotals.cgst + purchaseTotals.sgst + purchaseTotals.igst;
+  const netGSTLiability = totalSalesGST - totalPurchaseGST;
 
-  const downloadCSV = (data: any[], filename: string, type: 'sales' | 'purchase') => {
-    if (type === 'sales') {
-      const headers = ['Date', 'Invoice #', 'Customer', 'GSTIN', 'State', 'Taxable', 'CGST', 'SGST', 'IGST', 'Total'];
-      const rows = data.map(item => [
-        item.invoice_date,
-        item.invoice_number,
-        item.customer_name || 'Walk-in',
-        item.customer_gstin || '-',
-        item.customer_state_code || '33',
-        item.subtotal,
-        item.cgst_amount || 0,
-        item.sgst_amount || 0,
-        item.igst_amount || 0,
-        item.total_amount
-      ]);
-      const csv = [headers, ...rows].map(row => row.join(',')).join('\n');
-      const blob = new Blob([csv], { type: 'text/csv' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = filename;
-      a.click();
-    } else {
-      const headers = ['Date', 'Record #', 'Invoice #', 'Vendor', 'GSTIN', 'State', 'Taxable', 'CGST', 'SGST', 'IGST', 'Total'];
-      const rows = data.map(item => [
-        item.invoice_date,
-        item.record_number,
-        item.invoice_number || '-',
-        item.vendor?.name || '-',
-        item.vendor?.gstin || '-',
-        item.vendor?.state_code || '33',
-        item.subtotal,
-        item.cgst_amount || 0,
-        item.sgst_amount || 0,
-        item.igst_amount || 0,
-        item.total_amount
-      ]);
-      const csv = [headers, ...rows].map(row => row.join(',')).join('\n');
-      const blob = new Blob([csv], { type: 'text/csv' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = filename;
-      a.click();
+  const downloadGSTR1 = () => {
+    if (salesData.length === 0) {
+      toast.warning('No data', 'No sales data available for this period.');
+      return;
     }
+
+    const csv = [
+      ['GSTR-1 Sales Register', '', '', '', '', '', ''],
+      [`Period: ${month}`, '', '', '', '', '', ''],
+      ['', '', '', '', '', '', ''],
+      ['Invoice No', 'Date', 'Customer', 'GSTIN', 'Taxable', 'CGST+SGST', 'IGST', 'Total'],
+      ...salesData.map(s => [
+        s.invoice_number,
+        s.invoice_date,
+        s.customer_name || 'Walk-in',
+        s.customer_gstin || 'N/A',
+        s.subtotal.toFixed(2),
+        ((s.cgst_amount || 0) + (s.sgst_amount || 0)).toFixed(2),
+        (s.igst_amount || 0).toFixed(2),
+        s.total_amount.toFixed(2)
+      ]),
+      ['', '', '', '', '', '', ''],
+      ['', '', '', 'TOTAL', salesTotals.taxable.toFixed(2), (salesTotals.cgst + salesTotals.sgst).toFixed(2), salesTotals.igst.toFixed(2), salesTotals.total.toFixed(2)]
+    ].map(row => row.join(',')).join('\n');
+
+    const blob = new Blob([csv], { type: 'text/csv' });
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `GSTR1_${month}.csv`;
+    a.click();
+    window.URL.revokeObjectURL(url);
+
+    toast.success('Downloaded', 'GSTR-1 report has been downloaded.');
+  };
+
+  const downloadGSTR2 = () => {
+    if (purchaseData.length === 0) {
+      toast.warning('No data', 'No purchase data available for this period.');
+      return;
+    }
+
+    const csv = [
+      ['GSTR-2 Purchase Register', '', '', '', '', ''],
+      [`Period: ${month}`, '', '', '', '', ''],
+      ['', '', '', '', '', ''],
+      ['Invoice No', 'Date', 'Vendor', 'Taxable', 'CGST+SGST', 'IGST', 'Total'],
+      ...purchaseData.map(p => [
+        p.invoice_number,
+        p.invoice_date,
+        p.vendor_name || 'N/A',
+        p.subtotal.toFixed(2),
+        ((p.cgst_amount || 0) + (p.sgst_amount || 0)).toFixed(2),
+        (p.igst_amount || 0).toFixed(2),
+        p.total_amount.toFixed(2)
+      ]),
+      ['', '', '', '', '', ''],
+      ['', '', 'TOTAL', purchaseTotals.taxable.toFixed(2), (purchaseTotals.cgst + purchaseTotals.sgst).toFixed(2), purchaseTotals.igst.toFixed(2), purchaseTotals.total.toFixed(2)]
+    ].map(row => row.join(',')).join('\n');
+
+    const blob = new Blob([csv], { type: 'text/csv' });
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `GSTR2_${month}.csv`;
+    a.click();
+    window.URL.revokeObjectURL(url);
+
+    toast.success('Downloaded', 'GSTR-2 report has been downloaded.');
   };
 
   if (error && !loading) {
@@ -156,18 +175,18 @@ const TaxReports = () => {
       <div className="space-y-6">
         <div>
           <h2 className="text-2xl font-bold text-gray-900">GST Tax Reports</h2>
-          <p className="text-gray-600 text-sm mt-1">GST returns and compliance reports</p>
+          <p className="text-gray-600 text-sm mt-1">Generate GST compliance reports</p>
         </div>
-        <div className="bg-red-50 border border-red-200 rounded-lg p-6">
-          <h3 className="font-bold text-red-800 mb-2">Failed to Load Tax Data</h3>
-          <p className="text-red-600 text-sm">{error}</p>
-          <button
-            onClick={loadTaxData}
-            className="mt-4 bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700 text-sm"
-          >
-            Try Again
-          </button>
-        </div>
+        <Card>
+          <div className="text-center py-8">
+            <div className="text-red-600 mb-4">
+              <FileText size={48} className="mx-auto opacity-50" />
+            </div>
+            <h3 className="font-bold text-red-800 mb-2">Failed to Load Tax Reports</h3>
+            <p className="text-red-600 text-sm mb-4">{error}</p>
+            <Button onClick={loadTaxData} variant="primary">Try Again</Button>
+          </div>
+        </Card>
       </div>
     );
   }
@@ -175,187 +194,214 @@ const TaxReports = () => {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div>
-        <h2 className="text-2xl font-bold text-gray-900">GST Tax Reports</h2>
-        <p className="text-gray-600 text-sm mt-1">GST returns and compliance reports (GSTR-1, GSTR-3B)</p>
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div>
+          <h2 className="text-2xl font-bold text-gray-900">GST Tax Reports</h2>
+          <p className="text-gray-600 text-sm mt-1">Generate GST compliance reports</p>
+        </div>
+        <div className="flex gap-2">
+          <Button onClick={downloadGSTR1} variant="secondary" size="md" icon={<Download size={18} />}>
+            GSTR-1
+          </Button>
+          <Button onClick={downloadGSTR2} variant="secondary" size="md" icon={<Download size={18} />}>
+            GSTR-2
+          </Button>
+        </div>
       </div>
 
       {/* Month Selector */}
-      <div className="bg-white rounded-lg border border-gray-200 p-4">
+      <Card>
         <div className="flex items-center gap-4">
-          <Calendar size={20} className="text-gray-400" />
-          <div className="flex items-center gap-2">
-            <label className="text-sm font-medium text-gray-700">Select Month:</label>
-            <input
-              type="month"
-              value={month}
-              onChange={(e) => setMonth(e.target.value)}
-              className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-            />
+          <div className="flex items-center gap-2 text-gray-700">
+            <Calendar size={20} />
+            <span className="font-medium">Period:</span>
           </div>
+          <Input
+            type="month"
+            value={month}
+            onChange={(e) => setMonth(e.target.value)}
+            className="w-auto"
+          />
         </div>
-      </div>
+      </Card>
 
       {loading ? (
-        <div className="text-center py-12">
-          <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
-          <p className="text-gray-600 mt-4">Loading tax reports...</p>
-        </div>
+        <Card>
+          <div className="py-12">
+            <LoadingSpinner size="lg" text="Loading tax reports..." />
+          </div>
+        </Card>
       ) : (
         <>
-          {/* GSTR-1 Summary (Outward Supplies) */}
-          <div className="bg-white rounded-lg border border-gray-200 p-6">
-            <div className="flex justify-between items-center mb-4">
-              <h3 className="text-lg font-semibold text-gray-900">GSTR-1: Outward Supplies (Sales)</h3>
-              <button
-                onClick={() => downloadCSV(salesData, `GSTR1_${month}.csv`, 'sales')}
-                className="bg-blue-600 text-white px-3 py-1.5 rounded-lg hover:bg-blue-700 text-sm flex items-center gap-2"
-              >
-                <Download size={16} />
-                Download CSV
-              </button>
-            </div>
+          {/* Summary Cards */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            <Card padding="md" hover>
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm text-gray-600">Total Sales</p>
+                  <p className="text-2xl font-bold text-gray-900">₹{salesTotals.total.toLocaleString()}</p>
+                  <p className="text-xs text-gray-500 mt-1">{salesData.length} invoices</p>
+                </div>
+                <div className={`p-3 rounded-lg ${theme.classes.bgPrimaryLight}`}>
+                  <TrendingUp size={24} className={theme.classes.textPrimary} />
+                </div>
+              </div>
+            </Card>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
-              <div className="bg-gray-50 rounded-lg p-4">
-                <p className="text-xs text-gray-600 mb-1">B2B Invoices</p>
-                <p className="text-2xl font-bold text-gray-900">{salesTotals.b2b}</p>
+            <Card padding="md" hover>
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm text-gray-600">Total Purchases</p>
+                  <p className="text-2xl font-bold text-gray-900">₹{purchaseTotals.total.toLocaleString()}</p>
+                  <p className="text-xs text-gray-500 mt-1">{purchaseData.length} records</p>
+                </div>
+                <div className="p-3 rounded-lg bg-blue-100">
+                  <TrendingDown size={24} className="text-blue-600" />
+                </div>
               </div>
-              <div className="bg-gray-50 rounded-lg p-4">
-                <p className="text-xs text-gray-600 mb-1">B2C Invoices</p>
-                <p className="text-2xl font-bold text-gray-900">{salesTotals.b2c}</p>
-              </div>
-              <div className="bg-gray-50 rounded-lg p-4">
-                <p className="text-xs text-gray-600 mb-1">Intrastate</p>
-                <p className="text-2xl font-bold text-gray-900">{salesTotals.intrastate}</p>
-              </div>
-              <div className="bg-gray-50 rounded-lg p-4">
-                <p className="text-xs text-gray-600 mb-1">Interstate</p>
-                <p className="text-2xl font-bold text-gray-900">{salesTotals.interstate}</p>
-              </div>
-            </div>
+            </Card>
 
-            <div className="space-y-2">
-              <div className="flex justify-between py-2 border-b">
-                <span className="text-sm font-medium text-gray-700">Taxable Value</span>
-                <span className="text-sm font-semibold">₹{salesTotals.taxable.toLocaleString('en-IN')}</span>
+            <Card padding="md" hover>
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm text-gray-600">Output GST</p>
+                  <p className="text-2xl font-bold text-gray-900">₹{totalSalesGST.toLocaleString()}</p>
+                  <p className="text-xs text-gray-500 mt-1">Collected</p>
+                </div>
+                <div className="p-3 rounded-lg bg-green-100">
+                  <DollarSign size={24} className="text-green-600" />
+                </div>
               </div>
-              <div className="flex justify-between py-2 border-b">
-                <span className="text-sm font-medium text-gray-700">CGST Collected</span>
-                <span className="text-sm font-semibold text-green-600">₹{salesTotals.cgst.toFixed(2)}</span>
+            </Card>
+
+            <Card padding="md" hover>
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm text-gray-600">Input GST</p>
+                  <p className="text-2xl font-bold text-gray-900">₹{totalPurchaseGST.toLocaleString()}</p>
+                  <p className="text-xs text-gray-500 mt-1">Paid</p>
+                </div>
+                <div className="p-3 rounded-lg bg-blue-100">
+                  <DollarSign size={24} className="text-blue-600" />
+                </div>
               </div>
-              <div className="flex justify-between py-2 border-b">
-                <span className="text-sm font-medium text-gray-700">SGST Collected</span>
-                <span className="text-sm font-semibold text-green-600">₹{salesTotals.sgst.toFixed(2)}</span>
-              </div>
-              <div className="flex justify-between py-2 border-b">
-                <span className="text-sm font-medium text-gray-700">IGST Collected</span>
-                <span className="text-sm font-semibold text-green-600">₹{salesTotals.igst.toFixed(2)}</span>
-              </div>
-              <div className="flex justify-between py-3 bg-green-50 rounded-lg px-3 mt-2">
-                <span className="font-bold text-gray-900">Total Sales</span>
-                <span className="font-bold text-green-600">₹{salesTotals.total.toLocaleString('en-IN')}</span>
-              </div>
-            </div>
+            </Card>
           </div>
 
-          {/* GSTR-2 Summary (Inward Supplies) */}
-          <div className="bg-white rounded-lg border border-gray-200 p-6">
-            <div className="flex justify-between items-center mb-4">
-              <h3 className="text-lg font-semibold text-gray-900">GSTR-2: Inward Supplies (Purchases)</h3>
-              <button
-                onClick={() => downloadCSV(purchaseData, `GSTR2_${month}.csv`, 'purchase')}
-                className="bg-blue-600 text-white px-3 py-1.5 rounded-lg hover:bg-blue-700 text-sm flex items-center gap-2"
-              >
-                <Download size={16} />
-                Download CSV
-              </button>
+          {/* Net GST Liability */}
+          <Card>
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="text-lg font-semibold text-gray-900 mb-1">Net GST Liability</h3>
+                <p className="text-sm text-gray-600">
+                  Output GST - Input GST = {netGSTLiability >= 0 ? 'Payable' : 'Refundable'}
+                </p>
+              </div>
+              <div className="text-right">
+                <Badge variant={netGSTLiability >= 0 ? 'warning' : 'success'} size="lg">
+                  {netGSTLiability >= 0 ? 'Payable' : 'Refundable'}
+                </Badge>
+                <p className={`text-3xl font-bold mt-2 ${netGSTLiability >= 0 ? 'text-amber-600' : 'text-green-600'}`}>
+                  ₹{Math.abs(netGSTLiability).toLocaleString()}
+                </p>
+              </div>
             </div>
+          </Card>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
-              <div className="bg-gray-50 rounded-lg p-4">
-                <p className="text-xs text-gray-600 mb-1">Registered Vendors</p>
-                <p className="text-2xl font-bold text-gray-900">{purchaseTotals.registered}</p>
-              </div>
-              <div className="bg-gray-50 rounded-lg p-4">
-                <p className="text-xs text-gray-600 mb-1">Unregistered</p>
-                <p className="text-2xl font-bold text-gray-900">{purchaseTotals.unregistered}</p>
-              </div>
-              <div className="bg-gray-50 rounded-lg p-4">
-                <p className="text-xs text-gray-600 mb-1">Intrastate</p>
-                <p className="text-2xl font-bold text-gray-900">{purchaseTotals.intrastate}</p>
-              </div>
-              <div className="bg-gray-50 rounded-lg p-4">
-                <p className="text-xs text-gray-600 mb-1">Interstate</p>
-                <p className="text-2xl font-bold text-gray-900">{purchaseTotals.interstate}</p>
-              </div>
-            </div>
+          {/* Sales Details */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <Card>
+              <h3 className="text-lg font-semibold text-gray-900 mb-4">Output GST (Sales)</h3>
+              <div className="space-y-4">
+                <div>
+                  <div className="flex justify-between items-center mb-2">
+                    <span className="text-sm text-gray-600">Transaction Type</span>
+                  </div>
+                  <div className="flex gap-4">
+                    <div className="flex-1 text-center p-3 bg-gray-50 rounded-lg">
+                      <p className="text-2xl font-bold text-gray-900">{salesTotals.b2b}</p>
+                      <p className="text-xs text-gray-600 mt-1">B2B</p>
+                    </div>
+                    <div className="flex-1 text-center p-3 bg-gray-50 rounded-lg">
+                      <p className="text-2xl font-bold text-gray-900">{salesTotals.b2c}</p>
+                      <p className="text-xs text-gray-600 mt-1">B2C</p>
+                    </div>
+                  </div>
+                </div>
 
-            <div className="space-y-2">
-              <div className="flex justify-between py-2 border-b">
-                <span className="text-sm font-medium text-gray-700">Taxable Value</span>
-                <span className="text-sm font-semibold">₹{purchaseTotals.taxable.toLocaleString('en-IN')}</span>
+                <div className="space-y-2 pt-2 border-t border-gray-200">
+                  <div className="flex justify-between">
+                    <span className="text-sm text-gray-600">Taxable Value</span>
+                    <span className="font-semibold">₹{salesTotals.taxable.toLocaleString()}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-sm text-gray-600">CGST</span>
+                    <span className="font-semibold">₹{salesTotals.cgst.toLocaleString()}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-sm text-gray-600">SGST</span>
+                    <span className="font-semibold">₹{salesTotals.sgst.toLocaleString()}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-sm text-gray-600">IGST</span>
+                    <span className="font-semibold">₹{salesTotals.igst.toLocaleString()}</span>
+                  </div>
+                  <div className="flex justify-between pt-2 border-t border-gray-200">
+                    <span className="font-bold text-gray-900">Total GST</span>
+                    <span className={`font-bold ${theme.classes.textPrimary}`}>₹{totalSalesGST.toLocaleString()}</span>
+                  </div>
+                </div>
               </div>
-              <div className="flex justify-between py-2 border-b">
-                <span className="text-sm font-medium text-gray-700">CGST Paid (Input Credit)</span>
-                <span className="text-sm font-semibold text-orange-600">₹{purchaseTotals.cgst.toFixed(2)}</span>
+            </Card>
+
+            <Card>
+              <h3 className="text-lg font-semibold text-gray-900 mb-4">Input GST (Purchases)</h3>
+              <div className="space-y-4">
+                <div>
+                  <div className="flex justify-between items-center mb-2">
+                    <span className="text-sm text-gray-600">Total Records</span>
+                    <span className="font-bold text-2xl text-gray-900">{purchaseTotals.count}</span>
+                  </div>
+                </div>
+
+                <div className="space-y-2 pt-2 border-t border-gray-200">
+                  <div className="flex justify-between">
+                    <span className="text-sm text-gray-600">Taxable Value</span>
+                    <span className="font-semibold">₹{purchaseTotals.taxable.toLocaleString()}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-sm text-gray-600">CGST</span>
+                    <span className="font-semibold">₹{purchaseTotals.cgst.toLocaleString()}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-sm text-gray-600">SGST</span>
+                    <span className="font-semibold">₹{purchaseTotals.sgst.toLocaleString()}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-sm text-gray-600">IGST</span>
+                    <span className="font-semibold">₹{purchaseTotals.igst.toLocaleString()}</span>
+                  </div>
+                  <div className="flex justify-between pt-2 border-t border-gray-200">
+                    <span className="font-bold text-gray-900">Total GST</span>
+                    <span className="font-bold text-blue-600">₹{totalPurchaseGST.toLocaleString()}</span>
+                  </div>
+                </div>
               </div>
-              <div className="flex justify-between py-2 border-b">
-                <span className="text-sm font-medium text-gray-700">SGST Paid (Input Credit)</span>
-                <span className="text-sm font-semibold text-orange-600">₹{purchaseTotals.sgst.toFixed(2)}</span>
-              </div>
-              <div className="flex justify-between py-2 border-b">
-                <span className="text-sm font-medium text-gray-700">IGST Paid (Input Credit)</span>
-                <span className="text-sm font-semibold text-orange-600">₹{purchaseTotals.igst.toFixed(2)}</span>
-              </div>
-              <div className="flex justify-between py-3 bg-orange-50 rounded-lg px-3 mt-2">
-                <span className="font-bold text-gray-900">Total Purchases</span>
-                <span className="font-bold text-orange-600">₹{purchaseTotals.total.toLocaleString('en-IN')}</span>
-              </div>
-            </div>
+            </Card>
           </div>
 
-          {/* GSTR-3B Summary (Net Liability) */}
-          <div className="bg-white rounded-lg border border-blue-200 p-6">
-            <h3 className="text-lg font-semibold text-gray-900 mb-4">GSTR-3B: Net GST Liability</h3>
-            <div className="space-y-3">
-              <div className="flex justify-between py-2">
-                <span className="text-sm font-medium text-gray-700">Net CGST (Output - Input)</span>
-                <span className={`text-sm font-bold ${netGST.cgst >= 0 ? 'text-red-600' : 'text-green-600'}`}>
-                  ₹{Math.abs(netGST.cgst).toFixed(2)} {netGST.cgst >= 0 ? '(Payable)' : '(Refund)'}
-                </span>
-              </div>
-              <div className="flex justify-between py-2">
-                <span className="text-sm font-medium text-gray-700">Net SGST (Output - Input)</span>
-                <span className={`text-sm font-bold ${netGST.sgst >= 0 ? 'text-red-600' : 'text-green-600'}`}>
-                  ₹{Math.abs(netGST.sgst).toFixed(2)} {netGST.sgst >= 0 ? '(Payable)' : '(Refund)'}
-                </span>
-              </div>
-              <div className="flex justify-between py-2">
-                <span className="text-sm font-medium text-gray-700">Net IGST (Output - Input)</span>
-                <span className={`text-sm font-bold ${netGST.igst >= 0 ? 'text-red-600' : 'text-green-600'}`}>
-                  ₹{Math.abs(netGST.igst).toFixed(2)} {netGST.igst >= 0 ? '(Payable)' : '(Refund)'}
-                </span>
-              </div>
-              <div className="flex justify-between py-4 bg-blue-50 rounded-lg px-4 mt-4 border-t-2 border-blue-200">
-                <span className="font-bold text-gray-900 text-lg">Total GST Liability</span>
-                <span className={`font-bold text-lg ${(netGST.cgst + netGST.sgst + netGST.igst) >= 0 ? 'text-red-600' : 'text-green-600'}`}>
-                  ₹{Math.abs(netGST.cgst + netGST.sgst + netGST.igst).toFixed(2)}
-                  <span className="text-sm ml-2">
-                    {(netGST.cgst + netGST.sgst + netGST.igst) >= 0 ? '(Payable)' : '(Refund)'}
-                  </span>
-                </span>
-              </div>
+          {/* Instructions */}
+          <Card>
+            <h3 className="text-lg font-semibold text-gray-900 mb-3">GST Filing Instructions</h3>
+            <div className="space-y-2 text-sm text-gray-700">
+              <p>• <strong>GSTR-1:</strong> Report of outward supplies - Download and file by 11th of next month</p>
+              <p>• <strong>GSTR-2:</strong> Report of inward supplies - Use for ITC reconciliation</p>
+              <p>• <strong>GSTR-3B:</strong> Monthly summary return - File by 20th of next month with payment</p>
+              <p className="pt-2 text-xs text-gray-500">
+                Note: These reports are auto-generated from your transactions. Always verify data before filing.
+              </p>
             </div>
-          </div>
-
-          {/* Info Note */}
-          <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
-            <p className="text-sm text-yellow-800">
-              <strong>📌 Important:</strong> These reports are generated from your recorded transactions. 
-              Please verify all data before filing GST returns. Consult with a tax professional for accurate filing.
-            </p>
-          </div>
+          </Card>
         </>
       )}
     </div>
