@@ -1,11 +1,11 @@
 // FILE PATH: components/CategoriesManagement.tsx
-// Categories Management with ConfirmDialog and active/inactive filtering
+// Categories Management with Select/Textarea components and improved mobile UX
 
 'use client';
 import React, { useState, useEffect } from 'react';
 import { FolderOpen, Plus, Edit2, Trash2, X, Search } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
-import { Button, Card, Input, EmptyState, LoadingSpinner, ConfirmDialog, useToast } from '@/components/ui';
+import { Button, Card, Input, Textarea, EmptyState, LoadingSpinner, ConfirmDialog, useToast } from '@/components/ui';
 import { useTheme } from '@/contexts/ThemeContext';
 
 type Category = {
@@ -37,11 +37,10 @@ const CategoriesManagement = () => {
     is_active: true
   });
 
-  // Helper to normalize is_active from database
   const normalizeBoolean = (value: boolean | string | null): boolean => {
     if (value === true || value === 'true') return true;
     if (value === false || value === 'false') return false;
-    return true; // Default to true if null or undefined
+    return true;
   };
 
   useEffect(() => {
@@ -90,8 +89,6 @@ const CategoriesManagement = () => {
       toast.warning('Name required', 'Please enter a category name.');
       return;
     }
-
-    // Show confirmation dialog
     setShowEditConfirm(true);
   };
 
@@ -99,40 +96,27 @@ const CategoriesManagement = () => {
     setShowEditConfirm(false);
     try {
       setSaving(true);
-      setError(null);
-
-      if (!formData.name.trim()) {
-        toast.warning('Name required', 'Please enter a category name.');
-        return;
-      }
 
       if (editingCategory) {
-        const { error: err } = await supabase
+        const { error } = await supabase
           .from('categories')
-          .update({
-            name: formData.name.trim(),
-            description: formData.description.trim() || null,
-            is_active: formData.is_active
-          })
+          .update(formData)
           .eq('id', editingCategory.id);
 
-        if (err) throw err;
+        if (error) throw error;
         toast.success('Updated!', `Category "${formData.name}" has been updated.`);
       } else {
-        const { error: err } = await supabase
+        const { error } = await supabase
           .from('categories')
-          .insert({
-            name: formData.name.trim(),
-            description: formData.description.trim() || null,
-            is_active: formData.is_active
-          });
+          .insert(formData);
 
-        if (err) throw err;
-        toast.success('Created!', `Category "${formData.name}" has been added.`);
+        if (error) throw error;
+        toast.success('Created!', `Category "${formData.name}" has been created.`);
       }
 
       await loadCategories();
       setShowModal(false);
+      setFormData({ name: '', description: '', is_active: true });
     } catch (err: any) {
       console.error('Error saving category:', err);
       toast.error('Failed to save', err.message || 'Could not save category.');
@@ -150,33 +134,15 @@ const CategoriesManagement = () => {
     if (!deletingCategory) return;
 
     try {
-      const { data: items, error: checkErr } = await supabase
-        .from('items')
-        .select('id')
-        .eq('category_id', deletingCategory.id)
-        .limit(1);
-
-      if (checkErr) throw checkErr;
-
-      if (items && items.length > 0) {
-        toast.warning(
-          'Cannot delete',
-          `Category "${deletingCategory.name}" has items assigned. Please reassign them first.`
-        );
-        setShowDeleteConfirm(false);
-        setDeletingCategory(null);
-        return;
-      }
-
-      const { error: err } = await supabase
+      const { error } = await supabase
         .from('categories')
-        .delete()
+        .update({ is_active: false })
         .eq('id', deletingCategory.id);
 
-      if (err) throw err;
+      if (error) throw error;
 
       await loadCategories();
-      toast.success('Deleted', `Category "${deletingCategory.name}" has been removed.`);
+      toast.success('Deleted', `Category "${deletingCategory.name}" has been deleted.`);
       setShowDeleteConfirm(false);
       setDeletingCategory(null);
     } catch (err: any) {
@@ -189,7 +155,6 @@ const CategoriesManagement = () => {
     const matchesSearch = cat.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
       (cat.description && cat.description.toLowerCase().includes(searchTerm.toLowerCase()));
     
-    // Ensure is_active is treated as boolean
     const isActive = cat.is_active === true || cat.is_active === 'true';
     const matchesActive = showInactive || isActive;
     
@@ -239,6 +204,14 @@ const CategoriesManagement = () => {
           <Card padding="md">
             <Input
               leftIcon={<Search size={18} />}
+              rightIcon={searchTerm ? (
+                <button 
+                  onClick={() => setSearchTerm('')}
+                  className="text-gray-400 hover:text-gray-600"
+                >
+                  <X size={18} />
+                </button>
+              ) : undefined}
               placeholder="Search categories..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
@@ -268,22 +241,28 @@ const CategoriesManagement = () => {
             <LoadingSpinner size="lg" text="Loading categories..." />
           </div>
         ) : filteredCategories.length === 0 ? (
-          <EmptyState
-            icon={<FolderOpen size={64} />}
-            title={searchTerm ? "No categories found" : "No categories yet"}
-            description={
-              searchTerm
-                ? "Try adjusting your search terms"
-                : "Get started by creating your first category"
-            }
-            action={
-              !searchTerm && (
-                <Button onClick={handleAddNew} variant="primary" icon={<Plus size={18} />}>
-                  Add Your First Category
-                </Button>
-              )
-            }
-          />
+          <div className="p-12">
+            <EmptyState
+              icon={<FolderOpen size={48} />}
+              title={searchTerm ? "No categories found" : "No categories yet"}
+              description={
+                searchTerm
+                  ? "Try adjusting your search terms"
+                  : "Get started by creating your first category"
+              }
+              action={
+                !searchTerm ? (
+                  <Button onClick={handleAddNew} variant="primary" icon={<Plus size={18} />}>
+                    Add Your First Category
+                  </Button>
+                ) : (
+                  <Button onClick={() => setSearchTerm('')} variant="secondary">
+                    Clear Search
+                  </Button>
+                )
+              }
+            />
+          </div>
         ) : (
           <div className="divide-y divide-gray-200">
             {filteredCategories.map((category) => (
@@ -345,94 +324,90 @@ const CategoriesManagement = () => {
 
       {/* Add/Edit Modal */}
       {showModal && (
-        <div className="fixed inset-0 bg-black/20 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-          <Card className="w-full max-w-md">
-            <div className="flex items-center justify-between mb-6">
-              <h3 className="text-xl font-bold text-gray-900">
-                {editingCategory ? 'Edit Category' : 'Add New Category'}
-              </h3>
-              <button onClick={() => setShowModal(false)} className="text-gray-400 hover:text-gray-600 transition-colors">
-                <X size={24} />
-              </button>
-            </div>
+        <div className="fixed inset-0 bg-black/20 backdrop-blur-sm flex items-start justify-center p-4 z-50 overflow-y-auto">
+          <div className="min-h-screen w-full flex items-center justify-center py-8">
+            <Card className="w-full max-w-md">
+              <div className="flex items-center justify-between mb-6">
+                <h3 className="text-xl font-bold text-gray-900">
+                  {editingCategory ? 'Edit Category' : 'Add New Category'}
+                </h3>
+                <button onClick={() => setShowModal(false)} className="text-gray-400 hover:text-gray-600">
+                  <X size={24} />
+                </button>
+              </div>
 
-            <div className="space-y-4">
-              <Input
-                label="Category Name"
-                placeholder="e.g., Electronics, Groceries, Clothing"
-                value={formData.name}
-                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                required
-              />
+              <div className="space-y-4">
+                <Input
+                  label="Category Name"
+                  placeholder="Enter category name"
+                  value={formData.name}
+                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                  required
+                />
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
-                <textarea
+                <Textarea
+                  label="Description"
+                  placeholder="Optional description"
                   value={formData.description}
                   onChange={(e) => setFormData({ ...formData, description: e.target.value })}
                   rows={3}
-                  className={`w-full px-3 py-2 border border-gray-300 rounded-lg ${theme.classes.focusRing} focus:ring-2 focus:ring-opacity-20 focus:border-current transition-all`}
-                  placeholder="Optional description..."
                 />
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Status</label>
+                  <label className="flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                      checked={formData.is_active}
+                      onChange={(e) => setFormData({ ...formData, is_active: e.target.checked })}
+                      className="rounded border-gray-300"
+                    />
+                    <span className="text-sm text-gray-700">Active</span>
+                  </label>
+                </div>
               </div>
 
-              <div className="pt-4 border-t border-gray-200">
-                <label className="flex items-center gap-2">
-                  <input
-                    type="checkbox"
-                    checked={normalizeBoolean(formData.is_active)}
-                    onChange={(e) => setFormData({ ...formData, is_active: e.target.checked })}
-                    className={`rounded ${theme.classes.textPrimary}`}
-                  />
-                  <span className="text-sm font-medium text-gray-700">Active Category</span>
-                </label>
+              <div className="flex gap-3 mt-6 pt-6 border-t border-gray-200">
+                <Button onClick={() => setShowModal(false)} variant="secondary" fullWidth>
+                  Cancel
+                </Button>
+                <Button onClick={handleSubmit} variant="primary" fullWidth disabled={saving}>
+                  {saving ? 'Saving...' : editingCategory ? 'Update' : 'Create'}
+                </Button>
               </div>
-            </div>
-
-            <div className="flex gap-3 mt-6">
-              <Button onClick={() => setShowModal(false)} variant="secondary" fullWidth disabled={saving}>
-                Cancel
-              </Button>
-              <Button onClick={handleSubmit} variant="primary" fullWidth loading={saving}>
-                {editingCategory ? 'Update' : 'Create'}
-              </Button>
-            </div>
-          </Card>
+            </Card>
+          </div>
         </div>
       )}
 
       {/* Edit Confirmation */}
-      {showEditConfirm && (
-        <ConfirmDialog
-          isOpen={showEditConfirm}
-          onClose={() => setShowEditConfirm(false)}
-          onConfirm={handleConfirmSubmit}
-          title={editingCategory ? 'Update Category' : 'Create Category'}
-          message={editingCategory 
-            ? `Save changes to "${formData.name}"?` 
-            : `Create new category "${formData.name}"?`}
-          confirmText={editingCategory ? 'Update' : 'Create'}
-          cancelText="Cancel"
-          variant="primary"
-        />
-      )}
+      <ConfirmDialog
+        isOpen={showEditConfirm}
+        onClose={() => setShowEditConfirm(false)}
+        onConfirm={handleConfirmSubmit}
+        title={editingCategory ? 'Update Category' : 'Create Category'}
+        message={editingCategory 
+          ? `Save changes to "${formData.name}"?` 
+          : `Create new category "${formData.name}"?`}
+        confirmText={editingCategory ? 'Update' : 'Create'}
+        cancelText="Cancel"
+        variant="primary"
+      />
 
       {/* Delete Confirmation */}
-      {showDeleteConfirm && deletingCategory && (
-        <ConfirmDialog
-          isOpen={showDeleteConfirm}
-          onClose={() => {
-            setShowDeleteConfirm(false);
-            setDeletingCategory(null);
-          }}
-          onConfirm={handleDeleteConfirm}
-          title="Delete Category"
-          message={`Are you sure you want to delete "${deletingCategory.name}"? This action cannot be undone.`}
-          confirmText="Delete"
-          cancelText="Cancel"
-          variant="danger"
-        />
-      )}
+      <ConfirmDialog
+        isOpen={showDeleteConfirm}
+        onClose={() => {
+          setShowDeleteConfirm(false);
+          setDeletingCategory(null);
+        }}
+        onConfirm={handleDeleteConfirm}
+        title="Delete Category"
+        message={deletingCategory ? `Are you sure you want to delete "${deletingCategory.name}"? This action cannot be undone.` : ''}
+        confirmText="Delete"
+        cancelText="Cancel"
+        variant="danger"
+      />
     </div>
   );
 };
