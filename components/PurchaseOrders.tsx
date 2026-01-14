@@ -1,11 +1,11 @@
 // FILE PATH: components/PurchaseOrders.tsx
-// Purchase Orders Management with new UI components and ConfirmDialog
+// Purchase Orders Management with Select/Textarea components and improved mobile UX
 
 'use client';
 import React, { useState, useEffect } from 'react';
 import { ShoppingCart, Plus, Edit2, Trash2, X, Search, CheckCircle, Clock, XCircle, Package } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
-import { Button, Card, Input, Badge, EmptyState, LoadingSpinner, ConfirmDialog, useToast } from '@/components/ui';
+import { Button, Card, Input, Select, Textarea, Badge, EmptyState, LoadingSpinner, ConfirmDialog, useToast } from '@/components/ui';
 import { useTheme } from '@/contexts/ThemeContext';
 
 type POItem = {
@@ -157,7 +157,7 @@ const PurchaseOrders = () => {
       setShowModal(true);
     } catch (err: any) {
       console.error('Error loading PO:', err);
-      alert('Failed to load PO: ' + err.message);
+      toast.error('Failed to load', 'Could not load purchase order: ' + err.message);
     }
   };
 
@@ -445,22 +445,29 @@ const PurchaseOrders = () => {
           <div className="flex-1">
             <Input
               leftIcon={<Search size={18} />}
+              rightIcon={searchTerm ? (
+                <button 
+                  onClick={() => setSearchTerm('')}
+                  className="text-gray-400 hover:text-gray-600"
+                >
+                  <X size={18} />
+                </button>
+              ) : undefined}
               placeholder="Search POs..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
             />
           </div>
-          <select
+          <Select
             value={filterStatus}
             onChange={(e) => setFilterStatus(e.target.value)}
-            className={`px-3 py-2 border border-gray-300 rounded-lg ${theme.classes.focusRing} focus:ring-2 focus:ring-opacity-20 transition-all`}
           >
             <option value="all">All Status</option>
             <option value="pending">Pending</option>
             <option value="partial">Partial</option>
             <option value="received">Received</option>
             <option value="cancelled">Cancelled</option>
-          </select>
+          </Select>
         </div>
       </Card>
 
@@ -471,22 +478,28 @@ const PurchaseOrders = () => {
             <LoadingSpinner size="lg" text="Loading orders..." />
           </div>
         ) : filteredOrders.length === 0 ? (
-          <EmptyState
-            icon={<ShoppingCart size={64} />}
-            title={searchTerm || filterStatus !== 'all' ? "No orders found" : "No purchase orders yet"}
-            description={
-              searchTerm || filterStatus !== 'all'
-                ? "Try adjusting your filters"
-                : "Get started by creating your first purchase order"
-            }
-            action={
-              !searchTerm && filterStatus === 'all' && (
-                <Button onClick={handleAddNew} variant="primary" icon={<Plus size={18} />}>
-                  Create Your First PO
-                </Button>
-              )
-            }
-          />
+          <div className="p-12">
+            <EmptyState
+              icon={<ShoppingCart size={48} />}
+              title={searchTerm || filterStatus !== 'all' ? "No orders found" : "No purchase orders yet"}
+              description={
+                searchTerm || filterStatus !== 'all'
+                  ? "Try adjusting your filters"
+                  : "Get started by creating your first purchase order"
+              }
+              action={
+                !searchTerm && filterStatus === 'all' ? (
+                  <Button onClick={handleAddNew} variant="primary" icon={<Plus size={18} />}>
+                    Create Your First PO
+                  </Button>
+                ) : (
+                  <Button onClick={() => { setSearchTerm(''); setFilterStatus('all'); }} variant="secondary">
+                    Clear Filters
+                  </Button>
+                )
+              }
+            />
+          </div>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full">
@@ -546,240 +559,241 @@ const PurchaseOrders = () => {
       </Card>
 
       {/* Delete Confirmation */}
-      {showDeleteConfirm && deletingPO && (
-        <ConfirmDialog
-          isOpen={showDeleteConfirm}
-          onClose={() => {
-            setShowDeleteConfirm(false);
-            setDeletingPO(null);
-          }}
-          onConfirm={handleDeleteConfirm}
-          title="Delete Purchase Order"
-          message={`Are you sure you want to delete PO ${deletingPO.po_number}? This action cannot be undone.`}
-          confirmText="Delete"
-          cancelText="Cancel"
-          variant="danger"
-        />
-      )}
+      <ConfirmDialog
+        isOpen={showDeleteConfirm}
+        onClose={() => {
+          setShowDeleteConfirm(false);
+          setDeletingPO(null);
+        }}
+        onConfirm={handleDeleteConfirm}
+        title="Delete Purchase Order"
+        message={deletingPO ? `Are you sure you want to delete PO ${deletingPO.po_number}? This action cannot be undone.` : ''}
+        confirmText="Delete"
+        cancelText="Cancel"
+        variant="danger"
+      />
 
       {/* Create PO Modal */}
       {showModal && (
-        <div className="fixed inset-0 bg-black/20 backdrop-blur-sm flex items-center justify-center p-4 z-50 overflow-y-auto">
-          <div className="bg-white rounded-lg max-w-4xl w-full max-h-[90vh] overflow-y-auto">
-            <div className="sticky top-0 bg-white border-b border-gray-200 px-6 py-4 flex justify-between items-center">
-              <h3 className="text-lg font-semibold text-gray-900">
-                {editingPO ? `Edit Purchase Order ${editingPO.po_number}` : 'Create Purchase Order'}
-              </h3>
-              <button
-                onClick={() => setShowModal(false)}
-                className="text-gray-400 hover:text-gray-600"
-                disabled={saving}
-              >
-                <X size={24} />
-              </button>
-            </div>
+        <div className="fixed inset-0 bg-black/20 backdrop-blur-sm flex items-start justify-center p-4 z-50 overflow-y-auto">
+          <div className="min-h-screen w-full flex items-center justify-center py-8">
+            <div className="bg-white rounded-lg max-w-4xl w-full">
+              <div className="sticky top-0 bg-white border-b border-gray-200 px-6 py-4 flex justify-between items-center rounded-t-lg">
+                <h3 className="text-lg font-semibold text-gray-900">
+                  {editingPO ? `Edit Purchase Order ${editingPO.po_number}` : 'Create Purchase Order'}
+                </h3>
+                <button
+                  onClick={() => setShowModal(false)}
+                  className="text-gray-400 hover:text-gray-600"
+                  disabled={saving}
+                >
+                  <X size={24} />
+                </button>
+              </div>
 
-            <div className="p-6 space-y-4">
-              {/* Vendor Details */}
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Vendor <span className="text-red-500">*</span>
-                  </label>
-                  <select
+              <div className="p-6 space-y-4">
+                {/* Vendor Details */}
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <Select
+                    label="Vendor"
                     value={formData.vendor_id}
                     onChange={(e) => handleVendorChange(e.target.value)}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    required
                   >
                     <option value="">Select vendor</option>
                     {vendors.map(vendor => (
                       <option key={vendor.id} value={vendor.id}>{vendor.name}</option>
                     ))}
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">PO Date</label>
-                  <input
+                  </Select>
+
+                  <Input
+                    label="PO Date"
                     type="date"
                     value={formData.po_date}
                     onChange={(e) => setFormData({ ...formData, po_date: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                   />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Expected Delivery</label>
-                  <input
+
+                  <Input
+                    label="Expected Delivery"
                     type="date"
                     value={formData.expected_delivery_date}
                     onChange={(e) => setFormData({ ...formData, expected_delivery_date: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                   />
                 </div>
-              </div>
 
-              {/* Items */}
-              <div>
-                <div className="flex justify-between items-center mb-2">
-                  <h4 className="font-medium text-gray-900">Items</h4>
-                  <button
-                    onClick={addItem}
-                    className="bg-blue-600 text-white px-3 py-1.5 rounded-lg hover:bg-blue-700 text-sm flex items-center gap-2"
-                  >
-                    <Plus size={16} />
-                    Add Item
-                  </button>
+                {/* Items */}
+                <div>
+                  <div className="flex justify-between items-center mb-2">
+                    <h4 className="font-medium text-gray-900">Items</h4>
+                    <button
+                      onClick={addItem}
+                      className="bg-blue-600 text-white px-3 py-1.5 rounded-lg hover:bg-blue-700 text-sm flex items-center gap-2"
+                    >
+                      <Plus size={16} />
+                      Add Item
+                    </button>
+                  </div>
+
+                  {items.length === 0 ? (
+                    <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center">
+                      <p className="text-gray-500 text-sm">No items added</p>
+                    </div>
+                  ) : (
+                    <div className="space-y-2">
+                      {/* Header Row */}
+                      <div className="grid grid-cols-4 gap-2 px-3 py-2 bg-gray-50 rounded-lg border border-gray-200">
+                        <div className="col-span-2 text-xs font-semibold text-gray-600 uppercase">Item Name</div>
+                        <div className="text-xs font-semibold text-gray-600 uppercase">Quantity</div>
+                        <div className="text-xs font-semibold text-gray-600 uppercase">Rate (₹)</div>
+                      </div>
+
+                      {items.map((item, index) => (
+                        <div key={item.id} className="border border-gray-200 rounded-lg p-3">
+                          <div className="flex justify-between items-center mb-2">
+                            <span className="text-sm font-medium">Item #{index + 1}</span>
+                            <button onClick={() => removeItem(item.id)} className="text-red-600 hover:bg-red-50 p-1 rounded">
+                              <Trash2 size={14} />
+                            </button>
+                          </div>
+                          <div className="grid grid-cols-4 gap-2">
+                            <div className="col-span-2 relative">
+                              <input
+                                type="text"
+                                value={item.item_name}
+                                onChange={(e) => {
+                                  const searchTerm = e.target.value;
+                                  setItems(items.map(i => i.id === item.id ? {...i, item_name: searchTerm} : i));
+                                }}
+                                onFocus={(e) => {
+                                  const dropdown = document.getElementById(`dropdown-${item.id}`);
+                                  if (dropdown) dropdown.style.display = 'block';
+                                }}
+                                onBlur={(e) => {
+                                  setTimeout(() => {
+                                    const dropdown = document.getElementById(`dropdown-${item.id}`);
+                                    if (dropdown) dropdown.style.display = 'none';
+                                  }, 200);
+                                }}
+                                placeholder="Type to search..."
+                                className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 text-gray-900 placeholder:text-gray-400"
+                              />
+                              {/* Custom Dropdown */}
+                              <div
+                                id={`dropdown-${item.id}`}
+                                className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-lg shadow-lg max-h-48 overflow-y-auto hidden"
+                                style={{ display: 'none' }}
+                              >
+                                {availableItems
+                                  .filter(i => i.name.toLowerCase().includes(item.item_name.toLowerCase()))
+                                  .slice(0, 50)
+                                  .map(availItem => (
+                                    <div
+                                      key={availItem.id}
+                                      onClick={() => {
+                                        updateItem(item.id, 'item_id', availItem.id);
+                                        const dropdown = document.getElementById(`dropdown-${item.id}`);
+                                        if (dropdown) dropdown.style.display = 'none';
+                                      }}
+                                      className="px-3 py-2 hover:bg-blue-50 cursor-pointer text-sm border-b border-gray-100 last:border-0"
+                                    >
+                                      <div className="font-medium text-gray-900">{availItem.name}</div>
+                                      <div className="text-xs text-gray-500">Rate: ₹{availItem.wholesale_price} | GST: {availItem.gst_rate}%</div>
+                                    </div>
+                                  ))}
+                                {availableItems.filter(i => i.name.toLowerCase().includes(item.item_name.toLowerCase())).length === 0 && (
+                                  <div className="px-3 py-2 text-sm text-gray-500">No items found</div>
+                                )}
+                              </div>
+                            </div>
+                            <input
+                              type="number"
+                              value={item.quantity}
+                              onChange={(e) => updateItem(item.id, 'quantity', parseFloat(e.target.value) || 0)}
+                              placeholder="Qty"
+                              className="px-2 py-1.5 text-sm border border-gray-300 rounded text-gray-900 placeholder:text-gray-400"
+                            />
+                            <input
+                              type="number"
+                              step="0.01"
+                              value={item.rate}
+                              onChange={(e) => updateItem(item.id, 'rate', parseFloat(e.target.value) || 0)}
+                              placeholder="Rate"
+                              className="px-2 py-1.5 text-sm border border-gray-300 rounded text-gray-900 placeholder:text-gray-400"
+                            />
+                          </div>
+                          {/* Show calculated amount */}
+                          <div className="mt-2 text-right">
+                            <span className="text-xs text-gray-600">Amount: </span>
+                            <span className="text-sm font-semibold text-gray-900">₹{item.amount.toFixed(2)}</span>
+                            <span className="text-xs text-gray-500 ml-2">(GST: {item.gst_rate}%)</span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
 
-                {items.length === 0 ? (
-                  <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center">
-                    <p className="text-gray-500 text-sm">No items added</p>
-                  </div>
-                ) : (
-                  <div className="space-y-2">
-                    {/* Header Row */}
-                    <div className="grid grid-cols-4 gap-2 px-3 py-2 bg-gray-50 rounded-lg border border-gray-200">
-                      <div className="col-span-2 text-xs font-semibold text-gray-600 uppercase">Item Name</div>
-                      <div className="text-xs font-semibold text-gray-600 uppercase">Quantity</div>
-                      <div className="text-xs font-semibold text-gray-600 uppercase">Rate (₹)</div>
-                    </div>
+                {/* Notes */}
+                <Textarea
+                  label="Notes"
+                  placeholder="Additional notes (optional)"
+                  value={formData.notes}
+                  onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
+                  rows={2}
+                />
 
-                    {items.map((item, index) => (
-                      <div key={item.id} className="border border-gray-200 rounded-lg p-3">
-                        <div className="flex justify-between items-center mb-2">
-                          <span className="text-sm font-medium">Item #{index + 1}</span>
-                          <button onClick={() => removeItem(item.id)} className="text-red-600 hover:bg-red-50 p-1 rounded">
-                            <Trash2 size={14} />
-                          </button>
-                        </div>
-                        <div className="grid grid-cols-4 gap-2">
-                          <div className="col-span-2 relative">
-                            <input
-                              type="text"
-                              value={item.item_name}
-                              onChange={(e) => {
-                                const searchTerm = e.target.value;
-                                setItems(items.map(i => i.id === item.id ? {...i, item_name: searchTerm} : i));
-                              }}
-                              onFocus={(e) => {
-                                // Show dropdown on focus
-                                const dropdown = document.getElementById(`dropdown-${item.id}`);
-                                if (dropdown) dropdown.style.display = 'block';
-                              }}
-                              onBlur={(e) => {
-                                // Hide dropdown after selection (with delay)
-                                setTimeout(() => {
-                                  const dropdown = document.getElementById(`dropdown-${item.id}`);
-                                  if (dropdown) dropdown.style.display = 'none';
-                                }, 200);
-                              }}
-                              placeholder="Type to search..."
-                              className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500"
-                            />
-                            {/* Custom Dropdown */}
-                            <div
-                              id={`dropdown-${item.id}`}
-                              className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-lg shadow-lg max-h-48 overflow-y-auto hidden"
-                              style={{ display: 'none' }}
-                            >
-                              {availableItems
-                                .filter(i => i.name.toLowerCase().includes(item.item_name.toLowerCase()))
-                                .slice(0, 50)
-                                .map(availItem => (
-                                  <div
-                                    key={availItem.id}
-                                    onClick={() => {
-                                      updateItem(item.id, 'item_id', availItem.id);
-                                      const dropdown = document.getElementById(`dropdown-${item.id}`);
-                                      if (dropdown) dropdown.style.display = 'none';
-                                    }}
-                                    className="px-3 py-2 hover:bg-blue-50 cursor-pointer text-sm border-b border-gray-100 last:border-0"
-                                  >
-                                    <div className="font-medium text-gray-900">{availItem.name}</div>
-                                    <div className="text-xs text-gray-500">Rate: ₹{availItem.wholesale_price} | GST: {availItem.gst_rate}%</div>
-                                  </div>
-                                ))}
-                              {availableItems.filter(i => i.name.toLowerCase().includes(item.item_name.toLowerCase())).length === 0 && (
-                                <div className="px-3 py-2 text-sm text-gray-500">No items found</div>
-                              )}
-                            </div>
-                          </div>
-                          <input
-                            type="number"
-                            value={item.quantity}
-                            onChange={(e) => updateItem(item.id, 'quantity', parseFloat(e.target.value) || 0)}
-                            placeholder="Qty"
-                            className="px-2 py-1.5 text-sm border border-gray-300 rounded"
-                          />
-                          <input
-                            type="number"
-                            step="0.01"
-                            value={item.rate}
-                            onChange={(e) => updateItem(item.id, 'rate', parseFloat(e.target.value) || 0)}
-                            placeholder="Rate"
-                            className="px-2 py-1.5 text-sm border border-gray-300 rounded"
-                          />
-                        </div>
-                        {/* Show calculated amount */}
-                        <div className="mt-2 text-right">
-                          <span className="text-xs text-gray-600">Amount: </span>
-                          <span className="text-sm font-semibold text-gray-900">₹{item.amount.toFixed(2)}</span>
-                          <span className="text-xs text-gray-500 ml-2">(GST: {item.gst_rate}%)</span>
-                        </div>
+                {/* Totals */}
+                {totals && (
+                  <div className="border-t border-gray-200 pt-4">
+                    <div className="max-w-sm ml-auto space-y-2">
+                      <div className="flex justify-between text-sm">
+                        <span>Subtotal:</span>
+                        <span className="font-medium">₹{totals.subtotal.toFixed(2)}</span>
                       </div>
-                    ))}
+                      {isIntrastate ? (
+                        <>
+                          <div className="flex justify-between text-sm">
+                            <span>CGST:</span>
+                            <span>₹{totals.cgst.toFixed(2)}</span>
+                          </div>
+                          <div className="flex justify-between text-sm">
+                            <span>SGST:</span>
+                            <span>₹{totals.sgst.toFixed(2)}</span>
+                          </div>
+                        </>
+                      ) : (
+                        <div className="flex justify-between text-sm">
+                          <span>IGST:</span>
+                          <span>₹{totals.igst.toFixed(2)}</span>
+                        </div>
+                      )}
+                      <div className="flex justify-between text-lg font-bold pt-2 border-t">
+                        <span>Total:</span>
+                        <span>₹{totals.total.toFixed(2)}</span>
+                      </div>
+                    </div>
                   </div>
                 )}
-              </div>
 
-              {/* Totals */}
-              {totals && (
-                <div className="border-t border-gray-200 pt-4">
-                  <div className="max-w-sm ml-auto space-y-2">
-                    <div className="flex justify-between text-sm">
-                      <span>Subtotal:</span>
-                      <span className="font-medium">₹{totals.subtotal.toFixed(2)}</span>
-                    </div>
-                    {isIntrastate ? (
-                      <>
-                        <div className="flex justify-between text-sm">
-                          <span>CGST:</span>
-                          <span>₹{totals.cgst.toFixed(2)}</span>
-                        </div>
-                        <div className="flex justify-between text-sm">
-                          <span>SGST:</span>
-                          <span>₹{totals.sgst.toFixed(2)}</span>
-                        </div>
-                      </>
-                    ) : (
-                      <div className="flex justify-between text-sm">
-                        <span>IGST:</span>
-                        <span>₹{totals.igst.toFixed(2)}</span>
-                      </div>
-                    )}
-                    <div className="flex justify-between text-lg font-bold pt-2 border-t">
-                      <span>Total:</span>
-                      <span>₹{totals.total.toFixed(2)}</span>
-                    </div>
-                  </div>
+                {/* Actions */}
+                <div className="flex gap-3 pt-4 border-t border-gray-200">
+                  <Button
+                    onClick={() => setShowModal(false)}
+                    disabled={saving}
+                    variant="secondary"
+                    fullWidth
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    onClick={handleSubmit}
+                    disabled={saving || !formData.vendor_id || items.length === 0}
+                    variant="primary"
+                    fullWidth
+                  >
+                    {saving ? 'Saving...' : (editingPO ? 'Update Purchase Order' : 'Create Purchase Order')}
+                  </Button>
                 </div>
-              )}
-
-              {/* Actions */}
-              <div className="flex gap-3 pt-4">
-                <button
-                  onClick={handleSubmit}
-                  disabled={saving || !formData.vendor_id || items.length === 0}
-                  className="flex-1 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 font-medium disabled:bg-gray-400"
-                >
-                  {saving ? 'Saving...' : (editingPO ? 'Update Purchase Order' : 'Create Purchase Order')}
-                </button>
-                <button
-                  onClick={() => setShowModal(false)}
-                  disabled={saving}
-                  className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50"
-                >
-                  Cancel
-                </button>
               </div>
             </div>
           </div>
