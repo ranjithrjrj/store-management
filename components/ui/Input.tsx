@@ -26,7 +26,7 @@ export const Input: React.FC<InputProps> = ({
 }) => {
   const { theme } = useTheme();
 
-  const baseInputClasses = 'w-full px-3 py-2 border rounded-lg transition-all duration-200';
+  const baseInputClasses = 'w-full px-3 py-2 border rounded-lg transition-all duration-200 text-gray-900 placeholder:text-gray-400';
   const focusClasses = `${theme.classes.focusRing} focus:ring-2 focus:ring-opacity-20 focus:border-current`;
   const errorClasses = error ? 'border-red-300 focus:border-red-500 focus:ring-red-500' : 'border-gray-300';
   const iconPaddingLeft = leftIcon ? 'pl-10' : '';
