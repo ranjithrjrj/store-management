@@ -43,7 +43,7 @@ export const Input: React.FC<InputProps> = ({
       
       <div className="relative">
         {leftIcon && (
-          <div className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">
+          <div className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none">
             {leftIcon}
           </div>
         )}
@@ -54,7 +54,7 @@ export const Input: React.FC<InputProps> = ({
         />
         
         {rightIcon && (
-          <div className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400">
+          <div className="absolute right-3 top-1/2 -translate-y-1/2">
             {rightIcon}
           </div>
         )}
