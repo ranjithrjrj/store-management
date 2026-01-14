@@ -461,7 +461,7 @@ const CustomersManagement = () => {
                   <label className="flex items-center gap-2">
                     <input
                       type="checkbox"
-                      checked={formData.is_active}
+                      checked={!!formData.is_active}
                       onChange={(e) => setFormData({ ...formData, is_active: e.target.checked })}
                       className="rounded border-gray-300"
                     />
