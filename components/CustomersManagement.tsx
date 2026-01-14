@@ -1,11 +1,11 @@
 // FILE PATH: components/CustomersManagement.tsx
-// Customers Management with ConfirmDialog and active/inactive filtering
+// Customers Management with Select/Textarea components and improved mobile UX
 
 'use client';
 import React, { useState, useEffect } from 'react';
 import { Users, Plus, Edit2, Trash2, X, Search, Phone, Mail, MapPin, FileText } from 'lucide-react';
 import { supabase, customersAPI } from '@/lib/supabase';
-import { Button, Card, Input, Badge, EmptyState, LoadingSpinner, ConfirmDialog, useToast } from '@/components/ui';
+import { Button, Card, Input, Textarea, Badge, EmptyState, LoadingSpinner, ConfirmDialog, useToast } from '@/components/ui';
 import { useTheme } from '@/contexts/ThemeContext';
 
 type Customer = {
@@ -46,17 +46,16 @@ const CustomersManagement = () => {
     gstin: '',
     address: '',
     city: '',
-    state: '',
-    state_code: '',
+    state: 'Tamil Nadu',
+    state_code: '33',
     pincode: '',
     is_active: true
   });
 
-  // Helper to normalize is_active from database
   const normalizeBoolean = (value: boolean | string | null | undefined): boolean => {
     if (value === true || value === 'true') return true;
     if (value === false || value === 'false') return false;
-    return true; // Default to true if null or undefined
+    return true;
   };
 
   useEffect(() => {
@@ -118,8 +117,6 @@ const CustomersManagement = () => {
       toast.warning('Name required', 'Please enter customer name.');
       return;
     }
-
-    // Show confirmation dialog
     setShowEditConfirm(true);
   };
 
@@ -228,18 +225,26 @@ const CustomersManagement = () => {
 
       {/* Search & Filter */}
       <div className="grid grid-cols-1 md:grid-cols-12 gap-4">
-        <div className="md:col-span-8">
+        <div className="md:col-span-9">
           <Card padding="md">
             <Input
               leftIcon={<Search size={18} />}
-              placeholder="Search customers by name, phone, or email..."
+              rightIcon={searchTerm ? (
+                <button 
+                  onClick={() => setSearchTerm('')}
+                  className="text-gray-400 hover:text-gray-600"
+                >
+                  <X size={18} />
+                </button>
+              ) : undefined}
+              placeholder="Search by name, phone, or email..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
             />
           </Card>
         </div>
         
-        <div className="md:col-span-4">
+        <div className="md:col-span-3">
           <Card padding="md">
             <label className="flex items-center gap-2 cursor-pointer">
               <input
@@ -248,9 +253,7 @@ const CustomersManagement = () => {
                 onChange={(e) => setShowInactive(e.target.checked)}
                 className={`rounded ${theme.classes.textPrimary}`}
               />
-              <span className="text-sm font-medium text-gray-700">
-                Show Inactive ({inactiveCount})
-              </span>
+              <span className="text-sm font-medium text-gray-700">Show Inactive ({inactiveCount})</span>
             </label>
           </Card>
         </div>
@@ -263,77 +266,78 @@ const CustomersManagement = () => {
             <LoadingSpinner size="lg" text="Loading customers..." />
           </div>
         ) : filteredCustomers.length === 0 ? (
-          <EmptyState
-            icon={<Users size={64} />}
-            title={searchTerm ? "No customers found" : "No customers yet"}
-            description={
-              searchTerm
-                ? "Try adjusting your search terms"
-                : "Add your first customer to get started"
-            }
-            action={
-              !searchTerm && (
-                <Button onClick={handleAddNew} variant="primary" icon={<Plus size={18} />}>
-                  Add First Customer
-                </Button>
-              )
-            }
-          />
+          <div className="p-12">
+            <EmptyState
+              icon={<Users size={48} />}
+              title={searchTerm ? "No customers found" : "No customers yet"}
+              description={
+                searchTerm
+                  ? "Try adjusting your search terms"
+                  : "Get started by adding your first customer"
+              }
+              action={
+                !searchTerm ? (
+                  <Button onClick={handleAddNew} variant="primary" icon={<Plus size={18} />}>
+                    Add Your First Customer
+                  </Button>
+                ) : (
+                  <Button onClick={() => setSearchTerm('')} variant="secondary">
+                    Clear Search
+                  </Button>
+                )
+              }
+            />
+          </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 p-4">
+          <div className="grid grid-cols-1 gap-4 p-4">
             {filteredCustomers.map((customer) => (
-              <Card key={customer.id} hover padding="md" className={(customer.is_active === false || customer.is_active === 'false') ? 'opacity-60' : ''}>
-                <div className="space-y-3">
-                  {/* Header */}
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="flex-1 min-w-0">
-                      <h3 className="font-semibold text-gray-900 truncate">{customer.name}</h3>
-                      <div className="flex items-center gap-2 mt-1">
-                        {(customer.is_active === false || customer.is_active === 'false') && (
-                          <Badge variant="neutral" size="sm">Inactive</Badge>
-                        )}
-                      </div>
+              <Card 
+                key={customer.id} 
+                padding="md" 
+                hover
+                className={`${(customer.is_active === false || customer.is_active === 'false') ? 'opacity-60' : ''}`}
+              >
+                <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 mb-2">
+                      <h3 className="font-semibold text-gray-900 text-lg">{customer.name}</h3>
+                      {(customer.is_active === false || customer.is_active === 'false') && (
+                        <Badge variant="neutral" size="sm">Inactive</Badge>
+                      )}
                     </div>
-                    <div>
-                      <Badge variant={(customer.is_active === true || customer.is_active === 'true') ? 'success' : 'neutral'} size="sm">
-                        {(customer.is_active === true || customer.is_active === 'true') ? 'Active' : 'Inactive'}
-                      </Badge>
+
+                    <div className="space-y-1 text-sm">
+                      {customer.phone && (
+                        <div className="flex items-center gap-2 text-gray-600">
+                          <Phone size={14} />
+                          <span>{customer.phone}</span>
+                        </div>
+                      )}
+                      {customer.email && (
+                        <div className="flex items-center gap-2 text-gray-600">
+                          <Mail size={14} />
+                          <span>{customer.email}</span>
+                        </div>
+                      )}
+                      {customer.gstin && (
+                        <div className="flex items-center gap-2 text-gray-600">
+                          <FileText size={14} />
+                          <span>GSTIN: {customer.gstin}</span>
+                        </div>
+                      )}
+                      {(customer.city || customer.state) && (
+                        <div className="flex items-center gap-2 text-gray-600">
+                          <MapPin size={14} />
+                          <span>{[customer.city, customer.state].filter(Boolean).join(', ')}</span>
+                        </div>
+                      )}
                     </div>
                   </div>
 
-                  {/* Contact Details */}
-                  <div className="space-y-2 text-sm text-gray-600">
-                    {customer.phone && (
-                      <div className="flex items-center gap-2">
-                        <Phone size={14} className="flex-shrink-0" />
-                        <span className="truncate">{customer.phone}</span>
-                      </div>
-                    )}
-                    {customer.email && (
-                      <div className="flex items-center gap-2">
-                        <Mail size={14} className="flex-shrink-0" />
-                        <span className="truncate">{customer.email}</span>
-                      </div>
-                    )}
-                    {(customer.city || customer.state) && (
-                      <div className="flex items-center gap-2">
-                        <MapPin size={14} className="flex-shrink-0" />
-                        <span className="truncate">{[customer.city, customer.state].filter(Boolean).join(', ')}</span>
-                      </div>
-                    )}
-                    {customer.gstin && (
-                      <div className="flex items-center gap-2">
-                        <FileText size={14} className="flex-shrink-0" />
-                        <span className="truncate font-mono text-xs">{customer.gstin}</span>
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Actions */}
-                  <div className="flex gap-2 pt-2 border-t border-gray-100">
+                  <div className="flex gap-2 flex-shrink-0">
                     <button
                       onClick={() => handleEdit(customer)}
-                      className={`flex-1 flex items-center justify-center gap-2 px-3 py-2 ${theme.classes.textPrimary} ${theme.classes.bgPrimaryLighter} rounded-lg hover:${theme.classes.bgPrimaryLight} transition-colors text-sm font-medium`}
+                      className="flex-1 flex items-center justify-center gap-2 px-3 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors text-sm font-medium"
                     >
                       <Edit2 size={14} />
                       Edit
@@ -362,154 +366,151 @@ const CustomersManagement = () => {
 
       {/* Add/Edit Modal */}
       {showModal && (
-        <div className="fixed inset-0 bg-black/20 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-          <Card className="w-full max-w-2xl max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center justify-between mb-6">
-              <h3 className="text-xl font-bold text-gray-900">
-                {editingCustomer ? 'Edit Customer' : 'Add New Customer'}
-              </h3>
-              <button onClick={() => setShowModal(false)} className="text-gray-400 hover:text-gray-600 transition-colors">
-                <X size={24} />
-              </button>
-            </div>
-
-            <div className="space-y-4">
-              <Input
-                label="Customer Name"
-                placeholder="Enter customer name"
-                value={formData.name}
-                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                required
-                leftIcon={<Users size={18} />}
-              />
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <Input
-                  label="Phone"
-                  type="tel"
-                  placeholder="Enter phone number"
-                  value={formData.phone}
-                  onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-                  leftIcon={<Phone size={18} />}
-                />
-
-                <Input
-                  label="Email"
-                  type="email"
-                  placeholder="Enter email address"
-                  value={formData.email}
-                  onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                  leftIcon={<Mail size={18} />}
-                />
+        <div className="fixed inset-0 bg-black/20 backdrop-blur-sm flex items-start justify-center p-4 z-50 overflow-y-auto">
+          <div className="min-h-screen w-full flex items-center justify-center py-8">
+            <Card className="w-full max-w-2xl">
+              <div className="flex items-center justify-between mb-6">
+                <h3 className="text-xl font-bold text-gray-900">
+                  {editingCustomer ? 'Edit Customer' : 'Add New Customer'}
+                </h3>
+                <button onClick={() => setShowModal(false)} className="text-gray-400 hover:text-gray-600 transition-colors">
+                  <X size={24} />
+                </button>
               </div>
 
-              <Input
-                label="GSTIN (Optional)"
-                placeholder="Enter 15-character GSTIN"
-                value={formData.gstin}
-                onChange={(e) => setFormData({ ...formData, gstin: e.target.value.toUpperCase() })}
-                maxLength={15}
-              />
+              <div className="space-y-4">
+                <Input
+                  label="Customer Name"
+                  placeholder="Enter customer name"
+                  value={formData.name}
+                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                  required
+                  leftIcon={<Users size={18} />}
+                />
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Address</label>
-                <textarea
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <Input
+                    label="Phone"
+                    type="tel"
+                    placeholder="Enter phone number"
+                    value={formData.phone}
+                    onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+                    leftIcon={<Phone size={18} />}
+                  />
+
+                  <Input
+                    label="Email"
+                    type="email"
+                    placeholder="Enter email address"
+                    value={formData.email}
+                    onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                    leftIcon={<Mail size={18} />}
+                  />
+                </div>
+
+                <Input
+                  label="GSTIN (Optional)"
+                  placeholder="Enter 15-character GSTIN"
+                  value={formData.gstin}
+                  onChange={(e) => setFormData({ ...formData, gstin: e.target.value.toUpperCase() })}
+                  maxLength={15}
+                  leftIcon={<FileText size={18} />}
+                />
+
+                <Textarea
+                  label="Address"
+                  placeholder="Enter street address"
                   value={formData.address}
                   onChange={(e) => setFormData({ ...formData, address: e.target.value })}
                   rows={2}
-                  className={`w-full px-3 py-2 border border-gray-300 rounded-lg ${theme.classes.focusRing} focus:ring-2 focus:ring-opacity-20 transition-all`}
-                  placeholder="Enter street address"
-                />
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <Input
-                  label="City"
-                  placeholder="Enter city"
-                  value={formData.city}
-                  onChange={(e) => setFormData({ ...formData, city: e.target.value })}
                 />
 
-                <Input
-                  label="State"
-                  placeholder="Enter state"
-                  value={formData.state}
-                  onChange={(e) => setFormData({ ...formData, state: e.target.value })}
-                />
-
-                <Input
-                  label="State Code"
-                  placeholder="e.g., 33"
-                  value={formData.state_code}
-                  onChange={(e) => setFormData({ ...formData, state_code: e.target.value })}
-                  helperText="2-digit GST state code"
-                />
-
-                <Input
-                  label="Pincode"
-                  placeholder="Enter pincode"
-                  value={formData.pincode}
-                  onChange={(e) => setFormData({ ...formData, pincode: e.target.value })}
-                />
-              </div>
-
-              <div className="pt-4 border-t border-gray-200">
-                <label className="flex items-center gap-2">
-                  <input
-                    type="checkbox"
-                    checked={normalizeBoolean(formData.is_active)}
-                    onChange={(e) => setFormData({ ...formData, is_active: e.target.checked })}
-                    className={`rounded ${theme.classes.textPrimary} ${theme.classes.focusRing}`}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <Input
+                    label="City"
+                    placeholder="Enter city"
+                    value={formData.city}
+                    onChange={(e) => setFormData({ ...formData, city: e.target.value })}
                   />
-                  <span className="text-sm font-medium text-gray-700">Active Customer</span>
-                </label>
-              </div>
-            </div>
 
-            <div className="flex gap-3 mt-6">
-              <Button onClick={() => setShowModal(false)} variant="secondary" fullWidth disabled={saving}>
-                Cancel
-              </Button>
-              <Button onClick={handleSubmit} variant="primary" fullWidth loading={saving}>
-                {editingCustomer ? 'Update' : 'Create'}
-              </Button>
-            </div>
-          </Card>
+                  <Input
+                    label="State"
+                    placeholder="Enter state"
+                    value={formData.state}
+                    onChange={(e) => setFormData({ ...formData, state: e.target.value })}
+                  />
+
+                  <Input
+                    label="State Code"
+                    placeholder="e.g., 33"
+                    value={formData.state_code}
+                    onChange={(e) => setFormData({ ...formData, state_code: e.target.value })}
+                    helperText="2-digit GST state code"
+                  />
+
+                  <Input
+                    label="Pincode"
+                    placeholder="Enter pincode"
+                    value={formData.pincode}
+                    onChange={(e) => setFormData({ ...formData, pincode: e.target.value })}
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Status</label>
+                  <label className="flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                      checked={formData.is_active}
+                      onChange={(e) => setFormData({ ...formData, is_active: e.target.checked })}
+                      className="rounded border-gray-300"
+                    />
+                    <span className="text-sm text-gray-700">Active</span>
+                  </label>
+                </div>
+              </div>
+
+              <div className="flex gap-3 mt-6 pt-6 border-t border-gray-200">
+                <Button onClick={() => setShowModal(false)} variant="secondary" fullWidth>
+                  Cancel
+                </Button>
+                <Button onClick={handleSubmit} variant="primary" fullWidth disabled={saving}>
+                  {saving ? 'Saving...' : editingCustomer ? 'Update' : 'Create'}
+                </Button>
+              </div>
+            </Card>
+          </div>
         </div>
       )}
 
       {/* Edit Confirmation */}
-      {showEditConfirm && (
-        <ConfirmDialog
-          isOpen={showEditConfirm}
-          onClose={() => setShowEditConfirm(false)}
-          onConfirm={handleConfirmSubmit}
-          title={editingCustomer ? 'Update Customer' : 'Create Customer'}
-          message={editingCustomer 
-            ? `Save changes to "${formData.name}"?` 
-            : `Create new customer "${formData.name}"?`}
-          confirmText={editingCustomer ? 'Update' : 'Create'}
-          cancelText="Cancel"
-          variant="primary"
-        />
-      )}
+      <ConfirmDialog
+        isOpen={showEditConfirm}
+        onClose={() => setShowEditConfirm(false)}
+        onConfirm={handleConfirmSubmit}
+        title={editingCustomer ? 'Update Customer' : 'Create Customer'}
+        message={editingCustomer 
+          ? `Save changes to "${formData.name}"?` 
+          : `Create new customer "${formData.name}"?`}
+        confirmText={editingCustomer ? 'Update' : 'Create'}
+        cancelText="Cancel"
+        variant="primary"
+      />
 
       {/* Delete Confirmation */}
-      {showDeleteConfirm && deletingCustomer && (
-        <ConfirmDialog
-          isOpen={showDeleteConfirm}
-          onClose={() => {
-            setShowDeleteConfirm(false);
-            setDeletingCustomer(null);
-          }}
-          onConfirm={handleDeleteConfirm}
-          title="Delete Customer"
-          message={`Are you sure you want to delete "${deletingCustomer.name}"? This action cannot be undone.`}
-          confirmText="Delete"
-          cancelText="Cancel"
-          variant="danger"
-        />
-      )}
+      <ConfirmDialog
+        isOpen={showDeleteConfirm}
+        onClose={() => {
+          setShowDeleteConfirm(false);
+          setDeletingCustomer(null);
+        }}
+        onConfirm={handleDeleteConfirm}
+        title="Delete Customer"
+        message={deletingCustomer ? `Are you sure you want to delete "${deletingCustomer.name}"? This action cannot be undone.` : ''}
+        confirmText="Delete"
+        cancelText="Cancel"
+        variant="danger"
+      />
     </div>
   );
 };
