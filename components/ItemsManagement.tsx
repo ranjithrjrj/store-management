@@ -365,6 +365,14 @@ const ItemsManagement = () => {
           <Card padding="md">
             <Input
               leftIcon={<Search size={18} />}
+              rightIcon={searchTerm ? (
+                <button 
+                  onClick={() => setSearchTerm('')}
+                  className="text-gray-400 hover:text-gray-600"
+                >
+                  <X size={18} />
+                </button>
+              ) : undefined}
               placeholder="Search items by name or HSN code..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
@@ -651,16 +659,17 @@ const ItemsManagement = () => {
 
       {/* Add/Edit Modal */}
       {showModal && (
-        <div className="fixed inset-0 bg-black/20 backdrop-blur-sm flex items-center justify-center p-4 z-50 overflow-y-auto">
-          <Card className="w-full max-w-2xl my-8">
-            <div className="flex items-center justify-between mb-6">
-              <h3 className="text-xl font-bold text-gray-900">
-                {editingItem ? 'Edit Item' : 'Add New Item'}
-              </h3>
-              <button onClick={() => setShowModal(false)} className="text-gray-400 hover:text-gray-600">
-                <X size={24} />
-              </button>
-            </div>
+        <div className="fixed inset-0 bg-black/20 backdrop-blur-sm flex items-start justify-center p-4 z-50 overflow-y-auto">
+          <div className="min-h-screen w-full flex items-center justify-center py-8">
+            <Card className="w-full max-w-2xl">
+              <div className="flex items-center justify-between mb-6">
+                <h3 className="text-xl font-bold text-gray-900">
+                  {editingItem ? 'Edit Item' : 'Add New Item'}
+                </h3>
+                <button onClick={() => setShowModal(false)} className="text-gray-400 hover:text-gray-600">
+                  <X size={24} />
+                </button>
+              </div>
 
             <div className="space-y-6">
               {/* Basic Info */}
@@ -813,19 +822,21 @@ const ItemsManagement = () => {
               </Button>
             </div>
           </Card>
+          </div>
         </div>
       )}
 
       {/* View Modal */}
       {showViewModal && viewingItem && (
-        <div className="fixed inset-0 bg-black/20 backdrop-blur-sm flex items-center justify-center p-4 z-50 overflow-y-auto">
-          <Card className="w-full max-w-3xl my-8">
-            <div className="flex items-center justify-between mb-6">
-              <h3 className="text-xl font-bold text-gray-900">Item Details</h3>
-              <button onClick={() => setShowViewModal(false)} className="text-gray-400 hover:text-gray-600">
-                <X size={24} />
-              </button>
-            </div>
+        <div className="fixed inset-0 bg-black/20 backdrop-blur-sm flex items-start justify-center p-4 z-50 overflow-y-auto">
+          <div className="min-h-screen w-full flex items-center justify-center py-8">
+            <Card className="w-full max-w-3xl">
+              <div className="flex items-center justify-between mb-6">
+                <h3 className="text-xl font-bold text-gray-900">Item Details</h3>
+                <button onClick={() => setShowViewModal(false)} className="text-gray-400 hover:text-gray-600">
+                  <X size={24} />
+                </button>
+              </div>
 
             <div className="space-y-6">
               {/* Basic Info */}
@@ -993,13 +1004,13 @@ const ItemsManagement = () => {
                       <div className="text-center p-3 bg-blue-50 rounded-lg">
                         <p className="text-xs text-gray-600 mb-1">Total Purchased</p>
                         <p className="text-lg font-bold text-blue-900">
-                          {itemTransactions.purchases.reduce((sum, p) => sum + p.quantity, 0)} units
+                          {itemTransactions.purchases.reduce((sum, p) => sum + p.quantity, 0)} {viewingItem.unit?.abbreviation || 'units'}
                         </p>
                       </div>
                       <div className="text-center p-3 bg-green-50 rounded-lg">
                         <p className="text-xs text-gray-600 mb-1">Total Sold</p>
                         <p className="text-lg font-bold text-green-900">
-                          {itemTransactions.sales.reduce((sum, s) => sum + s.quantity, 0)} units
+                          {itemTransactions.sales.reduce((sum, s) => sum + s.quantity, 0)} {viewingItem.unit?.abbreviation || 'units'}
                         </p>
                       </div>
                     </div>
@@ -1017,6 +1028,7 @@ const ItemsManagement = () => {
               </Button>
             </div>
           </Card>
+          </div>
         </div>
       )}
 
