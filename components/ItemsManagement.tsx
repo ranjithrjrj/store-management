@@ -455,7 +455,7 @@ const ItemsManagement = () => {
                     <td className="px-4 py-3 text-sm text-gray-600 hidden lg:table-cell">₹{item.retail_price}</td>
                     <td className="px-4 py-3 text-sm text-gray-600 hidden lg:table-cell">₹{item.wholesale_price}</td>
                     <td className="px-4 py-3 text-right">
-                      <div className="relative" ref={el => dropdownRefs.current[item.id] = el}>
+                      <div className="relative" ref={el => { dropdownRefs.current[item.id] = el; }}>
                         <button
                           onClick={() => setOpenDropdown(openDropdown === item.id ? null : item.id)}
                           className="text-gray-600 hover:text-gray-900 p-2 hover:bg-gray-100 rounded"
