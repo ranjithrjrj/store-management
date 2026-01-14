@@ -402,7 +402,7 @@ const ItemsManagement = () => {
         ) : filteredItems.length === 0 ? (
           <div className="p-12">
             <EmptyState
-              icon={Package}
+              icon={<Package size={48} />}
               title="No Items Found"
               description={searchTerm || filters.categories.length > 0 ? "No items match your search or filters." : "Start by adding your first item."}
               action={
