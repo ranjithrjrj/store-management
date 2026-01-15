@@ -1,36 +1,35 @@
-// FILE PATH: components/ui/Input.tsx
-// Themed input component with icon support
+// FILE PATH: components/ui/Select.tsx
+// Themed select component
 
 'use client';
-import React, { InputHTMLAttributes, ReactNode } from 'react';
+import React, { SelectHTMLAttributes, ReactNode } from 'react';
 import { useTheme } from '@/contexts/ThemeContext';
 
-interface InputProps extends InputHTMLAttributes<HTMLInputElement> {
+interface SelectProps extends SelectHTMLAttributes<HTMLSelectElement> {
   label?: string;
   error?: string;
   helperText?: string;
   leftIcon?: ReactNode;
-  rightIcon?: ReactNode;
   required?: boolean;
+  children: ReactNode;
 }
 
-export const Input: React.FC<InputProps> = ({
+export const Select: React.FC<SelectProps> = ({
   label,
   error,
   helperText,
   leftIcon,
-  rightIcon,
   required,
   className = '',
+  children,
   ...props
 }) => {
   const { theme } = useTheme();
 
-  const baseInputClasses = 'w-full px-3 py-2 border rounded-lg transition-all duration-200 text-gray-900 placeholder:text-gray-400';
+  const baseSelectClasses = 'w-full px-3 py-2 border rounded-lg transition-all duration-200 text-gray-900 bg-white';
   const focusClasses = `${theme.classes.focusRing} focus:ring-2 focus:ring-opacity-20 focus:border-current`;
   const errorClasses = error ? 'border-red-300 focus:border-red-500 focus:ring-red-500' : 'border-gray-300';
   const iconPaddingLeft = leftIcon ? 'pl-10' : '';
-  const iconPaddingRight = rightIcon ? 'pr-10' : '';
 
   return (
     <div className="w-full">
@@ -43,21 +42,17 @@ export const Input: React.FC<InputProps> = ({
       
       <div className="relative">
         {leftIcon && (
-          <div className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none">
+          <div className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none z-10">
             {leftIcon}
           </div>
         )}
         
-        <input
-          className={`${baseInputClasses} ${focusClasses} ${errorClasses} ${iconPaddingLeft} ${iconPaddingRight} ${className}`}
+        <select
+          className={`${baseSelectClasses} ${focusClasses} ${errorClasses} ${iconPaddingLeft} ${className}`}
           {...props}
-        />
-        
-        {rightIcon && (
-          <div className="absolute right-3 top-1/2 -translate-y-1/2">
-            {rightIcon}
-          </div>
-        )}
+        >
+          {children}
+        </select>
       </div>
       
       {error && (

@@ -11,6 +11,10 @@ export type { BadgeVariant, BadgeSize } from './Badge';
 
 export { Input } from './Input';
 
+export { Select } from './Select';
+
+export { Textarea } from './Textarea';
+
 export { LoadingSpinner, SkeletonLine, SkeletonCard, SkeletonTable } from './LoadingSpinner';
 
 export { EmptyState } from './EmptyState';

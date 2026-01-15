@@ -1,11 +1,11 @@
 // FILE PATH: components/ItemsManagement.tsx
-// Items Management with new UI components and theme support
+// Items Management with new UI components, theme support, and smart dropdown positioning
 
 'use client';
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Package, Plus, Edit2, Trash2, X, Search } from 'lucide-react';
 import { itemsAPI, categoriesAPI, unitsAPI, supabase } from '@/lib/supabase';
-import { Button, Card, Input, Badge, EmptyState, LoadingSpinner, ConfirmDialog, useToast } from '@/components/ui';
+import { Button, Card, Input, Select, Textarea, Badge, EmptyState, LoadingSpinner, ConfirmDialog, useToast } from '@/components/ui';
 import { useTheme } from '@/contexts/ThemeContext';
 
 type Item = {
@@ -40,6 +40,8 @@ type Unit = {
 const ItemsManagement = () => {
   const { theme } = useTheme();
   const toast = useToast();
+  const dropdownRefs = useRef<{ [key: string]: HTMLDivElement | null }>({});
+  
   const [items, setItems] = useState<Item[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [units, setUnits] = useState<Unit[]>([]);
@@ -90,7 +92,20 @@ const ItemsManagement = () => {
   const normalizeBoolean = (value: boolean | string | null): boolean => {
     if (value === true || value === 'true') return true;
     if (value === false || value === 'false') return false;
-    return true; // Default to true if null or undefined
+    return true;
+  };
+
+  // Smart dropdown positioning
+  const getDropdownPosition = (itemId: string) => {
+    const dropdown = dropdownRefs.current[itemId];
+    if (!dropdown) return 'bottom';
+    
+    const rect = dropdown.getBoundingClientRect();
+    const spaceBelow = window.innerHeight - rect.bottom;
+    const spaceAbove = rect.top;
+    
+    // If less than 200px space below and more space above, open upward
+    return spaceBelow < 200 && spaceAbove > spaceBelow ? 'top' : 'bottom';
   };
 
   useEffect(() => {
@@ -162,11 +177,9 @@ const ItemsManagement = () => {
     setShowViewModal(true);
     setOpenDropdown(null);
     
-    // Load transaction history
     setItemTransactions({ purchases: [], sales: [], loading: true });
     
     try {
-      // Get purchase history
       const { data: purchases, error: purchaseError } = await supabase
         .from('purchase_order_items')
         .select(`
@@ -182,7 +195,6 @@ const ItemsManagement = () => {
 
       if (purchaseError) throw purchaseError;
 
-      // Get sales history
       const { data: sales, error: salesError } = await supabase
         .from('sales_invoice_items')
         .select(`
@@ -210,6 +222,59 @@ const ItemsManagement = () => {
     }
   };
 
+  const handleSubmit = async () => {
+    if (!formData.name?.trim()) {
+      toast.warning('Name required', 'Please enter item name.');
+      return;
+    }
+    if (!formData.category_id) {
+      toast.warning('Category required', 'Please select a category.');
+      return;
+    }
+    if (!formData.unit_id) {
+      toast.warning('Unit required', 'Please select a unit.');
+      return;
+    }
+    setShowEditConfirm(true);
+  };
+
+  const handleConfirmSubmit = async () => {
+    setShowEditConfirm(false);
+    try {
+      setSaving(true);
+
+      if (editingItem) {
+        await itemsAPI.update(editingItem.id, formData as any);
+        toast.success('Updated!', `Item "${formData.name}" has been updated.`);
+      } else {
+        await itemsAPI.create(formData as any);
+        toast.success('Created!', `Item "${formData.name}" has been created.`);
+      }
+
+      await loadData();
+      setShowModal(false);
+      setFormData({
+        name: '',
+        description: '',
+        category_id: '',
+        unit_id: '',
+        hsn_code: '',
+        gst_rate: 18,
+        mrp: 0,
+        retail_price: 0,
+        wholesale_price: 0,
+        discount_percent: 0,
+        min_stock_level: 0,
+        is_active: true
+      });
+    } catch (err: any) {
+      console.error('Error saving item:', err);
+      toast.error('Failed to save', err.message || 'Could not save item.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
   const handleDeleteClick = (id: string, name: string) => {
     setDeletingItem({ id, name });
     setShowDeleteConfirm(true);
@@ -222,7 +287,7 @@ const ItemsManagement = () => {
     try {
       await itemsAPI.delete(deletingItem.id);
       await loadData();
-      toast.success('Deleted', `Item "${deletingItem.name}" has been removed.`);
+      toast.success('Deleted', `Item "${deletingItem.name}" has been deleted.`);
       setShowDeleteConfirm(false);
       setDeletingItem(null);
     } catch (err: any) {
@@ -231,74 +296,27 @@ const ItemsManagement = () => {
     }
   };
 
-  const handleSubmit = async () => {
-    if (!formData.name.trim()) {
-      toast.warning('Name required', 'Please enter item name.');
-      return;
-    }
-
-    if (!formData.category_id) {
-      toast.warning('Category required', 'Please select a category.');
-      return;
-    }
-
-    if (!formData.unit_id) {
-      toast.warning('Unit required', 'Please select a unit.');
-      return;
-    }
-
-    // Show confirmation dialog
-    setShowEditConfirm(true);
-  };
-
-  const handleConfirmSubmit = async () => {
-    setShowEditConfirm(false);
-    try {
-      setSaving(true);
-      setError(null);
-
-      if (editingItem) {
-        await itemsAPI.update(editingItem.id, formData as any);
-        toast.success('Updated!', `Item "${formData.name}" has been updated.`);
-      } else {
-        await itemsAPI.create(formData as any);
-        toast.success('Created!', `Item "${formData.name}" has been added.`);
-      }
-
-      await loadData();
-      setShowModal(false);
-    } catch (err: any) {
-      console.error('Error saving item:', err);
-      toast.error('Failed to save', err.message || 'Could not save item.');
-    } finally {
-      setSaving(false);
-    }
-  };
-
-
+  // Filtering and sorting
   const filteredItems = items.filter(item => {
-    // Text search
     const matchesSearch = item.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      item.hsn_code.toLowerCase().includes(searchTerm.toLowerCase());
-
-    // Category filter
+                         item.hsn_code.toLowerCase().includes(searchTerm.toLowerCase());
+    
     const matchesCategory = filters.categories.length === 0 || 
-      (item.category?.id && filters.categories.includes(item.category.id));
+                           filters.categories.includes(item.category_id);
+    
+    const matchesPrice = (!filters.priceRange.min || item.mrp >= parseFloat(filters.priceRange.min)) &&
+                        (!filters.priceRange.max || item.mrp <= parseFloat(filters.priceRange.max));
+    
+    const matchesGst = filters.gstRates.length === 0 || 
+                      filters.gstRates.includes(item.gst_rate);
 
-    // Price range filter
-    const matchesPriceMin = !filters.priceRange.min || item.retail_price >= parseFloat(filters.priceRange.min);
-    const matchesPriceMax = !filters.priceRange.max || item.retail_price <= parseFloat(filters.priceRange.max);
-
-    // GST rate filter
-    const matchesGst = filters.gstRates.length === 0 || filters.gstRates.includes(item.gst_rate);
-
-    return matchesSearch && matchesCategory && matchesPriceMin && matchesPriceMax && matchesGst;
+    return matchesSearch && matchesCategory && matchesPrice && matchesGst;
   }).sort((a, b) => {
     let comparison = 0;
     if (sortBy === 'name') {
       comparison = a.name.localeCompare(b.name);
     } else if (sortBy === 'price') {
-      comparison = a.retail_price - b.retail_price;
+      comparison = a.mrp - b.mrp;
     } else if (sortBy === 'gst') {
       comparison = a.gst_rate - b.gst_rate;
     }
@@ -347,6 +365,14 @@ const ItemsManagement = () => {
           <Card padding="md">
             <Input
               leftIcon={<Search size={18} />}
+              rightIcon={searchTerm ? (
+                <button 
+                  onClick={() => setSearchTerm('')}
+                  className="text-gray-400 hover:text-gray-600"
+                >
+                  <X size={18} />
+                </button>
+              ) : undefined}
               placeholder="Search items by name or HSN code..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
@@ -382,49 +408,46 @@ const ItemsManagement = () => {
             <LoadingSpinner size="lg" text="Loading items..." />
           </div>
         ) : filteredItems.length === 0 ? (
-          <EmptyState
-            icon={<Package size={64} />}
-            title={searchTerm ? "No items found" : "No items yet"}
-            description={
-              searchTerm
-                ? "Try adjusting your search terms"
-                : "Get started by adding your first item"
-            }
-            action={
-              !searchTerm && (
-                <Button onClick={handleAddNew} variant="primary" icon={<Plus size={18} />}>
-                  Add Your First Item
-                </Button>
-              )
-            }
-          />
+          <div className="p-12">
+            <EmptyState
+              icon={<Package size={48} />}
+              title="No Items Found"
+              description={searchTerm || filters.categories.length > 0 ? "No items match your search or filters." : "Start by adding your first item."}
+              action={
+                searchTerm || filters.categories.length > 0 ? (
+                  <Button onClick={() => { setSearchTerm(''); setFilters({ categories: [], priceRange: { min: '', max: '' }, gstRates: [] }); }} variant="secondary">
+                    Clear Filters
+                  </Button>
+                ) : (
+                  <Button onClick={handleAddNew} variant="primary" icon={<Plus size={18} />}>
+                    Add First Item
+                  </Button>
+                )
+              }
+            />
+          </div>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full">
               <thead className="bg-gray-50 border-b border-gray-200">
                 <tr>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Item Name</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase hidden md:table-cell">Category</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase hidden lg:table-cell">HSN</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase hidden sm:table-cell">GST %</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">MRP</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase hidden lg:table-cell">Retail</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase hidden lg:table-cell">Wholesale</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-600 uppercase">Item Name</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-600 uppercase hidden md:table-cell">Category</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-600 uppercase hidden lg:table-cell">HSN</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-600 uppercase hidden sm:table-cell">GST</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-600 uppercase">MRP</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-600 uppercase hidden lg:table-cell">Retail</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-600 uppercase hidden lg:table-cell">Wholesale</th>
+                  <th className="px-4 py-3 text-right text-xs font-medium text-gray-600 uppercase">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-200">
                 {filteredItems.map((item) => (
                   <tr key={item.id} className="hover:bg-gray-50">
                     <td className="px-4 py-3">
-                      <div className="flex items-center gap-2">
-                        <Package size={16} className="text-gray-400" />
-                        <div>
-                          <div className="font-medium text-gray-900">{item.name}</div>
-                          <div className="text-sm text-gray-500 md:hidden">
-                            {item.category?.name || 'N/A'}
-                          </div>
-                        </div>
+                      <div>
+                        <p className="font-medium text-gray-900">{item.name}</p>
+                        <p className="text-xs text-gray-500">{item.unit?.name} ({item.unit?.abbreviation})</p>
                       </div>
                     </td>
                     <td className="px-4 py-3 text-sm text-gray-600 hidden md:table-cell">
@@ -439,8 +462,8 @@ const ItemsManagement = () => {
                     <td className="px-4 py-3 text-sm font-medium text-gray-900">₹{item.mrp}</td>
                     <td className="px-4 py-3 text-sm text-gray-600 hidden lg:table-cell">₹{item.retail_price}</td>
                     <td className="px-4 py-3 text-sm text-gray-600 hidden lg:table-cell">₹{item.wholesale_price}</td>
-                    <td className="px-4 py-3">
-                      <div className="relative">
+                    <td className="px-4 py-3 text-right">
+                      <div className="relative" ref={el => { dropdownRefs.current[item.id] = el; }}>
                         <button
                           onClick={() => setOpenDropdown(openDropdown === item.id ? null : item.id)}
                           className="text-gray-600 hover:text-gray-900 p-2 hover:bg-gray-100 rounded"
@@ -456,7 +479,11 @@ const ItemsManagement = () => {
                               className="fixed inset-0 z-10"
                               onClick={() => setOpenDropdown(null)}
                             />
-                            <div className="absolute right-0 mt-2 w-48 bg-white rounded-lg shadow-lg border border-gray-200 py-1 z-20">
+                            <div 
+                              className={`absolute right-0 w-48 bg-white rounded-lg shadow-lg border border-gray-200 py-1 z-20 ${
+                                getDropdownPosition(item.id) === 'top' ? 'bottom-full mb-2' : 'mt-2'
+                              }`}
+                            >
                               <button
                                 onClick={() => handleView(item)}
                                 className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2"
@@ -517,29 +544,24 @@ const ItemsManagement = () => {
               <div className="pb-6 border-b border-gray-200">
                 <h4 className="font-semibold text-gray-900 mb-3">Sort By</h4>
                 <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">Field</label>
-                    <select
-                      value={sortBy}
-                      onChange={(e) => setSortBy(e.target.value as any)}
-                      className={`w-full px-3 py-2 border border-gray-300 rounded-lg ${theme.classes.focusRing} focus:ring-2 focus:ring-opacity-20 transition-all`}
-                    >
-                      <option value="name">Item Name</option>
-                      <option value="price">Price</option>
-                      <option value="gst">GST Rate</option>
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">Order</label>
-                    <select
-                      value={sortOrder}
-                      onChange={(e) => setSortOrder(e.target.value as any)}
-                      className={`w-full px-3 py-2 border border-gray-300 rounded-lg ${theme.classes.focusRing} focus:ring-2 focus:ring-opacity-20 transition-all`}
-                    >
-                      <option value="asc">A-Z / Low to High</option>
-                      <option value="desc">Z-A / High to Low</option>
-                    </select>
-                  </div>
+                  <Select
+                    label="Field"
+                    value={sortBy}
+                    onChange={(e) => setSortBy(e.target.value as any)}
+                  >
+                    <option value="name">Item Name</option>
+                    <option value="price">Price</option>
+                    <option value="gst">GST Rate</option>
+                  </Select>
+                  
+                  <Select
+                    label="Order"
+                    value={sortOrder}
+                    onChange={(e) => setSortOrder(e.target.value as any)}
+                  >
+                    <option value="asc">A-Z / Low to High</option>
+                    <option value="desc">Z-A / High to Low</option>
+                  </Select>
                 </div>
               </div>
 
@@ -554,22 +576,41 @@ const ItemsManagement = () => {
                         checked={filters.categories.includes(category.id)}
                         onChange={(e) => {
                           if (e.target.checked) {
-                            setFilters({...filters, categories: [...filters.categories, category.id]});
+                            setFilters({ ...filters, categories: [...filters.categories, category.id] });
                           } else {
-                            setFilters({...filters, categories: filters.categories.filter(c => c !== category.id)});
+                            setFilters({ ...filters, categories: filters.categories.filter(c => c !== category.id) });
                           }
                         }}
-                        className={`rounded ${theme.classes.textPrimary}`}
+                        className="rounded border-gray-300"
                       />
-                      {category.name}
+                      <span className="text-gray-700">{category.name}</span>
                     </label>
                   ))}
                 </div>
               </div>
 
-              {/* GST Rate Filter */}
+              {/* Price Range */}
               <div className="pb-6 border-b border-gray-200">
-                <h4 className="font-semibold text-gray-900 mb-3">Filter by GST Rate</h4>
+                <h4 className="font-semibold text-gray-900 mb-3">Price Range</h4>
+                <div className="grid grid-cols-2 gap-3">
+                  <Input
+                    type="number"
+                    placeholder="Min"
+                    value={filters.priceRange.min}
+                    onChange={(e) => setFilters({ ...filters, priceRange: { ...filters.priceRange, min: e.target.value } })}
+                  />
+                  <Input
+                    type="number"
+                    placeholder="Max"
+                    value={filters.priceRange.max}
+                    onChange={(e) => setFilters({ ...filters, priceRange: { ...filters.priceRange, max: e.target.value } })}
+                  />
+                </div>
+              </div>
+
+              {/* GST Rate Filter */}
+              <div>
+                <h4 className="font-semibold text-gray-900 mb-3">GST Rate</h4>
                 <div className="flex flex-wrap gap-2">
                   {gstRateOptions.map(rate => (
                     <label key={rate} className="flex items-center gap-2 text-sm">
@@ -578,50 +619,24 @@ const ItemsManagement = () => {
                         checked={filters.gstRates.includes(rate)}
                         onChange={(e) => {
                           if (e.target.checked) {
-                            setFilters({...filters, gstRates: [...filters.gstRates, rate]});
+                            setFilters({ ...filters, gstRates: [...filters.gstRates, rate] });
                           } else {
-                            setFilters({...filters, gstRates: filters.gstRates.filter(r => r !== rate)});
+                            setFilters({ ...filters, gstRates: filters.gstRates.filter(r => r !== rate) });
                           }
                         }}
-                        className={`rounded ${theme.classes.textPrimary}`}
+                        className="rounded border-gray-300"
                       />
-                      {rate}%
+                      <span className="text-gray-700">{rate}%</span>
                     </label>
                   ))}
                 </div>
               </div>
-
-              {/* Price Range Filter */}
-              <div>
-                <h4 className="font-semibold text-gray-900 mb-3">Filter by Price Range</h4>
-                <div className="grid grid-cols-2 gap-3">
-                  <Input
-                    label="Min Price (₹)"
-                    type="number"
-                    placeholder="0"
-                    value={filters.priceRange.min}
-                    onChange={(e) => setFilters({...filters, priceRange: {...filters.priceRange, min: e.target.value}})}
-                  />
-                  <Input
-                    label="Max Price (₹)"
-                    type="number"
-                    placeholder="No limit"
-                    value={filters.priceRange.max}
-                    onChange={(e) => setFilters({...filters, priceRange: {...filters.priceRange, max: e.target.value}})}
-                  />
-                </div>
-              </div>
             </div>
 
-            {/* Actions */}
             <div className="flex gap-3 mt-6 pt-6 border-t border-gray-200">
               <Button
                 onClick={() => {
-                  setFilters({
-                    categories: [],
-                    priceRange: { min: '', max: '' },
-                    gstRates: []
-                  });
+                  setFilters({ categories: [], priceRange: { min: '', max: '' }, gstRates: [] });
                   setSortBy('name');
                   setSortOrder('asc');
                 }}
@@ -630,7 +645,11 @@ const ItemsManagement = () => {
               >
                 Clear All
               </Button>
-              <Button onClick={() => setShowFilterModal(false)} variant="primary" fullWidth>
+              <Button
+                onClick={() => setShowFilterModal(false)}
+                variant="primary"
+                fullWidth
+              >
                 Apply Filters
               </Button>
             </div>
@@ -638,18 +657,19 @@ const ItemsManagement = () => {
         </div>
       )}
 
-      {/* Add/Edit Modal - Continue in next part due to length */}
+      {/* Add/Edit Modal */}
       {showModal && (
-        <div className="fixed inset-0 bg-black/20 backdrop-blur-sm flex items-center justify-center p-4 z-50 overflow-y-auto">
-          <Card className="w-full max-w-3xl my-8">
-            <div className="flex items-center justify-between mb-6">
-              <h3 className="text-xl font-bold text-gray-900">
-                {editingItem ? 'Edit Item' : 'Add New Item'}
-              </h3>
-              <button onClick={() => setShowModal(false)} className="text-gray-400 hover:text-gray-600">
-                <X size={24} />
-              </button>
-            </div>
+        <div className="fixed inset-0 bg-black/20 backdrop-blur-sm flex items-start justify-center p-4 z-50 overflow-y-auto">
+          <div className="min-h-screen w-full flex items-center justify-center py-8">
+            <Card className="w-full max-w-2xl">
+              <div className="flex items-center justify-between mb-6">
+                <h3 className="text-xl font-bold text-gray-900">
+                  {editingItem ? 'Edit Item' : 'Add New Item'}
+                </h3>
+                <button onClick={() => setShowModal(false)} className="text-gray-400 hover:text-gray-600">
+                  <X size={24} />
+                </button>
+              </div>
 
             <div className="space-y-6">
               {/* Basic Info */}
@@ -664,49 +684,38 @@ const ItemsManagement = () => {
                     required
                   />
 
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
-                    <textarea
-                      value={formData.description}
-                      onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                      rows={2}
-                      className={`w-full px-3 py-2 border border-gray-300 rounded-lg ${theme.classes.focusRing} focus:ring-2 focus:ring-opacity-20 transition-all`}
-                      placeholder="Optional description"
-                    />
-                  </div>
+                  <Textarea
+                    label="Description"
+                    placeholder="Optional description"
+                    value={formData.description}
+                    onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                    rows={2}
+                  />
 
                   <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">
-                        Category <span className="text-red-500">*</span>
-                      </label>
-                      <select
-                        value={formData.category_id}
-                        onChange={(e) => setFormData({ ...formData, category_id: e.target.value })}
-                        className={`w-full px-3 py-2 border border-gray-300 rounded-lg ${theme.classes.focusRing} focus:ring-2 focus:ring-opacity-20 transition-all`}
-                      >
-                        <option value="">Select category</option>
-                        {categories.map(cat => (
-                          <option key={cat.id} value={cat.id}>{cat.name}</option>
-                        ))}
-                      </select>
-                    </div>
+                    <Select
+                      label="Category"
+                      value={formData.category_id}
+                      onChange={(e) => setFormData({ ...formData, category_id: e.target.value })}
+                      required
+                    >
+                      <option value="">Select category</option>
+                      {categories.map(cat => (
+                        <option key={cat.id} value={cat.id}>{cat.name}</option>
+                      ))}
+                    </Select>
 
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">
-                        Unit <span className="text-red-500">*</span>
-                      </label>
-                      <select
-                        value={formData.unit_id}
-                        onChange={(e) => setFormData({ ...formData, unit_id: e.target.value })}
-                        className={`w-full px-3 py-2 border border-gray-300 rounded-lg ${theme.classes.focusRing} focus:ring-2 focus:ring-opacity-20 transition-all`}
-                      >
-                        <option value="">Select unit</option>
-                        {units.map(unit => (
-                          <option key={unit.id} value={unit.id}>{unit.name} ({unit.abbreviation})</option>
-                        ))}
-                      </select>
-                    </div>
+                    <Select
+                      label="Unit"
+                      value={formData.unit_id}
+                      onChange={(e) => setFormData({ ...formData, unit_id: e.target.value })}
+                      required
+                    >
+                      <option value="">Select unit</option>
+                      {units.map(unit => (
+                        <option key={unit.id} value={unit.id}>{unit.name} ({unit.abbreviation})</option>
+                      ))}
+                    </Select>
                   </div>
                 </div>
               </div>
@@ -722,27 +731,24 @@ const ItemsManagement = () => {
                     onChange={(e) => setFormData({ ...formData, hsn_code: e.target.value })}
                   />
 
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">GST Rate (%)</label>
-                    <select
-                      value={formData.gst_rate}
-                      onChange={(e) => setFormData({ ...formData, gst_rate: parseFloat(e.target.value) })}
-                      className={`w-full px-3 py-2 border border-gray-300 rounded-lg ${theme.classes.focusRing} focus:ring-2 focus:ring-opacity-20 transition-all`}
-                    >
-                      {gstRateOptions.map(rate => (
-                        <option key={rate} value={rate}>{rate}%</option>
-                      ))}
-                    </select>
-                  </div>
+                  <Select
+                    label="GST Rate"
+                    value={formData.gst_rate}
+                    onChange={(e) => setFormData({ ...formData, gst_rate: parseFloat(e.target.value) })}
+                  >
+                    {gstRateOptions.map(rate => (
+                      <option key={rate} value={rate}>{rate}%</option>
+                    ))}
+                  </Select>
                 </div>
               </div>
 
               {/* Pricing */}
               <div className="pt-6 border-t border-gray-200">
-                <h4 className="font-medium text-gray-900 mb-3">Pricing & Stock</h4>
-                <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                <h4 className="font-medium text-gray-900 mb-3">Pricing</h4>
+                <div className="grid grid-cols-2 gap-4">
                   <Input
-                    label="MRP (₹)"
+                    label="MRP"
                     type="number"
                     step="0.01"
                     placeholder="0.00"
@@ -751,7 +757,7 @@ const ItemsManagement = () => {
                   />
 
                   <Input
-                    label="Retail Price (₹)"
+                    label="Retail Price"
                     type="number"
                     step="0.01"
                     placeholder="0.00"
@@ -760,7 +766,7 @@ const ItemsManagement = () => {
                   />
 
                   <Input
-                    label="Wholesale Price (₹)"
+                    label="Wholesale Price"
                     type="number"
                     step="0.01"
                     placeholder="0.00"
@@ -769,14 +775,20 @@ const ItemsManagement = () => {
                   />
 
                   <Input
-                    label="Discount (%)"
+                    label="Discount %"
                     type="number"
                     step="0.01"
                     placeholder="0.00"
                     value={formData.discount_percent || ''}
                     onChange={(e) => setFormData({ ...formData, discount_percent: parseFloat(e.target.value) || 0 })}
                   />
+                </div>
+              </div>
 
+              {/* Stock */}
+              <div className="pt-6 border-t border-gray-200">
+                <h4 className="font-medium text-gray-900 mb-3">Stock Settings</h4>
+                <div className="grid grid-cols-2 gap-4">
                   <Input
                     label="Min Stock Level"
                     type="number"
@@ -784,46 +796,47 @@ const ItemsManagement = () => {
                     value={formData.min_stock_level || ''}
                     onChange={(e) => setFormData({ ...formData, min_stock_level: parseInt(e.target.value) || 0 })}
                   />
-                </div>
-              </div>
 
-              {/* Status */}
-              <div className="pt-6 border-t border-gray-200">
-                <label className="flex items-center gap-2">
-                  <input
-                    type="checkbox"
-                    checked={normalizeBoolean(formData.is_active)}
-                    onChange={(e) => setFormData({ ...formData, is_active: e.target.checked })}
-                    className={`rounded ${theme.classes.textPrimary}`}
-                  />
-                  <span className="text-sm font-medium text-gray-700">Active Item</span>
-                </label>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Status</label>
+                    <label className="flex items-center gap-2">
+                      <input
+                        type="checkbox"
+                        checked={formData.is_active}
+                        onChange={(e) => setFormData({ ...formData, is_active: e.target.checked })}
+                        className="rounded border-gray-300"
+                      />
+                      <span className="text-sm text-gray-700">Active</span>
+                    </label>
+                  </div>
+                </div>
               </div>
             </div>
 
-            {/* Actions */}
-            <div className="flex gap-3 mt-6">
-              <Button onClick={() => setShowModal(false)} variant="secondary" fullWidth disabled={saving}>
+            <div className="flex gap-3 mt-6 pt-6 border-t border-gray-200">
+              <Button onClick={() => setShowModal(false)} variant="secondary" fullWidth>
                 Cancel
               </Button>
-              <Button onClick={handleSubmit} variant="primary" fullWidth loading={saving}>
-                {editingItem ? 'Update Item' : 'Create Item'}
+              <Button onClick={handleSubmit} variant="primary" fullWidth disabled={saving}>
+                {saving ? 'Saving...' : editingItem ? 'Update Item' : 'Create Item'}
               </Button>
             </div>
           </Card>
+          </div>
         </div>
       )}
 
-      {/* View Details Modal */}
+      {/* View Modal */}
       {showViewModal && viewingItem && (
-        <div className="fixed inset-0 bg-black/20 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-          <Card className="w-full max-w-3xl max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center justify-between mb-6">
-              <h3 className="text-xl font-bold text-gray-900">Item Details</h3>
-              <button onClick={() => setShowViewModal(false)} className="text-gray-400 hover:text-gray-600">
-                <X size={24} />
-              </button>
-            </div>
+        <div className="fixed inset-0 bg-black/20 backdrop-blur-sm flex items-start justify-center p-4 z-50 overflow-y-auto">
+          <div className="min-h-screen w-full flex items-center justify-center py-8">
+            <Card className="w-full max-w-3xl">
+              <div className="flex items-center justify-between mb-6">
+                <h3 className="text-xl font-bold text-gray-900">Item Details</h3>
+                <button onClick={() => setShowViewModal(false)} className="text-gray-400 hover:text-gray-600">
+                  <X size={24} />
+                </button>
+              </div>
 
             <div className="space-y-6">
               {/* Basic Info */}
@@ -991,80 +1004,56 @@ const ItemsManagement = () => {
                       <div className="text-center p-3 bg-blue-50 rounded-lg">
                         <p className="text-xs text-gray-600 mb-1">Total Purchased</p>
                         <p className="text-lg font-bold text-blue-900">
-                          {itemTransactions.purchases.reduce((sum, p) => sum + p.quantity, 0)} units
+                          {itemTransactions.purchases.reduce((sum, p) => sum + p.quantity, 0)} {viewingItem.unit?.abbreviation || 'units'}
                         </p>
                       </div>
                       <div className="text-center p-3 bg-green-50 rounded-lg">
                         <p className="text-xs text-gray-600 mb-1">Total Sold</p>
                         <p className="text-lg font-bold text-green-900">
-                          {itemTransactions.sales.reduce((sum, s) => sum + s.quantity, 0)} units
+                          {itemTransactions.sales.reduce((sum, s) => sum + s.quantity, 0)} {viewingItem.unit?.abbreviation || 'units'}
                         </p>
                       </div>
                     </div>
                   </div>
                 )}
               </div>
+            </div>
 
-              {/* Quick Actions */}
-              <div className="pt-6 border-t border-gray-200 flex gap-3">
-                <Button
-                  onClick={() => {
-                    setShowViewModal(false);
-                    handleEdit(viewingItem);
-                  }}
-                  variant="primary"
-                  fullWidth
-                  icon={<Edit2 size={18} />}
-                >
-                  Edit Item
-                </Button>
-                <Button
-                  onClick={() => {
-                    setShowViewModal(false);
-                    handleDeleteClick(viewingItem.id, viewingItem.name);
-                  }}
-                  variant="danger"
-                  fullWidth
-                  icon={<Trash2 size={18} />}
-                >
-                  Delete Item
-                </Button>
-              </div>
+            <div className="flex gap-3 mt-6 pt-6 border-t border-gray-200">
+              <Button onClick={() => setShowViewModal(false)} variant="secondary" fullWidth>
+                Close
+              </Button>
+              <Button onClick={() => { setShowViewModal(false); handleEdit(viewingItem); }} variant="primary" fullWidth>
+                Edit Item
+              </Button>
             </div>
           </Card>
+          </div>
         </div>
       )}
 
-      {/* Edit Confirmation */}
-      {showEditConfirm && (
-        <ConfirmDialog
-          isOpen={showEditConfirm}
-          onClose={() => setShowEditConfirm(false)}
-          onConfirm={handleConfirmSubmit}
-          title={editingItem ? 'Update Item' : 'Create Item'}
-          message={editingItem 
-            ? `Save changes to "${formData.name}"?` 
-            : `Create new item "${formData.name}"?`}
-          confirmText={editingItem ? 'Update' : 'Create'}
-          cancelText="Cancel"
-          variant="primary"
-        />
-      )}
+      {/* Confirm Edit Dialog */}
+      <ConfirmDialog
+        isOpen={showEditConfirm}
+        onClose={() => setShowEditConfirm(false)}
+        onConfirm={handleConfirmSubmit}
+        title={editingItem ? 'Confirm Update' : 'Confirm Creation'}
+        message={`Are you sure you want to ${editingItem ? 'update' : 'create'} this item?`}
+        confirmText={editingItem ? 'Update' : 'Create'}
+        variant="primary"
+      />
 
-      {/* Delete Confirmation Modal */}
-      {showDeleteConfirm && deletingItem && (
+      {/* Delete Confirm Dialog */}
+      {deletingItem && (
         <div className="fixed inset-0 bg-black/20 backdrop-blur-sm flex items-center justify-center p-4 z-50">
           <Card className="w-full max-w-md">
-            <div className="text-center">
-              <div className="mx-auto flex items-center justify-center h-12 w-12 rounded-full bg-red-100 mb-4">
-                <Trash2 className="h-6 w-6 text-red-600" />
-              </div>
-              <h3 className="text-lg font-semibold text-gray-900 mb-2">Delete Item</h3>
-              <p className="text-sm text-gray-600 mb-6">
-                Are you sure you want to delete <span className="font-semibold">"{deletingItem.name}"</span>? 
+            <div className="mb-4">
+              <h3 className="text-lg font-bold text-gray-900 mb-2">Delete Item</h3>
+              <p className="text-sm text-gray-600">
+                Are you sure you want to delete <strong>{deletingItem.name}</strong>? 
                 This action cannot be undone.
               </p>
-              <div className="flex gap-3">
+              <div className="flex gap-3 mt-6">
                 <Button
                   onClick={() => {
                     setShowDeleteConfirm(false);
