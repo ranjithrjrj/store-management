@@ -217,6 +217,11 @@ const UnitsManagement = () => {
               placeholder="Search units by name or abbreviation..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
+              rightIcon={searchTerm ? (
+                <button onClick={() => setSearchTerm('')} className="text-gray-400 hover:text-gray-600">
+                  <X size={18} />
+                </button>
+              ) : undefined}
             />
           </Card>
         </div>
@@ -319,8 +324,9 @@ const UnitsManagement = () => {
 
       {/* Add/Edit Modal */}
       {showModal && (
-        <div className="fixed inset-0 bg-black/20 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-          <Card className="w-full max-w-md">
+        <div className="fixed inset-0 bg-black/20 backdrop-blur-sm flex items-start justify-center p-4 z-50 overflow-y-auto">
+          <div className="min-h-screen w-full flex items-center justify-center py-8">
+            <Card className="w-full max-w-md">
             <div className="flex items-center justify-between mb-6">
               <h3 className="text-xl font-bold text-gray-900">
                 {editingUnit ? 'Edit Unit' : 'Add New Unit'}
@@ -370,7 +376,8 @@ const UnitsManagement = () => {
                 {editingUnit ? 'Update' : 'Create'}
               </Button>
             </div>
-          </Card>
+            </Card>
+          </div>
         </div>
       )}
 

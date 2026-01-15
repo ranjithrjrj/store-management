@@ -5,7 +5,7 @@
 import React, { useState, useEffect } from 'react';
 import { Store, Plus, Edit2, Trash2, X, Search, Phone, Mail, MapPin, FileText, CreditCard } from 'lucide-react';
 import { supabase, vendorsAPI } from '@/lib/supabase';
-import { Button, Card, Input, Badge, EmptyState, LoadingSpinner, ConfirmDialog, useToast } from '@/components/ui';
+import { Button, Card, Input, Textarea, Badge, EmptyState, LoadingSpinner, ConfirmDialog, useToast } from '@/components/ui';
 import { useTheme } from '@/contexts/ThemeContext';
 
 type Vendor = {
@@ -246,6 +246,11 @@ const VendorsManagement = () => {
               placeholder="Search vendors by name, contact, phone, or email..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
+              rightIcon={searchTerm ? (
+                <button onClick={() => setSearchTerm('')} className="text-gray-400 hover:text-gray-600">
+                  <X size={18} />
+                </button>
+              ) : undefined}
             />
           </Card>
         </div>
@@ -382,8 +387,9 @@ const VendorsManagement = () => {
 
       {/* Add/Edit Modal */}
       {showModal && (
-        <div className="fixed inset-0 bg-black/20 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-          <Card className="w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+        <div className="fixed inset-0 bg-black/20 backdrop-blur-sm flex items-start justify-center p-4 z-50 overflow-y-auto">
+          <div className="min-h-screen w-full flex items-center justify-center py-8">
+            <Card className="w-full max-w-2xl">
             <div className="flex items-center justify-between mb-6">
               <h3 className="text-xl font-bold text-gray-900">
                 {editingVendor ? 'Edit Vendor' : 'Add New Vendor'}
@@ -440,11 +446,10 @@ const VendorsManagement = () => {
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Address</label>
-                <textarea
+                <Textarea
                   value={formData.address}
                   onChange={(e) => setFormData({ ...formData, address: e.target.value })}
                   rows={2}
-                  className={`w-full px-3 py-2 border border-gray-300 rounded-lg ${theme.classes.focusRing} focus:ring-2 focus:ring-opacity-20 transition-all`}
                   placeholder="Enter street address"
                 />
               </div>
@@ -509,6 +514,7 @@ const VendorsManagement = () => {
               </Button>
             </div>
           </Card>
+          </div>
         </div>
       )}
 

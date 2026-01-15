@@ -4,6 +4,8 @@ import React, { useState, useEffect } from 'react';
 import { Plus, Trash2, Printer, Save, Eye } from 'lucide-react';
 import { printInvoice } from '@/lib/thermalPrinter';
 import { supabase } from '@/lib/supabase';
+import { Button, Card, Input, Select, Badge, LoadingSpinner, useToast } from '@/components/ui';
+import { useTheme } from '@/contexts/ThemeContext';
 
 type InvoiceItem = {
   id: string;
@@ -17,6 +19,8 @@ type InvoiceItem = {
 };
 
 const SalesInvoice = () => {
+  const { theme } = useTheme();
+  const toast = useToast();
   const [customerType, setCustomerType] = useState<'walk-in' | 'registered'>('walk-in');
   const [formData, setFormData] = useState({
     customer_id: '',
@@ -371,10 +375,9 @@ const SalesInvoice = () => {
           {customerType === 'registered' ? (
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Select Customer</label>
-              <select
+              <Select
                 value={formData.customer_id}
                 onChange={(e) => handleCustomerChange(e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 disabled={loading}
               >
                 <option value="">Select customer</option>
@@ -383,7 +386,7 @@ const SalesInvoice = () => {
                     {customer.name} {customer.phone && `- ${customer.phone}`}
                   </option>
                 ))}
-              </select>
+              </Select>
             </div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -393,7 +396,7 @@ const SalesInvoice = () => {
                   type="text"
                   value={formData.customer_name}
                   onChange={(e) => setFormData({ ...formData, customer_name: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900 placeholder:text-gray-400"
                   placeholder="Optional"
                 />
               </div>
@@ -403,7 +406,7 @@ const SalesInvoice = () => {
                   type="tel"
                   value={formData.customer_phone}
                   onChange={(e) => setFormData({ ...formData, customer_phone: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900 placeholder:text-gray-400"
                   placeholder="Optional"
                 />
               </div>
@@ -413,7 +416,7 @@ const SalesInvoice = () => {
                   type="text"
                   value={formData.customer_gstin}
                   onChange={(e) => setFormData({ ...formData, customer_gstin: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900 placeholder:text-gray-400"
                   placeholder="Optional"
                 />
               </div>
@@ -427,21 +430,20 @@ const SalesInvoice = () => {
                 type="date"
                 value={formData.invoice_date}
                 onChange={(e) => setFormData({ ...formData, invoice_date: e.target.value })}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900 placeholder:text-gray-400"
               />
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Payment Method</label>
-              <select
+              <Select
                 value={formData.payment_method}
                 onChange={(e) => setFormData({ ...formData, payment_method: e.target.value })}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               >
                 <option value="cash">Cash</option>
                 <option value="card">Card</option>
                 <option value="upi">UPI</option>
                 <option value="credit">Credit</option>
-              </select>
+              </Select>
             </div>
           </div>
         </div>
@@ -542,7 +544,7 @@ const SalesInvoice = () => {
                         value={item.quantity}
                         onChange={(e) => updateItem(item.id, 'quantity', parseFloat(e.target.value) || 0)}
                         placeholder="Qty"
-                        className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900 placeholder:text-gray-400"
                       />
                     </div>
 
@@ -553,7 +555,7 @@ const SalesInvoice = () => {
                         value={item.rate}
                         onChange={(e) => updateItem(item.id, 'rate', parseFloat(e.target.value) || 0)}
                         placeholder="Rate"
-                        className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900 placeholder:text-gray-400"
                       />
                     </div>
 
@@ -564,7 +566,7 @@ const SalesInvoice = () => {
                         value={item.discount_percent}
                         onChange={(e) => updateItem(item.id, 'discount_percent', parseFloat(e.target.value) || 0)}
                         placeholder="Disc %"
-                        className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900 placeholder:text-gray-400"
                       />
                     </div>
 
@@ -697,16 +699,15 @@ const SalesInvoice = () => {
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">Print Method</label>
-                <select
+                <Select
                   value={printSettings.method}
                   onChange={(e) => setPrintSettings({ ...printSettings, method: e.target.value as any })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 >
                   <option value="iframe">Browser Print (Recommended)</option>
                   <option value="preview">Preview Only</option>
                   <option value="browser">USB/Serial Printer</option>
                   <option value="bluetooth">Bluetooth Printer</option>
-                </select>
+                </Select>
                 <p className="text-xs text-gray-500 mt-1">
                   {printSettings.method === 'iframe' && 'Works with most thermal printers via Windows/Mac print drivers'}
                   {printSettings.method === 'preview' && 'Opens preview in new window'}
