@@ -1,11 +1,10 @@
 // FILE PATH: components/PurchaseRecording.tsx
-// Purchase Recording with new UI components and theme support
 
 'use client';
 import React, { useState, useEffect } from 'react';
 import { Plus, Trash2, Save, X, Search, Package, Calendar, FileText } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
-import { Button, Card, Input, Badge, LoadingSpinner, useToast } from '@/components/ui';
+import { Button, Card, Input, Select, Textarea, Badge, LoadingSpinner, useToast } from '@/components/ui';
 import { useTheme } from '@/contexts/ThemeContext';
 
 type PurchaseItem = {
@@ -35,11 +34,25 @@ const PurchaseRecording = () => {
 
   const [items, setItems] = useState<PurchaseItem[]>([]);
   const [isIntrastate, setIsIntrastate] = useState(true);
+  const [showAddItemModal, setShowAddItemModal] = useState(false);
+  const [searchTerm, setSearchTerm] = useState('');
   
   const [vendors, setVendors] = useState<any[]>([]);
   const [availableItems, setAvailableItems] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+
+  const [newItem, setNewItem] = useState<PurchaseItem>({
+    id: '',
+    item_id: '',
+    item_name: '',
+    batch_number: '',
+    expiry_date: '',
+    quantity: 0,
+    rate: 0,
+    gst_rate: 18,
+    amount: 0
+  });
 
   useEffect(() => {
     loadData();
@@ -75,72 +88,74 @@ const PurchaseRecording = () => {
     }
   }
 
-  const addItem = () => {
-    setItems([
-      ...items,
-      {
-        id: crypto.randomUUID(),
-        item_id: '',
-        item_name: '',
-        batch_number: '',
-        expiry_date: '',
-        quantity: 0,
-        rate: 0,
-        gst_rate: 0,
-        amount: 0
-      }
-    ]);
+  const handleVendorChange = (vendorId: string) => {
+    setFormData({ ...formData, vendor_id: vendorId });
+    
+    const vendor = vendors.find(v => v.id === vendorId);
+    if (vendor) {
+      setIsIntrastate(vendor.state === 'Tamil Nadu');
+    }
   };
 
-  const removeItem = (id: string) => {
+  const handleAddItem = () => {
+    if (!newItem.item_id || newItem.quantity <= 0 || newItem.rate <= 0) {
+      toast.warning('Invalid item', 'Please fill all item details.');
+      return;
+    }
+
+    const selectedItem = availableItems.find(i => i.id === newItem.item_id);
+    const itemAmount = newItem.quantity * newItem.rate;
+    
+    setItems([...items, {
+      ...newItem,
+      id: Date.now().toString(),
+      item_name: selectedItem?.name || '',
+      amount: itemAmount
+    }]);
+
+    setNewItem({
+      id: '',
+      item_id: '',
+      item_name: '',
+      batch_number: '',
+      expiry_date: '',
+      quantity: 0,
+      rate: 0,
+      gst_rate: 18,
+      amount: 0
+    });
+    setShowAddItemModal(false);
+  };
+
+  const handleRemoveItem = (id: string) => {
     setItems(items.filter(item => item.id !== id));
-  };
-
-  const updateItem = (id: string, field: string, value: any) => {
-    setItems(items.map(item => {
-      if (item.id === id) {
-        const updated = { ...item, [field]: value };
-        
-        if (field === 'item_id') {
-          const selectedItem = availableItems.find(i => i.id === value);
-          if (selectedItem) {
-            updated.item_name = selectedItem.name;
-            updated.gst_rate = selectedItem.gst_rate;
-            updated.rate = selectedItem.wholesale_price;
-          }
-        }
-        
-        if (field === 'quantity' || field === 'rate') {
-          updated.amount = updated.quantity * updated.rate;
-        }
-        
-        return updated;
-      }
-      return item;
-    }));
   };
 
   const calculateTotals = () => {
     const subtotal = items.reduce((sum, item) => sum + item.amount, 0);
     
-    let cgst = 0, sgst = 0, igst = 0;
-    
-    items.forEach(item => {
-      const gstAmount = (item.amount * item.gst_rate) / 100;
-      if (isIntrastate) {
-        cgst += gstAmount / 2;
-        sgst += gstAmount / 2;
-      } else {
-        igst += gstAmount;
-      }
-    });
-    
+    let cgst = 0;
+    let sgst = 0;
+    let igst = 0;
+
+    if (isIntrastate) {
+      items.forEach(item => {
+        const taxAmount = (item.amount * item.gst_rate) / 100;
+        cgst += taxAmount / 2;
+        sgst += taxAmount / 2;
+      });
+    } else {
+      items.forEach(item => {
+        igst += (item.amount * item.gst_rate) / 100;
+      });
+    }
+
     const total = subtotal + cgst + sgst + igst;
-    
+
     return { subtotal, cgst, sgst, igst, total };
   };
 
-  const handleSubmit = async () => {
+  const handleSave = async () => {
     try {
       setSaving(true);
 
@@ -167,7 +182,6 @@ const PurchaseRecording = () => {
 
       const totals = calculateTotals();
 
-      // Insert purchase record
       const { data: purchase, error: purchaseError } = await supabase
         .from('purchase_recordings')
         .insert({
@@ -188,9 +202,7 @@ const PurchaseRecording = () => {
 
       if (purchaseError) throw purchaseError;
 
-      // Insert purchase items and update inventory
       for (const item of items) {
-        // Insert purchase item
         const { error: itemError } = await supabase
           .from('purchase_recording_items')
           .insert({
@@ -204,7 +216,6 @@ const PurchaseRecording = () => {
 
         if (itemError) throw itemError;
 
-        // Add to inventory
         const { error: inventoryError } = await supabase
           .from('inventory_batches')
           .insert({
@@ -220,7 +231,6 @@ const PurchaseRecording = () => {
 
       toast.success('Purchase recorded!', `Invoice ${formData.invoice_number} has been saved.`);
       
-      // Reset form
       setFormData({
         vendor_id: '',
         invoice_number: '',
@@ -243,51 +253,44 @@ const PurchaseRecording = () => {
 
   if (loading) {
     return (
-      <div className="space-y-6">
-        <div>
-          <h2 className="text-2xl font-bold text-gray-900">Purchase Recording</h2>
-          <p className="text-gray-600 text-sm mt-1">Record new purchases and update inventory</p>
-        </div>
-        <Card>
-          <div className="py-12">
-            <LoadingSpinner size="lg" text="Loading..." />
-          </div>
-        </Card>
+      <div className="p-6">
+        <LoadingSpinner size="lg" text="Loading purchase recording..." />
       </div>
     );
   }
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div>
-        <h2 className="text-2xl font-bold text-gray-900">Purchase Recording</h2>
-        <p className="text-gray-600 text-sm mt-1">Record new purchases and update inventory</p>
+    <div className="p-6 max-w-6xl mx-auto">
+      <div className="mb-6">
+        <h1 className="text-2xl font-bold text-gray-900 mb-2">Record Purchase</h1>
+        <p className="text-gray-600">Record new purchase with invoice details</p>
       </div>
 
-      {/* Purchase Details */}
-      <Card>
-        <h3 className="text-lg font-semibold text-gray-900 mb-4">Purchase Details</h3>
+      <Card padding="lg" className="mb-6">
+        <div className="flex items-center gap-2 mb-6">
+          <FileText className={theme.classes.textPrimary} size={24} />
+          <h2 className="text-lg font-semibold text-gray-900">Purchase Details</h2>
+        </div>
+
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
               Vendor <span className="text-red-500">*</span>
             </label>
-            <select
+            <Select
               value={formData.vendor_id}
-              onChange={(e) => setFormData({ ...formData, vendor_id: e.target.value })}
-              className={`w-full px-3 py-2 border border-gray-300 rounded-lg ${theme.classes.focusRing} focus:ring-2 focus:ring-opacity-20 transition-all`}
+              onChange={(e) => handleVendorChange(e.target.value)}
             >
               <option value="">Select vendor</option>
               {vendors.map(vendor => (
                 <option key={vendor.id} value={vendor.id}>{vendor.name}</option>
               ))}
-            </select>
+            </Select>
           </div>
 
           <Input
             label="Invoice Number"
-            placeholder="Enter invoice number"
+            placeholder="INV-001"
             value={formData.invoice_number}
             onChange={(e) => setFormData({ ...formData, invoice_number: e.target.value })}
             required
@@ -314,156 +317,88 @@ const PurchaseRecording = () => {
 
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Payment Status</label>
-            <select
+            <Select
               value={formData.payment_status}
               onChange={(e) => setFormData({ ...formData, payment_status: e.target.value })}
-              className={`w-full px-3 py-2 border border-gray-300 rounded-lg ${theme.classes.focusRing} focus:ring-2 focus:ring-opacity-20 transition-all`}
             >
               <option value="pending">Pending</option>
               <option value="partial">Partial</option>
               <option value="paid">Paid</option>
-            </select>
+            </Select>
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Tax Type</label>
-            <div className="flex gap-4 pt-2">
-              <label className="flex items-center gap-2">
-                <input
-                  type="radio"
-                  checked={isIntrastate}
-                  onChange={() => setIsIntrastate(true)}
-                  className={theme.classes.textPrimary}
-                />
-                <span className="text-sm">Intrastate (CGST + SGST)</span>
-              </label>
-              <label className="flex items-center gap-2">
-                <input
-                  type="radio"
-                  checked={!isIntrastate}
-                  onChange={() => setIsIntrastate(false)}
-                  className={theme.classes.textPrimary}
-                />
-                <span className="text-sm">Interstate (IGST)</span>
-              </label>
-            </div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Transaction Type</label>
+            <Select
+              value={isIntrastate ? 'intrastate' : 'interstate'}
+              onChange={(e) => setIsIntrastate(e.target.value === 'intrastate')}
+            >
+              <option value="intrastate">Intrastate (CGST + SGST)</option>
+              <option value="interstate">Interstate (IGST)</option>
+            </Select>
           </div>
         </div>
 
         <div className="mt-4">
           <label className="block text-sm font-medium text-gray-700 mb-1">Notes</label>
-          <textarea
+          <Textarea
             value={formData.notes}
             onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
             rows={2}
-            className={`w-full px-3 py-2 border border-gray-300 rounded-lg ${theme.classes.focusRing} focus:ring-2 focus:ring-opacity-20 transition-all`}
             placeholder="Additional notes (optional)"
           />
         </div>
       </Card>
 
-      {/* Items */}
-      <Card>
-        <div className="flex items-center justify-between mb-4">
-          <h3 className="text-lg font-semibold text-gray-900">Items</h3>
-          <Button onClick={addItem} variant="primary" size="sm" icon={<Plus size={16} />}>
+      <Card padding="lg" className="mb-6">
+        <div className="flex items-center justify-between mb-6">
+          <div className="flex items-center gap-2">
+            <Package className={theme.classes.textPrimary} size={24} />
+            <h2 className="text-lg font-semibold text-gray-900">Items</h2>
+          </div>
+          <Button
+            onClick={() => setShowAddItemModal(true)}
+            variant="primary"
+            icon={<Plus size={18} />}
+          >
             Add Item
           </Button>
         </div>
 
         {items.length === 0 ? (
-          <div className="text-center py-8 text-gray-500">
-            <Package size={48} className="mx-auto mb-2 opacity-50" />
-            <p>No items added yet. Click "Add Item" to start.</p>
+          <div className="text-center py-12 text-gray-500">
+            <Package size={48} className="mx-auto mb-3 text-gray-300" />
+            <p>No items added yet</p>
           </div>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full">
-              <thead className="bg-gray-50 border-b border-gray-200">
+              <thead className="bg-gray-50">
                 <tr>
-                  <th className="px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase">Item</th>
-                  <th className="px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase">Batch</th>
-                  <th className="px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase">Expiry</th>
-                  <th className="px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase">Qty</th>
-                  <th className="px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase">Rate</th>
-                  <th className="px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase">GST%</th>
-                  <th className="px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase">Amount</th>
-                  <th className="px-2 py-2 text-center text-xs font-medium text-gray-500 uppercase">Action</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase">Item</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase">Batch</th>
+                  <th className="px-4 py-3 text-right text-xs font-medium text-gray-700 uppercase">Qty</th>
+                  <th className="px-4 py-3 text-right text-xs font-medium text-gray-700 uppercase">Rate</th>
+                  <th className="px-4 py-3 text-right text-xs font-medium text-gray-700 uppercase">GST %</th>
+                  <th className="px-4 py-3 text-right text-xs font-medium text-gray-700 uppercase">Amount</th>
+                  <th className="px-4 py-3"></th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-200">
                 {items.map((item) => (
                   <tr key={item.id}>
-                    <td className="px-2 py-2">
-                      <select
-                        value={item.item_id}
-                        onChange={(e) => updateItem(item.id, 'item_id', e.target.value)}
-                        className="w-full px-2 py-1 border border-gray-300 rounded text-sm"
-                      >
-                        <option value="">Select item</option>
-                        {availableItems.map(i => (
-                          <option key={i.id} value={i.id}>
-                            {i.name} ({i.unit?.abbreviation})
-                          </option>
-                        ))}
-                      </select>
-                    </td>
-                    <td className="px-2 py-2">
-                      <input
-                        type="text"
-                        value={item.batch_number}
-                        onChange={(e) => updateItem(item.id, 'batch_number', e.target.value)}
-                        className="w-24 px-2 py-1 border border-gray-300 rounded text-sm"
-                        placeholder="Batch"
-                      />
-                    </td>
-                    <td className="px-2 py-2">
-                      <input
-                        type="date"
-                        value={item.expiry_date}
-                        onChange={(e) => updateItem(item.id, 'expiry_date', e.target.value)}
-                        className="w-32 px-2 py-1 border border-gray-300 rounded text-sm"
-                      />
-                    </td>
-                    <td className="px-2 py-2">
-                      <input
-                        type="number"
-                        value={item.quantity || ''}
-                        onChange={(e) => updateItem(item.id, 'quantity', parseFloat(e.target.value) || 0)}
-                        className="w-20 px-2 py-1 border border-gray-300 rounded text-sm"
-                        min="0"
-                        step="0.01"
-                      />
-                    </td>
-                    <td className="px-2 py-2">
-                      <input
-                        type="number"
-                        value={item.rate || ''}
-                        onChange={(e) => updateItem(item.id, 'rate', parseFloat(e.target.value) || 0)}
-                        className="w-24 px-2 py-1 border border-gray-300 rounded text-sm"
-                        min="0"
-                        step="0.01"
-                      />
-                    </td>
-                    <td className="px-2 py-2">
-                      <input
-                        type="number"
-                        value={item.gst_rate || ''}
-                        onChange={(e) => updateItem(item.id, 'gst_rate', parseFloat(e.target.value) || 0)}
-                        className="w-16 px-2 py-1 border border-gray-300 rounded text-sm"
-                        min="0"
-                        max="100"
-                      />
-                    </td>
-                    <td className="px-2 py-2 text-sm font-medium">
-                      ₹{item.amount.toFixed(2)}
-                    </td>
-                    <td className="px-2 py-2 text-center">
+                    <td className="px-4 py-3 text-sm text-gray-900">{item.item_name}</td>
+                    <td className="px-4 py-3 text-sm text-gray-600">{item.batch_number || '-'}</td>
+                    <td className="px-4 py-3 text-sm text-gray-900 text-right">{item.quantity}</td>
+                    <td className="px-4 py-3 text-sm text-gray-900 text-right">₹{item.rate.toFixed(2)}</td>
+                    <td className="px-4 py-3 text-sm text-gray-900 text-right">{item.gst_rate}%</td>
+                    <td className="px-4 py-3 text-sm font-medium text-gray-900 text-right">₹{item.amount.toFixed(2)}</td>
+                    <td className="px-4 py-3">
                       <button
-                        onClick={() => removeItem(item.id)}
-                        className="text-red-600 hover:bg-red-50 p-1 rounded"
+                        onClick={() => handleRemoveItem(item.id)}
+                        className="text-red-600 hover:text-red-800"
                       >
-                        <Trash2 size={16} />
+                        <Trash2 size={18} />
                       </button>
                     </td>
                   </tr>
@@ -474,54 +409,171 @@ const PurchaseRecording = () => {
         )}
       </Card>
 
-      {/* Summary */}
-      {items.length > 0 && (
-        <Card>
-          <h3 className="text-lg font-semibold text-gray-900 mb-4">Summary</h3>
-          <div className="space-y-2">
-            <div className="flex justify-between text-sm">
-              <span className="text-gray-600">Subtotal:</span>
-              <span className="font-medium">₹{totals.subtotal.toFixed(2)}</span>
-            </div>
-            {isIntrastate ? (
-              <>
-                <div className="flex justify-between text-sm">
-                  <span className="text-gray-600">CGST:</span>
-                  <span className="font-medium">₹{totals.cgst.toFixed(2)}</span>
-                </div>
-                <div className="flex justify-between text-sm">
-                  <span className="text-gray-600">SGST:</span>
-                  <span className="font-medium">₹{totals.sgst.toFixed(2)}</span>
-                </div>
-              </>
-            ) : (
-              <div className="flex justify-between text-sm">
-                <span className="text-gray-600">IGST:</span>
-                <span className="font-medium">₹{totals.igst.toFixed(2)}</span>
-              </div>
-            )}
-            <div className="flex justify-between text-lg font-bold pt-2 border-t border-gray-200">
-              <span>Total Amount:</span>
-              <span className={theme.classes.textPrimary}>₹{totals.total.toFixed(2)}</span>
-            </div>
+      <Card padding="lg" className="mb-6">
+        <h2 className="text-lg font-semibold text-gray-900 mb-4">Summary</h2>
+        <div className="space-y-2">
+          <div className="flex justify-between text-gray-700">
+            <span>Subtotal:</span>
+            <span>₹{totals.subtotal.toFixed(2)}</span>
           </div>
-        </Card>
-      )}
+          {isIntrastate ? (
+            <>
+              <div className="flex justify-between text-gray-700">
+                <span>CGST:</span>
+                <span>₹{totals.cgst.toFixed(2)}</span>
+              </div>
+              <div className="flex justify-between text-gray-700">
+                <span>SGST:</span>
+                <span>₹{totals.sgst.toFixed(2)}</span>
+              </div>
+            </>
+          ) : (
+            <div className="flex justify-between text-gray-700">
+              <span>IGST:</span>
+              <span>₹{totals.igst.toFixed(2)}</span>
+            </div>
+          )}
+          <div className="flex justify-between text-lg font-bold text-gray-900 pt-2 border-t">
+            <span>Total:</span>
+            <span>₹{totals.total.toFixed(2)}</span>
+          </div>
+        </div>
+      </Card>
 
-      {/* Actions */}
-      <div className="flex gap-4">
+      <div className="flex gap-3">
         <Button
-          onClick={handleSubmit}
+          onClick={handleSave}
+          disabled={saving || items.length === 0}
           variant="primary"
-          size="lg"
-          icon={<Save size={20} />}
-          loading={saving}
-          disabled={items.length === 0}
-          fullWidth
+          icon={<Save size={18} />}
+          className="flex-1"
         >
-          Record Purchase
+          {saving ? 'Saving...' : 'Save Purchase'}
         </Button>
       </div>
+
+      {showAddItemModal && (
+        <div className="fixed inset-0 bg-black/20 backdrop-blur-sm flex items-start justify-center p-4 z-50 overflow-y-auto">
+          <div className="min-h-screen w-full flex items-center justify-center py-8">
+            <Card className="w-full max-w-2xl">
+              <div className="flex items-center justify-between mb-6">
+                <h3 className="text-lg font-semibold text-gray-900">Add Item</h3>
+                <button
+                  onClick={() => setShowAddItemModal(false)}
+                  className="text-gray-400 hover:text-gray-600"
+                >
+                  <X size={24} />
+                </button>
+              </div>
+
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Item <span className="text-red-500">*</span>
+                  </label>
+                  <Input
+                    placeholder="Search items..."
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    leftIcon={<Search size={18} />}
+                    rightIcon={searchTerm ? (
+                      <button onClick={() => setSearchTerm('')} className="text-gray-400 hover:text-gray-600">
+                        <X size={18} />
+                      </button>
+                    ) : undefined}
+                  />
+                  <Select
+                    value={newItem.item_id}
+                    onChange={(e) => {
+                      const selected = availableItems.find(i => i.id === e.target.value);
+                      setNewItem({
+                        ...newItem,
+                        item_id: e.target.value,
+                        gst_rate: selected?.gst_rate || 18,
+                        rate: selected?.wholesale_price || 0
+                      });
+                    }}
+                    className="mt-2"
+                  >
+                    <option value="">Select item</option>
+                    {availableItems
+                      .filter(item => item.name.toLowerCase().includes(searchTerm.toLowerCase()))
+                      .map(item => (
+                        <option key={item.id} value={item.id}>
+                          {item.name} - ₹{item.wholesale_price} ({item.unit?.abbreviation})
+                        </option>
+                      ))}
+                  </Select>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <Input
+                    label="Batch Number"
+                    placeholder="BATCH-001"
+                    value={newItem.batch_number}
+                    onChange={(e) => setNewItem({ ...newItem, batch_number: e.target.value })}
+                  />
+
+                  <Input
+                    label="Expiry Date"
+                    type="date"
+                    value={newItem.expiry_date}
+                    onChange={(e) => setNewItem({ ...newItem, expiry_date: e.target.value })}
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <Input
+                    label="Quantity"
+                    type="number"
+                    placeholder="0"
+                    value={newItem.quantity || ''}
+                    onChange={(e) => setNewItem({ ...newItem, quantity: parseFloat(e.target.value) || 0 })}
+                    required
+                  />
+
+                  <Input
+                    label="Rate (₹)"
+                    type="number"
+                    step="0.01"
+                    placeholder="0.00"
+                    value={newItem.rate || ''}
+                    onChange={(e) => setNewItem({ ...newItem, rate: parseFloat(e.target.value) || 0 })}
+                    required
+                  />
+                </div>
+
+                <Input
+                  label="GST Rate (%)"
+                  type="number"
+                  placeholder="18"
+                  value={newItem.gst_rate || ''}
+                  onChange={(e) => setNewItem({ ...newItem, gst_rate: parseFloat(e.target.value) || 0 })}
+                  required
+                />
+
+                <div className="bg-gray-50 p-4 rounded-lg">
+                  <div className="flex justify-between text-sm">
+                    <span className="text-gray-600">Item Amount:</span>
+                    <span className="font-medium text-gray-900">
+                      ₹{(newItem.quantity * newItem.rate).toFixed(2)}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex gap-3 mt-6">
+                <Button onClick={() => setShowAddItemModal(false)} variant="secondary" className="flex-1">
+                  Cancel
+                </Button>
+                <Button onClick={handleAddItem} variant="primary" className="flex-1">
+                  Add Item
+                </Button>
+              </div>
+            </Card>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
