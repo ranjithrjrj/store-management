@@ -5,7 +5,7 @@
 import React, { useState, useEffect } from 'react';
 import { RotateCcw, Plus, Search, Calendar, DollarSign, CheckCircle, XCircle, Edit2, Trash2, X } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
-import { Button, Card, Input, Badge, EmptyState, LoadingSpinner, ConfirmDialog, useToast } from '@/components/ui';
+import { Button, Card, Input, Select, Textarea, Badge, EmptyState, LoadingSpinner, ConfirmDialog, useToast } from '@/components/ui';
 import { useTheme } from '@/contexts/ThemeContext';
 
 type SalesReturn = {
@@ -303,6 +303,11 @@ const ReturnsManagement = () => {
               placeholder="Search by return number, invoice, or customer..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
+              rightIcon={searchTerm ? (
+                <button onClick={() => setSearchTerm('')} className="text-gray-400 hover:text-gray-600">
+                  <X size={18} />
+                </button>
+              ) : undefined}
             />
           </Card>
         </div>
@@ -444,8 +449,9 @@ const ReturnsManagement = () => {
 
       {/* Add/Edit Modal */}
       {showModal && (
-        <div className="fixed inset-0 bg-black/20 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-          <Card className="w-full max-w-2xl">
+        <div className="fixed inset-0 bg-black/20 backdrop-blur-sm flex items-start justify-center p-4 z-50 overflow-y-auto">
+          <div className="min-h-screen w-full flex items-center justify-center py-8">
+            <Card className="w-full max-w-2xl">
             <div className="flex items-center justify-between mb-6">
               <h3 className="text-xl font-bold text-gray-900">
                 {editingReturn ? 'Edit Return' : 'Record New Return'}
@@ -460,10 +466,9 @@ const ReturnsManagement = () => {
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   Invoice <span className="text-red-500">*</span>
                 </label>
-                <select
+                <Select
                   value={formData.invoice_id}
                   onChange={(e) => handleInvoiceSelect(e.target.value)}
-                  className={`w-full px-3 py-2 border border-gray-300 rounded-lg ${theme.classes.focusRing} focus:ring-2 focus:ring-opacity-20 transition-all`}
                   disabled={!!editingReturn}
                 >
                   <option value="">Select invoice</option>
@@ -472,7 +477,7 @@ const ReturnsManagement = () => {
                       {inv.invoice_number} - {inv.customer_name} - ₹{inv.total_amount}
                     </option>
                   ))}
-                </select>
+                </Select>
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -498,29 +503,27 @@ const ReturnsManagement = () => {
 
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Refund Method</label>
-                  <select
+                  <Select
                     value={formData.refund_method}
                     onChange={(e) => setFormData({ ...formData, refund_method: e.target.value })}
-                    className={`w-full px-3 py-2 border border-gray-300 rounded-lg ${theme.classes.focusRing} focus:ring-2 focus:ring-opacity-20 transition-all`}
                   >
                     <option value="cash">Cash</option>
                     <option value="card">Card</option>
                     <option value="upi">UPI</option>
                     <option value="bank_transfer">Bank Transfer</option>
-                  </select>
+                  </Select>
                 </div>
 
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Refund Status</label>
-                  <select
+                  <Select
                     value={formData.refund_status}
                     onChange={(e) => setFormData({ ...formData, refund_status: e.target.value as any })}
-                    className={`w-full px-3 py-2 border border-gray-300 rounded-lg ${theme.classes.focusRing} focus:ring-2 focus:ring-opacity-20 transition-all`}
                   >
                     <option value="pending">Pending</option>
                     <option value="completed">Completed</option>
                     <option value="rejected">Rejected</option>
-                  </select>
+                  </Select>
                 </div>
               </div>
 
@@ -533,11 +536,10 @@ const ReturnsManagement = () => {
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Notes</label>
-                <textarea
+                <Textarea
                   value={formData.notes}
                   onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
                   rows={3}
-                  className={`w-full px-3 py-2 border border-gray-300 rounded-lg ${theme.classes.focusRing} focus:ring-2 focus:ring-opacity-20 transition-all`}
                   placeholder="Additional notes (optional)"
                 />
               </div>
@@ -551,7 +553,8 @@ const ReturnsManagement = () => {
                 {editingReturn ? 'Update Return' : 'Record Return'}
               </Button>
             </div>
-          </Card>
+            </Card>
+          </div>
         </div>
       )}
 
