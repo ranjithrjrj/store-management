@@ -178,8 +178,9 @@ const PurchaseRecording = () => {
       const totals = calculateTotals();
 
       const { data: purchase, error: purchaseError } = await supabase
-        .from('purchase_recordings')
+        .from('purchase_records')
         .insert({
+          record_number: `PR-${Date.now()}`,
           vendor_id: formData.vendor_id,
           invoice_number: formData.invoice_number,
           invoice_date: formData.invoice_date,
@@ -199,29 +200,19 @@ const PurchaseRecording = () => {
 
       for (const item of items) {
         const { error: itemError } = await supabase
-          .from('purchase_recording_items')
+          .from('purchase_record_items')
           .insert({
-            purchase_recording_id: purchase.id,
+            purchase_record_id: purchase.id,
             item_id: item.item_id,
             quantity: item.quantity,
-            unit_price: item.rate,
+            rate: item.rate,
             gst_rate: item.gst_rate,
-            total_price: item.amount
-          });
-
-        if (itemError) throw itemError;
-
-        const { error: inventoryError } = await supabase
-          .from('inventory_batches')
-          .insert({
-            item_id: item.item_id,
-            batch_number: item.batch_number || `BATCH-${Date.now()}`,
-            quantity: item.quantity,
-            purchase_price: item.rate,
+            amount: item.amount,
+            batch_number: item.batch_number || null,
             expiry_date: item.expiry_date || null
           });
 
-        if (inventoryError) throw inventoryError;
+        if (itemError) throw itemError;
       }
 
       toast.success('Purchase recorded!', `Invoice ${formData.invoice_number} has been saved.`);
@@ -454,7 +445,7 @@ const PurchaseRecording = () => {
 
                     <button
                       onClick={() => handleRemoveItem(item.id)}
-                      className="p-3 rounded-xl bg-red-50 text-red-600 hover:bg-red-100 transition-all duration-200 hover:scale-110 opacity-0 group-hover:opacity-100"
+                      className="p-3 rounded-xl bg-red-50 text-red-600 hover:bg-red-100 transition-all duration-200 hover:scale-110"
                     >
                       <Trash2 size={20} />
                     </button>
