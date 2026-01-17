@@ -44,7 +44,7 @@ const CreditPayments = () => {
   
   const [activeTab, setActiveTab] = useState<'invoices' | 'payments'>('invoices');
   const [creditInvoices, setCreditInvoices] = useState<CreditInvoice[]>([]);
-  const [payments, setPayments] = useState<CreditPayment[]>([]);
+  const [allPayments, setAllPayments] = useState<CreditPayment[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterStatus, setFilterStatus] = useState('all');
   const [showPaymentModal, setShowPaymentModal] = useState(false);
@@ -68,7 +68,7 @@ const CreditPayments = () => {
 
   useEffect(() => {
     loadCreditInvoices();
-    loadPayments();
+    loadAllPayments();
   }, []);
 
   async function loadCreditInvoices() {
@@ -111,10 +111,10 @@ const CreditPayments = () => {
     }
   }
 
-  async function loadPayments() {
+  async function loadAllPayments() {
     try {
       const { data, error } = await supabase
-        .from('credit_payments')
+        .from('sales_payments')
         .select(`
           *,
           invoice:sales_invoices(invoice_number, customer_name)
@@ -122,7 +122,7 @@ const CreditPayments = () => {
         .order('payment_date', { ascending: false });
 
       if (error) throw error;
-      setPayments(data || []);
+      setAllPayments(data || []);
     } catch (err: any) {
       console.error('Error loading payments:', err);
     }
@@ -238,7 +238,7 @@ const CreditPayments = () => {
 
       toast.success('Payment recorded!', `Payment ${paymentNumber} has been saved.`);
       await loadCreditInvoices();
-      await loadPayments();
+      await loadAllPayments();
       setShowPaymentModal(false);
       setSelectedInvoice(null);
     } catch (err: any) {
@@ -265,7 +265,7 @@ const CreditPayments = () => {
     return matchesSearch && matchesStatus;
   });
 
-  const filteredPayments = payments.filter(payment => {
+  const filteredPayments = allPayments.filter(payment => {
     const searchLower = searchTerm.toLowerCase();
     return (
       payment.payment_number.toLowerCase().includes(searchLower) ||
@@ -298,8 +298,8 @@ const CreditPayments = () => {
               <CreditCard className="text-orange-700" size={28} />
             </div>
             <div>
-              <h1 className="text-2xl font-bold text-slate-900">Credit Payments</h1>
-              <p className="text-slate-600 text-sm mt-0.5">Manage customer credit sales and payments</p>
+              <h1 className="text-2xl font-bold text-slate-900">Credits & Payments</h1>
+              <p className="text-slate-600 text-sm mt-0.5">Manage credit sales and track all payments received</p>
             </div>
           </div>
 
@@ -341,7 +341,7 @@ const CreditPayments = () => {
                   : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
               }`}
             >
-              Payment History ({payments.length})
+              All Payments ({allPayments.length})
             </button>
           </div>
 
