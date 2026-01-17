@@ -25,7 +25,6 @@ const SalesInvoice = () => {
   const { theme } = useTheme();
   const toast = useToast();
   
-  const [customerType, setCustomerType] = useState<'walk-in' | 'registered'>('walk-in');
   const [formData, setFormData] = useState({
     customer_id: '',
     customer_name: '',
@@ -40,7 +39,6 @@ const SalesInvoice = () => {
   const [items, setItems] = useState<InvoiceItem[]>([]);
   const [isIntrastate, setIsIntrastate] = useState(true);
   const [showPrintSettings, setShowPrintSettings] = useState(false);
-  const [showSaveConfirm, setShowSaveConfirm] = useState(false);
   const [printSettings, setPrintSettings] = useState({
     width: '80mm' as '58mm' | '80mm',
     method: 'iframe' as 'browser' | 'iframe' | 'bluetooth' | 'preview'
@@ -219,10 +217,18 @@ const SalesInvoice = () => {
     setShowSaveConfirm(true);
   };
 
-  const confirmSave = async (shouldPrint: boolean = false) => {
+  const confirmSave = async () => {
+    if (items.length === 0) {
+      toast.warning('Add items', 'Please add at least one item.');
+      return;
+    }
+    if (!formData.customer_name.trim()) {
+      toast.warning('Customer name required', 'Please enter customer name.');
+      return;
+    }
+
     try {
       setSaving(true);
-      setShowSaveConfirm(false);
       setShowPrintSettings(false);
 
       const invoiceNumber = `INV-${Date.now()}`;
@@ -245,7 +251,7 @@ const SalesInvoice = () => {
         total_amount: totals.total,
         payment_method: formData.payment_method,
         payment_status: 'paid',
-        is_printed: shouldPrint,
+        is_printed: true,
         notes: formData.notes
       };
 
@@ -307,7 +313,8 @@ const SalesInvoice = () => {
 
       toast.success('Invoice saved!', `Invoice ${invoiceNumber} has been created.`);
 
-      if (shouldPrint && storeSettings) {
+      // Always print
+      if (storeSettings) {
         await printInvoice(
           {
             store_name: storeSettings.store_name,
@@ -358,7 +365,6 @@ const SalesInvoice = () => {
         notes: ''
       });
       setItems([]);
-      setCustomerType('walk-in');
     } catch (err: any) {
       console.error('Error saving invoice:', err);
       toast.error('Failed to save', err.message || 'Could not save invoice.');
@@ -396,73 +402,70 @@ const SalesInvoice = () => {
           </div>
         </div>
 
-        {/* Customer Details */}
+        {/* Customer Selection */}
         <Card padding="lg">
           <h2 className="text-lg font-bold text-slate-900 mb-4">Customer Details</h2>
           
           <div className="mb-4">
-            <div className="flex gap-4">
-              <button
-                onClick={() => setCustomerType('walk-in')}
-                className={`flex-1 px-4 py-3 rounded-xl font-medium transition-all ${
-                  customerType === 'walk-in'
-                    ? 'bg-emerald-600 text-white shadow-md'
-                    : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                }`}
-              >
-                Walk-in Customer
-              </button>
-              <button
-                onClick={() => setCustomerType('registered')}
-                className={`flex-1 px-4 py-3 rounded-xl font-medium transition-all ${
-                  customerType === 'registered'
-                    ? 'bg-emerald-600 text-white shadow-md'
-                    : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                }`}
-              >
-                Registered Customer
-              </button>
-            </div>
+            <label className="block text-sm font-semibold text-slate-700 mb-2">Select Customer</label>
+            <Input
+              placeholder="Type to search customers..."
+              list="customers-list"
+              value={formData.customer_name}
+              onChange={(e) => {
+                const value = e.target.value;
+                setFormData({ ...formData, customer_name: value });
+                
+                // Check if selected from list
+                const customer = customers.find(c => c.name === value);
+                if (customer) {
+                  handleCustomerChange(customer.id);
+                } else {
+                  // Walk-in or manual entry
+                  setFormData({
+                    ...formData,
+                    customer_id: '',
+                    customer_name: value,
+                    customer_phone: '',
+                    customer_gstin: '',
+                    customer_state: 'Tamil Nadu'
+                  });
+                  setIsIntrastate(true);
+                }
+              }}
+              leftIcon={<User size={18} />}
+            />
+            <datalist id="customers-list">
+              <option value="Walk-in" />
+              {customers.map(customer => (
+                <option key={customer.id} value={customer.name} />
+              ))}
+            </datalist>
           </div>
 
-          {customerType === 'registered' ? (
-            <div className="mb-4">
-              <label className="block text-sm font-semibold text-slate-700 mb-2">Select Customer</label>
-              <Select
-                value={formData.customer_id}
-                onChange={(e) => handleCustomerChange(e.target.value)}
-              >
-                <option value="">Choose customer</option>
-                {customers.map(customer => (
-                  <option key={customer.id} value={customer.id}>
-                    {customer.name} {customer.phone && `- ${customer.phone}`}
-                  </option>
-                ))}
-              </Select>
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <Input
-                label="Name"
-                placeholder="Customer name"
-                value={formData.customer_name}
-                onChange={(e) => setFormData({ ...formData, customer_name: e.target.value })}
-                leftIcon={<User size={18} />}
-              />
-              <Input
-                label="Phone"
-                placeholder="Optional"
-                value={formData.customer_phone}
-                onChange={(e) => setFormData({ ...formData, customer_phone: e.target.value })}
-              />
-              <Input
-                label="GSTIN"
-                placeholder="Optional"
-                value={formData.customer_gstin}
-                onChange={(e) => setFormData({ ...formData, customer_gstin: e.target.value })}
-              />
-            </div>
-          )}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <Input
+              label="Phone"
+              placeholder="Optional"
+              value={formData.customer_phone}
+              onChange={(e) => setFormData({ ...formData, customer_phone: e.target.value })}
+            />
+            <Input
+              label="GSTIN"
+              placeholder="Optional"
+              value={formData.customer_gstin}
+              onChange={(e) => setFormData({ ...formData, customer_gstin: e.target.value })}
+            />
+            <Input
+              label="State"
+              placeholder="State"
+              value={formData.customer_state}
+              onChange={(e) => {
+                setFormData({ ...formData, customer_state: e.target.value });
+                setIsIntrastate(e.target.value === 'Tamil Nadu');
+              }}
+            />
+          </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
             <Input
@@ -495,14 +498,26 @@ const SalesInvoice = () => {
 
           <div className="mb-4">
             <label className="block text-sm font-semibold text-slate-700 mb-2">Add Item</label>
-            <Select onChange={(e) => { if (e.target.value) addItem(e.target.value); e.target.value = ''; }}>
-              <option value="">Select item to add</option>
+            <Input
+              placeholder="Type to search items..."
+              list="items-list"
+              onChange={(e) => {
+                const value = e.target.value;
+                const item = availableItems.find(i => i.name === value);
+                if (item) {
+                  addItem(item.id);
+                  e.target.value = '';
+                }
+              }}
+              leftIcon={<Package size={18} />}
+            />
+            <datalist id="items-list">
               {availableItems.map(item => (
-                <option key={item.id} value={item.id}>
-                  {item.name} - ₹{item.retail_price} ({item.unit?.abbreviation})
+                <option key={item.id} value={item.name}>
+                  ₹{item.retail_price} ({item.unit?.abbreviation})
                 </option>
               ))}
-            </Select>
+            </datalist>
           </div>
 
           {items.length === 0 ? (
@@ -639,39 +654,17 @@ const SalesInvoice = () => {
         )}
 
         {/* Actions */}
-        <div className="flex gap-3">
-          <Button
-            onClick={handleSaveInvoice}
-            disabled={saving || items.length === 0}
-            variant="primary"
-            icon={<Save size={20} />}
-            className="flex-1"
-          >
-            {saving ? 'Saving...' : 'Save Invoice'}
-          </Button>
+        <div className="flex justify-end">
           <Button
             onClick={() => setShowPrintSettings(true)}
             disabled={items.length === 0}
-            variant="secondary"
+            variant="primary"
             icon={<Printer size={20} />}
-            className="flex-1"
           >
             Save & Print
           </Button>
         </div>
       </div>
-
-      {/* Save Confirmation */}
-      <ConfirmDialog
-        isOpen={showSaveConfirm}
-        onClose={() => setShowSaveConfirm(false)}
-        onConfirm={() => confirmSave(false)}
-        title="Save Invoice"
-        message={`Save invoice for ${formData.customer_name || 'Walk-in Customer'} with total amount ₹${totals.total.toFixed(2)}?`}
-        confirmText="Save"
-        cancelText="Cancel"
-        variant="primary"
-      />
 
       {/* Print Settings Modal */}
       {showPrintSettings && (
@@ -731,7 +724,7 @@ const SalesInvoice = () => {
                 <Button onClick={() => setShowPrintSettings(false)} variant="secondary" fullWidth>
                   Cancel
                 </Button>
-                <Button onClick={() => confirmSave(true)} variant="primary" fullWidth loading={saving}>
+                <Button onClick={confirmSave} variant="primary" fullWidth loading={saving}>
                   Save & Print
                 </Button>
               </div>
