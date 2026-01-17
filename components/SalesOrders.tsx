@@ -479,6 +479,24 @@ const SalesOrders = () => {
     if (!convertingOrder) return;
 
     try {
+      // Load order items
+      const { data: orderItemsData } = await supabase
+        .from('sales_order_items')
+        .select(`
+          *,
+          item:items(id, name, gst_rate)
+        `)
+        .eq('order_id', convertingOrder.id);
+
+      const items = orderItemsData?.map(item => ({
+        item_id: item.item_id,
+        item_name: item.item?.name || '',
+        quantity: item.quantity,
+        rate: item.rate,
+        discount_percent: item.discount_percent,
+        gst_rate: item.gst_rate
+      })) || [];
+
       // Store order data in sessionStorage for Sales Invoice page to pick up
       const orderData = {
         order_id: convertingOrder.id,
@@ -489,28 +507,8 @@ const SalesOrders = () => {
         customer_state: convertingOrder.customer_state,
         order_date: convertingOrder.order_date,
         notes: `Converted from ${convertingOrder.order_number}`,
-        items: [] // Will be loaded in Sales Invoice
+        items: items
       };
-
-      // Load order items
-      const { data: orderItemsData } = await supabase
-        .from('sales_order_items')
-        .select(`
-          *,
-          item:items(id, name, gst_rate)
-        `)
-        .eq('order_id', convertingOrder.id);
-
-      if (orderItemsData) {
-        orderData.items = orderItemsData.map(item => ({
-          item_id: item.item_id,
-          item_name: item.item?.name || '',
-          quantity: item.quantity,
-          rate: item.rate,
-          discount_percent: item.discount_percent,
-          gst_rate: item.gst_rate
-        }));
-      }
 
       sessionStorage.setItem('converting_order', JSON.stringify(orderData));
 
