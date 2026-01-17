@@ -525,7 +525,7 @@ const SalesOrders = () => {
 
       // Inform user to go to Sales Invoice page
       setTimeout(() => {
-        toast.info('Next Step', 'Please go to Sales Invoice page to complete the invoice.', 5000);
+        toast.info('Next Step', 'Please go to Sales Invoice page to complete the invoice.');
       }, 1000);
     } catch (err: any) {
       console.error('Error converting order:', err);
