@@ -228,7 +228,7 @@ const SalesInvoice = () => {
         customer_name: formData.customer_name,
         customer_phone: formData.customer_phone || null,
         customer_gstin: formData.customer_gstin || null,
-        customer_state: formData.customer_state,
+        place_of_supply: formData.customer_state,
         invoice_date: formData.invoice_date,
         subtotal: totals.subtotal,
         discount_amount: totals.discountAmount,
