@@ -196,12 +196,12 @@ const AppContent = () => {
   const locationText = locationParts.length > 0 ? locationParts.join(', ') : 'India';
 
   return (
-    <div className="flex h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50">
+    <div className="flex h-screen bg-gray-50">
       {/* Mobile menu button */}
       {!mobileMenuOpen && (
         <button
           onClick={() => setMobileMenuOpen(true)}
-          className="lg:hidden fixed top-4 left-4 z-50 p-3 bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-2xl shadow-2xl hover:shadow-3xl transition-all hover:scale-105"
+          className={`lg:hidden fixed top-4 left-4 z-50 p-2 ${theme.classes.bgPrimary} text-white rounded-lg shadow-lg`}
         >
           <Menu size={24} />
         </button>
@@ -210,19 +210,19 @@ const AppContent = () => {
       {/* Sidebar */}
       <aside className={`${
         mobileMenuOpen ? 'translate-x-0' : '-translate-x-full'
-      } lg:translate-x-0 fixed lg:static inset-0 lg:inset-y-0 lg:w-72 z-40 w-full backdrop-blur-2xl bg-white/80 border-r border-white/20 transition-transform duration-300 overflow-y-auto shadow-2xl`}>
+      } lg:translate-x-0 fixed lg:static inset-0 lg:inset-y-0 lg:w-72 z-40 w-full bg-white border-r border-gray-200 transition-transform duration-300 overflow-y-auto shadow-lg lg:shadow-none`}>
         
         {/* Store Header */}
-        <div className="p-6 border-b border-white/20 bg-gradient-to-r from-blue-600 via-purple-600 to-pink-600">
+        <div className={`p-6 border-b border-gray-200 ${theme.classes.bgPrimaryLight}`}>
           <div className="flex items-start gap-3">
-            <div className="p-2.5 bg-white/20 backdrop-blur-sm rounded-2xl flex-shrink-0">
+            <div className={`p-2.5 ${theme.classes.bgPrimary} rounded-lg flex-shrink-0`}>
               <Store size={24} className="text-white" />
             </div>
             <div className="flex-1 min-w-0">
-              <h1 className="text-lg font-bold text-white truncate">
+              <h1 className={`text-lg font-bold ${theme.classes.textPrimary} truncate`}>
                 {storeInfo.name}
               </h1>
-              <div className="flex items-center gap-1.5 mt-1 text-xs text-white/90">
+              <div className="flex items-center gap-1.5 mt-1 text-xs text-gray-600">
                 <MapPin size={12} className="flex-shrink-0" />
                 <span className="truncate">{locationText}</span>
               </div>
@@ -243,10 +243,10 @@ const AppContent = () => {
                 <div key={item.id}>
                   <button
                     onClick={() => toggleSection(item.id)}
-                    className={`w-full flex items-center justify-between px-4 py-3 text-sm font-medium rounded-xl transition-all ${
+                    className={`w-full flex items-center justify-between px-3 py-2.5 text-sm font-medium rounded-lg transition-all ${
                       hasActiveSubmenu
-                        ? 'bg-gradient-to-r from-blue-600 to-purple-600 text-white shadow-lg'
-                        : 'text-gray-700 hover:bg-white/60 hover:shadow-sm'
+                        ? `${theme.classes.bgPrimaryLight} ${theme.classes.textPrimary}`
+                        : 'text-gray-700 hover:bg-gray-100'
                     }`}
                   >
                     <div className="flex items-center">
@@ -268,13 +268,13 @@ const AppContent = () => {
                         <button
                           key={subItem.id}
                           onClick={() => handlePageChange(subItem.id as Page)}
-                          className={`w-full flex items-center px-4 py-2.5 text-sm rounded-xl transition-all ${
+                          className={`w-full flex items-center px-3 py-2 text-sm rounded-lg transition-all ${
                             currentPage === subItem.id
-                              ? 'bg-gradient-to-r from-blue-500 to-purple-500 text-white font-medium shadow-md'
-                              : 'text-gray-600 hover:bg-white/60 hover:text-gray-900'
+                              ? `${theme.classes.bgPrimary} text-white font-medium shadow-sm`
+                              : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
                           }`}
                         >
-                          <div className={`w-2 h-2 rounded-full mr-2.5 ${
+                          <div className={`w-1.5 h-1.5 rounded-full mr-2 ${
                             currentPage === subItem.id ? 'bg-white' : 'bg-gray-400'
                           }`}></div>
                           {subItem.label}
@@ -290,10 +290,10 @@ const AppContent = () => {
               <button
                 key={item.id}
                 onClick={() => handlePageChange(item.id as Page)}
-                className={`w-full flex items-center px-4 py-3 text-sm font-medium rounded-xl transition-all ${
+                className={`w-full flex items-center px-3 py-2.5 text-sm font-medium rounded-lg transition-all ${
                   currentPage === item.id
-                    ? 'bg-gradient-to-r from-blue-600 to-purple-600 text-white shadow-lg'
-                    : 'text-gray-700 hover:bg-white/60 hover:shadow-sm'
+                    ? `${theme.classes.bgPrimaryLight} ${theme.classes.textPrimary}`
+                    : 'text-gray-700 hover:bg-gray-100'
                 }`}
               >
                 <Icon size={18} className="mr-3" />
@@ -307,7 +307,7 @@ const AppContent = () => {
         <div className="lg:hidden fixed bottom-6 right-6 z-50">
           <button
             onClick={() => setMobileMenuOpen(false)}
-            className="p-4 bg-gradient-to-r from-red-600 to-pink-600 text-white rounded-full shadow-2xl hover:shadow-3xl transition-all hover:scale-105"
+            className="p-4 bg-red-600 text-white rounded-full shadow-lg hover:bg-red-700 transition-colors"
           >
             <X size={24} />
           </button>
