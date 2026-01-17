@@ -1,14 +1,19 @@
 // FILE PATH: components/SalesInvoice.tsx
+// Modern Sales Invoice with inventory check, proper GST, confirmations
 
+'use client';
 import React, { useState, useEffect } from 'react';
-import { Plus, Trash2, Printer, Save, Eye } from 'lucide-react';
+import { Plus, Trash2, Printer, Save, ShoppingCart, User, Package, Calendar, AlertTriangle } from 'lucide-react';
 import { printInvoice } from '@/lib/thermalPrinter';
 import { supabase } from '@/lib/supabase';
+import { Button, Card, Input, Select, Badge, LoadingSpinner, ConfirmDialog, useToast } from '@/components/ui';
+import { useTheme } from '@/contexts/ThemeContext';
 
 type InvoiceItem = {
   id: string;
   item_id: string;
   item_name: string;
+  available_stock: number;
   quantity: number;
   rate: number;
   discount_percent: number;
@@ -17,12 +22,16 @@ type InvoiceItem = {
 };
 
 const SalesInvoice = () => {
+  const { theme } = useTheme();
+  const toast = useToast();
+  
   const [customerType, setCustomerType] = useState<'walk-in' | 'registered'>('walk-in');
   const [formData, setFormData] = useState({
     customer_id: '',
     customer_name: '',
     customer_phone: '',
     customer_gstin: '',
+    customer_state: 'Tamil Nadu',
     invoice_date: new Date().toISOString().split('T')[0],
     payment_method: 'cash',
     notes: ''
@@ -30,18 +39,19 @@ const SalesInvoice = () => {
 
   const [items, setItems] = useState<InvoiceItem[]>([]);
   const [isIntrastate, setIsIntrastate] = useState(true);
-  const [showPrintPreview, setShowPrintPreview] = useState(false);
+  const [showPrintSettings, setShowPrintSettings] = useState(false);
+  const [showSaveConfirm, setShowSaveConfirm] = useState(false);
   const [printSettings, setPrintSettings] = useState({
     width: '80mm' as '58mm' | '80mm',
     method: 'iframe' as 'browser' | 'iframe' | 'bluetooth' | 'preview'
   });
 
-  // Real data from database
   const [customers, setCustomers] = useState<any[]>([]);
   const [availableItems, setAvailableItems] = useState<any[]>([]);
+  const [storeSettings, setStoreSettings] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
 
-  // Load customers and items from database
   useEffect(() => {
     loadData();
   }, []);
@@ -50,123 +60,40 @@ const SalesInvoice = () => {
     try {
       setLoading(true);
       
-      // Load customers
-      const { data: customersData } = await supabase
-        .from('customers')
-        .select('*')
-        .eq('is_active', true)
-        .order('name');
-      
-      // Load items with details
-      const { data: itemsData } = await supabase
-        .from('items')
-        .select(`
-          id,
-          name,
-          retail_price,
-          gst_rate,
-          category:categories(name),
+      const [customersData, itemsData, storeData] = await Promise.all([
+        supabase.from('customers').select('*').eq('is_active', true).order('name'),
+        supabase.from('items').select(`
+          id, name, gst_rate, retail_price, discount_percent,
           unit:units(abbreviation)
-        `)
-        .eq('is_active', true)
-        .order('name');
-      
-      setCustomers(customersData || []);
-      setAvailableItems(itemsData || []);
-    } catch (error) {
-      console.error('Error loading data:', error);
+        `).eq('is_active', true).order('name'),
+        supabase.from('store_settings').select('*').limit(1)
+      ]);
+
+      setCustomers(customersData.data || []);
+      setAvailableItems(itemsData.data || []);
+      setStoreSettings(storeData.data?.[0] || null);
+    } catch (err: any) {
+      console.error('Error loading data:', err);
+      toast.error('Failed to load', 'Could not load data.');
     } finally {
       setLoading(false);
     }
   }
 
-  const addItem = () => {
-    const newItem: InvoiceItem = {
-      id: Date.now().toString(),
-      item_id: '',
-      item_name: '',
-      quantity: 1,
-      rate: 0,
-      discount_percent: 0,
-      gst_rate: 0,
-      amount: 0
-    };
-    setItems([...items, newItem]);
-  };
-
-  const updateItem = (id: string, field: string, value: any) => {
-    setItems(items.map(item => {
-      if (item.id === id) {
-        const updated = { ...item, [field]: value };
-        
-        if (field === 'item_id') {
-          const selectedItem = availableItems.find(i => i.id === value);
-          if (selectedItem) {
-            updated.item_name = selectedItem.name;
-            updated.rate = selectedItem.retail_price;
-            updated.gst_rate = selectedItem.gst_rate;
-          }
-        }
-        
-        // Recalculate amount
-        const discountAmount = (updated.quantity * updated.rate * updated.discount_percent) / 100;
-        const taxableAmount = (updated.quantity * updated.rate) - discountAmount;
-        const gstAmount = (taxableAmount * updated.gst_rate) / 100;
-        updated.amount = taxableAmount + gstAmount;
-        
-        return updated;
-      }
-      return item;
-    }));
-  };
-
-  const removeItem = (id: string) => {
-    setItems(items.filter(item => item.id !== id));
-  };
-
-  const calculateTotals = () => {
-    const subtotal = items.reduce((sum, item) => sum + (item.quantity * item.rate), 0);
-    const discountAmount = items.reduce((sum, item) => {
-      return sum + (item.quantity * item.rate * item.discount_percent / 100);
-    }, 0);
-    const taxableAmount = subtotal - discountAmount;
-    
-    const totalGst = items.reduce((sum, item) => {
-      const itemDiscount = (item.quantity * item.rate * item.discount_percent) / 100;
-      const itemTaxable = (item.quantity * item.rate) - itemDiscount;
-      return sum + (itemTaxable * item.gst_rate / 100);
-    }, 0);
-
-    const total = taxableAmount + totalGst;
-    const roundOff = Math.round(total) - total;
-    const finalTotal = Math.round(total);
-
-    if (isIntrastate) {
-      return {
-        subtotal,
-        discountAmount,
-        taxableAmount,
-        cgst: totalGst / 2,
-        sgst: totalGst / 2,
-        igst: 0,
-        roundOff,
-        total: finalTotal
-      };
-    } else {
-      return {
-        subtotal,
-        discountAmount,
-        taxableAmount,
-        cgst: 0,
-        sgst: 0,
-        igst: totalGst,
-        roundOff,
-        total: finalTotal
-      };
+  async function getItemStock(itemId: string): Promise<number> {
+    try {
+      const { data } = await supabase
+        .from('inventory_batches')
+        .select('quantity')
+        .eq('item_id', itemId)
+        .gt('quantity', 0);
+      
+      return data?.reduce((sum, batch) => sum + batch.quantity, 0) || 0;
+    } catch (err) {
+      console.error('Error getting stock:', err);
+      return 0;
     }
-  };
-
-  const totals = calculateTotals();
+  }
 
   const handleCustomerChange = (customerId: string) => {
     const customer = customers.find(c => c.id === customerId);
@@ -176,30 +103,138 @@ const SalesInvoice = () => {
         customer_id: customerId,
         customer_name: customer.name,
         customer_phone: customer.phone || '',
-        customer_gstin: customer.gstin || ''
+        customer_gstin: customer.gstin || '',
+        customer_state: customer.state || 'Tamil Nadu'
       });
-      setIsIntrastate(customer.state_code === '33');
+      setIsIntrastate(customer.state === 'Tamil Nadu');
     }
   };
 
-  const handleSave = async () => {
-    if (items.length === 0) {
-      alert('Please add at least one item');
+  const addItem = async (itemId: string) => {
+    const selectedItem = availableItems.find(i => i.id === itemId);
+    if (!selectedItem) return;
+
+    const stock = await getItemStock(itemId);
+    if (stock <= 0) {
+      toast.warning('Out of stock', `${selectedItem.name} is currently out of stock.`);
       return;
     }
 
-    try {
-      // Generate invoice number
-      const invoiceNumber = `INV-${Date.now()}`;
+    const existingItem = items.find(i => i.item_id === itemId);
+    if (existingItem) {
+      toast.warning('Already added', 'This item is already in the invoice.');
+      return;
+    }
+
+    const newItem: InvoiceItem = {
+      id: Date.now().toString(),
+      item_id: itemId,
+      item_name: selectedItem.name,
+      available_stock: stock,
+      quantity: 1,
+      rate: selectedItem.retail_price,
+      discount_percent: selectedItem.discount_percent || 0,
+      gst_rate: selectedItem.gst_rate,
+      amount: selectedItem.retail_price
+    };
+
+    setItems([...items, newItem]);
+  };
+
+  const updateItem = (id: string, field: string, value: number) => {
+    setItems(items.map(item => {
+      if (item.id !== id) return item;
+
+      const updated = { ...item, [field]: value };
+
+      if (field === 'quantity' && value > item.available_stock) {
+        toast.warning('Insufficient stock', `Only ${item.available_stock} units available.`);
+        return item;
+      }
+
+      const subtotal = updated.quantity * updated.rate;
+      const discountAmount = (subtotal * updated.discount_percent) / 100;
+      updated.amount = subtotal - discountAmount;
+
+      return updated;
+    }));
+  };
+
+  const removeItem = (id: string) => {
+    setItems(items.filter(item => item.id !== id));
+  };
+
+  const calculateTotals = () => {
+    const subtotal = items.reduce((sum, item) => {
+      return sum + (item.quantity * item.rate);
+    }, 0);
+
+    const discountAmount = items.reduce((sum, item) => {
+      return sum + ((item.quantity * item.rate * item.discount_percent) / 100);
+    }, 0);
+
+    const taxableAmount = subtotal - discountAmount;
+
+    let cgst = 0;
+    let sgst = 0;
+    let igst = 0;
+
+    items.forEach(item => {
+      const itemTaxable = item.amount;
+      const taxAmount = (itemTaxable * item.gst_rate) / 100;
       
-      // Prepare invoice data
+      if (isIntrastate) {
+        cgst += taxAmount / 2;
+        sgst += taxAmount / 2;
+      } else {
+        igst += taxAmount;
+      }
+    });
+
+    const totalBeforeRounding = taxableAmount + cgst + sgst + igst;
+    const roundedTotal = Math.round(totalBeforeRounding);
+    const roundOff = roundedTotal - totalBeforeRounding;
+
+    return {
+      subtotal,
+      discountAmount,
+      taxableAmount,
+      cgst,
+      sgst,
+      igst,
+      roundOff,
+      total: roundedTotal
+    };
+  };
+
+  const handleSaveInvoice = () => {
+    if (items.length === 0) {
+      toast.warning('Add items', 'Please add at least one item.');
+      return;
+    }
+    if (!formData.customer_name.trim()) {
+      toast.warning('Customer name required', 'Please enter customer name.');
+      return;
+    }
+    setShowSaveConfirm(true);
+  };
+
+  const confirmSave = async (shouldPrint: boolean = false) => {
+    try {
+      setSaving(true);
+      setShowSaveConfirm(false);
+      setShowPrintSettings(false);
+
+      const invoiceNumber = `INV-${Date.now()}`;
+      const totals = calculateTotals();
+
       const invoiceData = {
         invoice_number: invoiceNumber,
         customer_id: customerType === 'registered' ? formData.customer_id : null,
-        customer_name: formData.customer_name || null,
+        customer_name: formData.customer_name,
         customer_phone: formData.customer_phone || null,
         customer_gstin: formData.customer_gstin || null,
-        customer_state_code: isIntrastate ? '33' : null,
+        customer_state: formData.customer_state,
         invoice_date: formData.invoice_date,
         subtotal: totals.subtotal,
         discount_amount: totals.discountAmount,
@@ -210,10 +245,10 @@ const SalesInvoice = () => {
         total_amount: totals.total,
         payment_method: formData.payment_method,
         payment_status: 'paid',
+        is_printed: shouldPrint,
         notes: formData.notes
       };
 
-      // Insert invoice
       const { data: invoice, error: invoiceError } = await supabase
         .from('sales_invoices')
         .insert(invoiceData)
@@ -222,12 +257,11 @@ const SalesInvoice = () => {
 
       if (invoiceError) throw invoiceError;
 
-      // Insert invoice items
       const invoiceItems = items.map(item => {
         const discountAmount = (item.quantity * item.rate * item.discount_percent) / 100;
         const taxableAmount = (item.quantity * item.rate) - discountAmount;
         const gstAmount = (taxableAmount * item.gst_rate) / 100;
-        
+
         return {
           invoice_id: invoice.id,
           item_id: item.item_id,
@@ -240,7 +274,7 @@ const SalesInvoice = () => {
           cgst_amount: isIntrastate ? gstAmount / 2 : 0,
           sgst_amount: isIntrastate ? gstAmount / 2 : 0,
           igst_amount: !isIntrastate ? gstAmount : 0,
-          total_amount: item.amount
+          total_amount: item.amount + gstAmount
         };
       });
 
@@ -250,492 +284,458 @@ const SalesInvoice = () => {
 
       if (itemsError) throw itemsError;
 
-      alert(`Invoice ${invoiceNumber} saved successfully!`);
-      
-      // Reset form
-      setItems([]);
+      // Reduce inventory
+      for (const item of items) {
+        let remaining = item.quantity;
+        const { data: batches } = await supabase
+          .from('inventory_batches')
+          .select('*')
+          .eq('item_id', item.item_id)
+          .gt('quantity', 0)
+          .order('expiry_date', { ascending: true, nullsFirst: false });
+
+        for (const batch of batches || []) {
+          if (remaining <= 0) break;
+          const deduct = Math.min(batch.quantity, remaining);
+          await supabase
+            .from('inventory_batches')
+            .update({ quantity: batch.quantity - deduct })
+            .eq('id', batch.id);
+          remaining -= deduct;
+        }
+      }
+
+      toast.success('Invoice saved!', `Invoice ${invoiceNumber} has been created.`);
+
+      if (shouldPrint && storeSettings) {
+        await printInvoice(
+          {
+            store_name: storeSettings.store_name,
+            address: storeSettings.address,
+            city: storeSettings.city,
+            state: storeSettings.state,
+            pincode: storeSettings.pincode,
+            phone: storeSettings.phone,
+            gstin: storeSettings.gstin
+          },
+          {
+            invoice_number: invoiceNumber,
+            invoice_date: formData.invoice_date,
+            customer_name: formData.customer_name,
+            customer_phone: formData.customer_phone,
+            customer_gstin: formData.customer_gstin,
+            items: items.map(item => ({
+              name: item.item_name,
+              quantity: item.quantity,
+              rate: item.rate,
+              gst_rate: item.gst_rate,
+              total: item.amount
+            })),
+            subtotal: totals.subtotal,
+            discount_amount: totals.discountAmount,
+            cgst_amount: totals.cgst,
+            sgst_amount: totals.sgst,
+            igst_amount: totals.igst,
+            round_off: totals.roundOff,
+            total_amount: totals.total,
+            payment_method: formData.payment_method
+          },
+          {
+            width: printSettings.width,
+            method: printSettings.method
+          }
+        );
+      }
+
       setFormData({
         customer_id: '',
         customer_name: '',
         customer_phone: '',
         customer_gstin: '',
+        customer_state: 'Tamil Nadu',
         invoice_date: new Date().toISOString().split('T')[0],
         payment_method: 'cash',
         notes: ''
       });
+      setItems([]);
       setCustomerType('walk-in');
-      
-    } catch (error: any) {
-      console.error('Error saving invoice:', error);
-      alert('Failed to save invoice: ' + error.message);
+    } catch (err: any) {
+      console.error('Error saving invoice:', err);
+      toast.error('Failed to save', err.message || 'Could not save invoice.');
+    } finally {
+      setSaving(false);
     }
   };
 
-  const handlePrint = async () => {
-    if (items.length === 0) {
-      alert('Please add items before printing');
-      return;
-    }
+  const totals = calculateTotals();
 
-    // Prepare store info (get from settings in real app)
-    const storeInfo = {
-      store_name: 'Thirukumaran Angadi',
-      address: 'Your Address Here',
-      city: 'Mettupalayam',
-      state: 'Tamil Nadu',
-      pincode: '641301',
-      phone: '1234567890',
-      gstin: formData.customer_gstin ? '33XXXXX1234X1ZX' : undefined
-    };
-
-    // Prepare invoice data
-    const invoiceData = {
-      invoice_number: `INV-${Date.now()}`,
-      invoice_date: formData.invoice_date,
-      customer_name: formData.customer_name,
-      customer_phone: formData.customer_phone,
-      customer_gstin: formData.customer_gstin,
-      items: items.map(item => ({
-        name: item.item_name,
-        quantity: item.quantity,
-        rate: item.rate,
-        gst_rate: item.gst_rate,
-        total: item.amount
-      })),
-      subtotal: totals.subtotal,
-      discount_amount: totals.discountAmount,
-      cgst_amount: totals.cgst,
-      sgst_amount: totals.sgst,
-      igst_amount: totals.igst,
-      round_off: totals.roundOff,
-      total_amount: totals.total,
-      payment_method: formData.payment_method
-    };
-
-    try {
-      await printInvoice(storeInfo, invoiceData, {
-        width: printSettings.width,
-        footer: 'Thank you for your business!',
-        terms: 'Goods once sold cannot be returned',
-        method: printSettings.method
-      });
-      alert('Print sent successfully!');
-    } catch (error) {
-      console.error('Print error:', error);
-      alert('Print failed. Please check printer connection.');
-    }
-  };
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-slate-50">
+        <div className="text-center">
+          <LoadingSpinner size="lg" />
+          <p className="mt-4 text-slate-600 font-medium">Loading sales data...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div>
-        <h2 className="text-2xl font-bold text-gray-900">Sales Invoice</h2>
-        <p className="text-gray-600 text-sm mt-1">Create GST-compliant sales invoices</p>
-      </div>
-
-      <div className="bg-white rounded-lg border border-gray-200 p-6">
-        {/* Customer Type Selection */}
-        <div className="mb-6">
-          <label className="block text-sm font-medium text-gray-700 mb-2">Customer Type</label>
-          <div className="flex gap-4">
-            <label className="flex items-center gap-2">
-              <input
-                type="radio"
-                name="customerType"
-                value="walk-in"
-                checked={customerType === 'walk-in'}
-                onChange={(e) => setCustomerType(e.target.value as 'walk-in' | 'registered')}
-                className="w-4 h-4 text-blue-600"
-              />
-              <span className="text-sm text-gray-700">Walk-in Customer</span>
-            </label>
-            <label className="flex items-center gap-2">
-              <input
-                type="radio"
-                name="customerType"
-                value="registered"
-                checked={customerType === 'registered'}
-                onChange={(e) => setCustomerType(e.target.value as 'walk-in' | 'registered')}
-                className="w-4 h-4 text-blue-600"
-              />
-              <span className="text-sm text-gray-700">Registered Customer</span>
-            </label>
+    <div className="min-h-screen bg-slate-50 p-4 md:p-6 lg:p-8">
+      <div className="max-w-7xl mx-auto space-y-6">
+        {/* Header */}
+        <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6">
+          <div className="flex items-center gap-3">
+            <div className="p-3 bg-emerald-100 rounded-xl">
+              <ShoppingCart className="text-emerald-700" size={28} />
+            </div>
+            <div>
+              <h1 className="text-2xl font-bold text-slate-900">Sales Invoice</h1>
+              <p className="text-slate-600 text-sm mt-0.5">Create GST-compliant sales invoices</p>
+            </div>
           </div>
         </div>
 
         {/* Customer Details */}
-        <div className="space-y-4">
-          <h3 className="font-semibold text-gray-900">Customer Details</h3>
+        <Card padding="lg">
+          <h2 className="text-lg font-bold text-slate-900 mb-4">Customer Details</h2>
           
+          <div className="mb-4">
+            <div className="flex gap-4">
+              <button
+                onClick={() => setCustomerType('walk-in')}
+                className={`flex-1 px-4 py-3 rounded-xl font-medium transition-all ${
+                  customerType === 'walk-in'
+                    ? 'bg-emerald-600 text-white shadow-md'
+                    : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                }`}
+              >
+                Walk-in Customer
+              </button>
+              <button
+                onClick={() => setCustomerType('registered')}
+                className={`flex-1 px-4 py-3 rounded-xl font-medium transition-all ${
+                  customerType === 'registered'
+                    ? 'bg-emerald-600 text-white shadow-md'
+                    : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                }`}
+              >
+                Registered Customer
+              </button>
+            </div>
+          </div>
+
           {customerType === 'registered' ? (
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Select Customer</label>
-              <select
+            <div className="mb-4">
+              <label className="block text-sm font-semibold text-slate-700 mb-2">Select Customer</label>
+              <Select
                 value={formData.customer_id}
                 onChange={(e) => handleCustomerChange(e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                disabled={loading}
               >
-                <option value="">Select customer</option>
+                <option value="">Choose customer</option>
                 {customers.map(customer => (
                   <option key={customer.id} value={customer.id}>
                     {customer.name} {customer.phone && `- ${customer.phone}`}
                   </option>
                 ))}
-              </select>
+              </Select>
             </div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Name</label>
-                <input
-                  type="text"
-                  value={formData.customer_name}
-                  onChange={(e) => setFormData({ ...formData, customer_name: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  placeholder="Optional"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Phone</label>
-                <input
-                  type="tel"
-                  value={formData.customer_phone}
-                  onChange={(e) => setFormData({ ...formData, customer_phone: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  placeholder="Optional"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">GSTIN</label>
-                <input
-                  type="text"
-                  value={formData.customer_gstin}
-                  onChange={(e) => setFormData({ ...formData, customer_gstin: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  placeholder="Optional"
-                />
-              </div>
+              <Input
+                label="Name"
+                placeholder="Customer name"
+                value={formData.customer_name}
+                onChange={(e) => setFormData({ ...formData, customer_name: e.target.value })}
+                leftIcon={<User size={18} />}
+              />
+              <Input
+                label="Phone"
+                placeholder="Optional"
+                value={formData.customer_phone}
+                onChange={(e) => setFormData({ ...formData, customer_phone: e.target.value })}
+              />
+              <Input
+                label="GSTIN"
+                placeholder="Optional"
+                value={formData.customer_gstin}
+                onChange={(e) => setFormData({ ...formData, customer_gstin: e.target.value })}
+              />
             </div>
           )}
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
+            <Input
+              label="Invoice Date"
+              type="date"
+              value={formData.invoice_date}
+              onChange={(e) => setFormData({ ...formData, invoice_date: e.target.value })}
+              leftIcon={<Calendar size={18} />}
+            />
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Invoice Date</label>
-              <input
-                type="date"
-                value={formData.invoice_date}
-                onChange={(e) => setFormData({ ...formData, invoice_date: e.target.value })}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Payment Method</label>
-              <select
+              <label className="block text-sm font-semibold text-slate-700 mb-2">Payment Method</label>
+              <Select
                 value={formData.payment_method}
                 onChange={(e) => setFormData({ ...formData, payment_method: e.target.value })}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               >
                 <option value="cash">Cash</option>
                 <option value="card">Card</option>
                 <option value="upi">UPI</option>
                 <option value="credit">Credit</option>
-              </select>
+              </Select>
             </div>
           </div>
-        </div>
+        </Card>
 
-        {/* Items Section */}
-        <div className="mt-6 space-y-4">
-          <div className="flex justify-between items-center">
-            <h3 className="font-semibold text-gray-900">Items</h3>
-            <button
-              onClick={addItem}
-              className="bg-blue-600 text-white px-3 py-1.5 rounded-lg hover:bg-blue-700 text-sm font-medium flex items-center gap-2"
-            >
-              <Plus size={16} />
-              Add Item
-            </button>
+        {/* Items */}
+        <Card padding="lg">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-lg font-bold text-slate-900">Items</h2>
+          </div>
+
+          <div className="mb-4">
+            <label className="block text-sm font-semibold text-slate-700 mb-2">Add Item</label>
+            <Select onChange={(e) => { if (e.target.value) addItem(e.target.value); e.target.value = ''; }}>
+              <option value="">Select item to add</option>
+              {availableItems.map(item => (
+                <option key={item.id} value={item.id}>
+                  {item.name} - ₹{item.retail_price} ({item.unit?.abbreviation})
+                </option>
+              ))}
+            </Select>
           </div>
 
           {items.length === 0 ? (
-            <div className="border-2 border-dashed border-gray-300 rounded-lg p-8 text-center">
-              <p className="text-gray-500">No items added yet. Click "Add Item" to begin.</p>
+            <div className="text-center py-12 text-slate-500">
+              <Package size={48} className="mx-auto mb-3 text-slate-300" />
+              <p>No items added yet</p>
             </div>
           ) : (
             <div className="space-y-3">
-              {/* Header Row */}
-              <div className="grid grid-cols-2 md:grid-cols-6 gap-2 px-3 py-2 bg-gray-50 rounded-lg border border-gray-200">
-                <div className="col-span-2 text-xs font-semibold text-gray-600 uppercase">Item Name</div>
-                <div className="text-xs font-semibold text-gray-600 uppercase">Qty</div>
-                <div className="text-xs font-semibold text-gray-600 uppercase">Rate (₹)</div>
-                <div className="text-xs font-semibold text-gray-600 uppercase">Disc %</div>
-                <div className="text-xs font-semibold text-gray-600 uppercase">Amount</div>
-              </div>
-
-              {items.map((item, index) => (
-                <div key={item.id} className="border border-gray-200 rounded-lg p-3">
-                  <div className="flex justify-between items-center mb-2">
-                    <span className="text-sm font-medium text-gray-900">Item #{index + 1}</span>
-                    <button
-                      onClick={() => removeItem(item.id)}
-                      className="text-red-600 hover:bg-red-50 p-1 rounded"
-                    >
-                      <Trash2 size={14} />
-                    </button>
-                  </div>
-
-                  <div className="grid grid-cols-2 md:grid-cols-6 gap-2">
-                    <div className="col-span-2 relative">
-                      <input
-                        type="text"
-                        value={item.item_name}
-                        onChange={(e) => {
-                          setItems(items.map(i => i.id === item.id ? {...i, item_name: e.target.value} : i));
-                        }}
-                        onFocus={() => {
-                          const dropdown = document.getElementById(`dropdown-${item.id}`);
-                          if (dropdown) dropdown.style.display = 'block';
-                        }}
-                        onBlur={() => {
-                          setTimeout(() => {
-                            const dropdown = document.getElementById(`dropdown-${item.id}`);
-                            if (dropdown) dropdown.style.display = 'none';
-                          }, 200);
-                        }}
-                        placeholder="Type to search..."
-                        className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                        disabled={loading}
-                      />
-                      <div
-                        id={`dropdown-${item.id}`}
-                        className="absolute z-50 w-full mt-1 bg-white border border-gray-300 rounded-lg shadow-lg max-h-48 overflow-y-auto hidden"
-                        style={{ display: 'none' }}
-                      >
-                        {availableItems
-                          .filter(i => i.name.toLowerCase().includes(item.item_name.toLowerCase()))
-                          .slice(0, 50)
-                          .map(availItem => (
-                            <div
-                              key={availItem.id}
-                              onMouseDown={() => {
-                                updateItem(item.id, 'item_id', availItem.id);
-                                const dropdown = document.getElementById(`dropdown-${item.id}`);
-                                if (dropdown) dropdown.style.display = 'none';
-                              }}
-                              className="px-3 py-2 hover:bg-blue-50 cursor-pointer text-sm border-b border-gray-100 last:border-0"
-                            >
-                              <div className="font-medium text-gray-900">{availItem.name}</div>
-                              <div className="text-xs text-gray-500">Rate: ₹{availItem.retail_price} | GST: {availItem.gst_rate}%</div>
-                            </div>
-                          ))}
-                        {availableItems.filter(i => i.name.toLowerCase().includes(item.item_name.toLowerCase())).length === 0 && (
-                          <div className="px-3 py-2 text-sm text-gray-500">No items found</div>
+              {items.map((item) => (
+                <div key={item.id} className="bg-slate-50 rounded-xl p-4 border border-slate-200">
+                  <div className="flex items-start justify-between mb-3">
+                    <div className="flex-1">
+                      <h4 className="font-semibold text-slate-900">{item.item_name}</h4>
+                      <div className="flex items-center gap-2 mt-1">
+                        <Badge variant={item.available_stock > 10 ? 'success' : 'warning'} size="sm">
+                          {item.available_stock} available
+                        </Badge>
+                        {item.quantity > item.available_stock && (
+                          <Badge variant="danger" size="sm">
+                            <AlertTriangle size={12} className="inline mr-1" />
+                            Exceeds stock
+                          </Badge>
                         )}
                       </div>
                     </div>
+                    <button
+                      onClick={() => removeItem(item.id)}
+                      className="p-2 rounded-lg bg-red-50 text-red-600 hover:bg-red-100"
+                    >
+                      <Trash2 size={18} />
+                    </button>
+                  </div>
 
+                  <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
                     <div>
+                      <label className="block text-xs text-slate-600 mb-1">Qty</label>
                       <input
                         type="number"
                         value={item.quantity}
                         onChange={(e) => updateItem(item.id, 'quantity', parseFloat(e.target.value) || 0)}
-                        placeholder="Qty"
-                        className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        className="w-full px-3 py-2 border border-slate-300 rounded-lg text-slate-900 placeholder:text-slate-400"
                       />
                     </div>
-
                     <div>
+                      <label className="block text-xs text-slate-600 mb-1">Rate</label>
                       <input
                         type="number"
                         step="0.01"
                         value={item.rate}
                         onChange={(e) => updateItem(item.id, 'rate', parseFloat(e.target.value) || 0)}
-                        placeholder="Rate"
-                        className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        className="w-full px-3 py-2 border border-slate-300 rounded-lg text-slate-900 placeholder:text-slate-400"
                       />
                     </div>
-
                     <div>
+                      <label className="block text-xs text-slate-600 mb-1">Disc %</label>
                       <input
                         type="number"
                         step="0.01"
                         value={item.discount_percent}
                         onChange={(e) => updateItem(item.id, 'discount_percent', parseFloat(e.target.value) || 0)}
-                        placeholder="Disc %"
-                        className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        className="w-full px-3 py-2 border border-slate-300 rounded-lg text-slate-900 placeholder:text-slate-400"
                       />
                     </div>
-
                     <div>
+                      <label className="block text-xs text-slate-600 mb-1">GST %</label>
+                      <input
+                        type="text"
+                        value={`${item.gst_rate}%`}
+                        readOnly
+                        className="w-full px-3 py-2 border border-slate-300 rounded-lg bg-slate-100 text-slate-900"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs text-slate-600 mb-1">Amount</label>
                       <input
                         type="text"
                         value={`₹${item.amount.toFixed(2)}`}
                         readOnly
-                        className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded bg-gray-50 font-medium"
+                        className="w-full px-3 py-2 border border-slate-300 rounded-lg bg-slate-100 text-slate-900 font-semibold"
                       />
                     </div>
-                  </div>
-
-                  {/* Show GST rate */}
-                  <div className="mt-2 text-right">
-                    <span className="text-xs text-gray-500">GST: {item.gst_rate}%</span>
                   </div>
                 </div>
               ))}
             </div>
           )}
-        </div>
+        </Card>
 
-        {/* Totals */}
+        {/* Summary */}
         {items.length > 0 && (
-          <div className="mt-6 border-t border-gray-200 pt-4">
-            <div className="max-w-sm ml-auto space-y-2">
-              <div className="flex justify-between text-sm">
-                <span className="text-gray-600">Subtotal:</span>
-                <span className="font-medium text-gray-900">₹{totals.subtotal.toFixed(2)}</span>
+          <Card padding="lg">
+            <h2 className="text-lg font-bold text-slate-900 mb-4">Summary</h2>
+            <div className="space-y-3">
+              <div className="flex justify-between text-slate-700">
+                <span>Subtotal</span>
+                <span className="font-semibold">₹{totals.subtotal.toFixed(2)}</span>
               </div>
               {totals.discountAmount > 0 && (
-                <div className="flex justify-between text-sm">
-                  <span className="text-gray-600">Discount:</span>
-                  <span className="font-medium text-red-600">-₹{totals.discountAmount.toFixed(2)}</span>
+                <div className="flex justify-between text-slate-700">
+                  <span>Discount</span>
+                  <span className="font-semibold text-red-600">-₹{totals.discountAmount.toFixed(2)}</span>
                 </div>
               )}
               {isIntrastate ? (
                 <>
-                  <div className="flex justify-between text-sm">
-                    <span className="text-gray-600">CGST:</span>
-                    <span className="font-medium text-gray-900">₹{totals.cgst.toFixed(2)}</span>
+                  <div className="flex justify-between text-slate-700">
+                    <span>CGST</span>
+                    <span className="font-semibold">₹{totals.cgst.toFixed(2)}</span>
                   </div>
-                  <div className="flex justify-between text-sm">
-                    <span className="text-gray-600">SGST:</span>
-                    <span className="font-medium text-gray-900">₹{totals.sgst.toFixed(2)}</span>
+                  <div className="flex justify-between text-slate-700">
+                    <span>SGST</span>
+                    <span className="font-semibold">₹{totals.sgst.toFixed(2)}</span>
                   </div>
                 </>
               ) : (
-                <div className="flex justify-between text-sm">
-                  <span className="text-gray-600">IGST:</span>
-                  <span className="font-medium text-gray-900">₹{totals.igst.toFixed(2)}</span>
+                <div className="flex justify-between text-slate-700">
+                  <span>IGST</span>
+                  <span className="font-semibold">₹{totals.igst.toFixed(2)}</span>
                 </div>
               )}
-              <div className="flex justify-between text-sm">
-                <span className="text-gray-600">Round Off:</span>
-                <span className="font-medium text-gray-900">₹{totals.roundOff.toFixed(2)}</span>
-              </div>
-              <div className="flex justify-between text-xl font-bold pt-2 border-t border-gray-200">
-                <span className="text-gray-900">Total:</span>
-                <span className="text-gray-900">₹{totals.total}</span>
+              {totals.roundOff !== 0 && (
+                <div className="flex justify-between text-slate-700">
+                  <span>Round Off</span>
+                  <span className="font-semibold">{totals.roundOff > 0 ? '+' : ''}₹{totals.roundOff.toFixed(2)}</span>
+                </div>
+              )}
+              <div className="flex justify-between text-xl font-bold text-slate-900 pt-3 border-t-2 border-slate-300">
+                <span>Total</span>
+                <span className="text-emerald-600">₹{totals.total.toFixed(2)}</span>
               </div>
             </div>
-          </div>
+          </Card>
         )}
 
         {/* Actions */}
-        <div className="mt-6 flex flex-col sm:flex-row gap-3">
-          <button
-            onClick={handleSave}
-            disabled={items.length === 0}
-            className="flex-1 bg-blue-600 text-white px-6 py-2 rounded-lg hover:bg-blue-700 font-medium disabled:bg-gray-300 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+        <div className="flex gap-3">
+          <Button
+            onClick={handleSaveInvoice}
+            disabled={saving || items.length === 0}
+            variant="primary"
+            icon={<Save size={20} />}
+            className="flex-1"
           >
-            <Save size={18} />
-            Save Invoice
-          </button>
-          <button
-            onClick={handlePrint}
+            {saving ? 'Saving...' : 'Save Invoice'}
+          </Button>
+          <Button
+            onClick={() => setShowPrintSettings(true)}
             disabled={items.length === 0}
-            className="flex-1 bg-green-600 text-white px-6 py-2 rounded-lg hover:bg-green-700 font-medium disabled:bg-gray-300 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+            variant="secondary"
+            icon={<Printer size={20} />}
+            className="flex-1"
           >
-            <Printer size={18} />
-            Print Bill
-          </button>
-          <button
-            onClick={() => setShowPrintPreview(true)}
-            disabled={items.length === 0}
-            className="px-6 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 font-medium disabled:bg-gray-100 disabled:cursor-not-allowed flex items-center gap-2"
-          >
-            <Eye size={18} />
-            Preview
-          </button>
+            Save & Print
+          </Button>
         </div>
       </div>
 
-      {/* Print Settings Modal */}
-      {showPrintPreview && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-lg max-w-md w-full">
-            <div className="border-b border-gray-200 px-6 py-4">
-              <h3 className="text-lg font-semibold text-gray-900">Print Settings</h3>
-            </div>
+      {/* Save Confirmation */}
+      <ConfirmDialog
+        isOpen={showSaveConfirm}
+        onClose={() => setShowSaveConfirm(false)}
+        onConfirm={() => confirmSave(false)}
+        title="Save Invoice"
+        message={`Save invoice for ${formData.customer_name || 'Walk-in Customer'} with total amount ₹${totals.total.toFixed(2)}?`}
+        confirmText="Save"
+        cancelText="Cancel"
+        variant="primary"
+      />
 
-            <div className="p-6 space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Printer Width</label>
-                <div className="grid grid-cols-2 gap-3">
-                  <button
-                    onClick={() => setPrintSettings({ ...printSettings, width: '58mm' })}
-                    className={`p-3 rounded-lg border-2 ${
-                      printSettings.width === '58mm'
-                        ? 'border-blue-600 bg-blue-50 text-blue-700'
-                        : 'border-gray-300 text-gray-700'
-                    }`}
+      {/* Print Settings Modal */}
+      {showPrintSettings && (
+        <div className="fixed inset-0 bg-black/20 backdrop-blur-sm flex items-start justify-center p-4 z-50 overflow-y-auto">
+          <div className="min-h-screen w-full flex items-center justify-center py-8">
+            <Card className="w-full max-w-md">
+              <div className="flex items-center justify-between mb-6">
+                <h3 className="text-xl font-bold text-slate-900">Print Settings</h3>
+                <button
+                  onClick={() => setShowPrintSettings(false)}
+                  className="p-2 rounded-lg hover:bg-slate-100"
+                >
+                  ×
+                </button>
+              </div>
+
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-semibold text-slate-700 mb-2">Paper Width</label>
+                  <div className="flex gap-3">
+                    <button
+                      onClick={() => setPrintSettings({ ...printSettings, width: '58mm' })}
+                      className={`flex-1 px-4 py-3 rounded-xl font-medium ${
+                        printSettings.width === '58mm'
+                          ? 'bg-emerald-600 text-white'
+                          : 'bg-slate-100 text-slate-600'
+                      }`}
+                    >
+                      58mm
+                    </button>
+                    <button
+                      onClick={() => setPrintSettings({ ...printSettings, width: '80mm' })}
+                      className={`flex-1 px-4 py-3 rounded-xl font-medium ${
+                        printSettings.width === '80mm'
+                          ? 'bg-emerald-600 text-white'
+                          : 'bg-slate-100 text-slate-600'
+                      }`}
+                    >
+                      80mm
+                    </button>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-semibold text-slate-700 mb-2">Print Method</label>
+                  <Select
+                    value={printSettings.method}
+                    onChange={(e) => setPrintSettings({ ...printSettings, method: e.target.value as any })}
                   >
-                    58mm (Small)
-                  </button>
-                  <button
-                    onClick={() => setPrintSettings({ ...printSettings, width: '80mm' })}
-                    className={`p-3 rounded-lg border-2 ${
-                      printSettings.width === '80mm'
-                        ? 'border-blue-600 bg-blue-50 text-blue-700'
-                        : 'border-gray-300 text-gray-700'
-                    }`}
-                  >
-                    80mm (Standard)
-                  </button>
+                    <option value="iframe">Browser Print (Recommended)</option>
+                    <option value="preview">Preview Only</option>
+                  </Select>
                 </div>
               </div>
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Print Method</label>
-                <select
-                  value={printSettings.method}
-                  onChange={(e) => setPrintSettings({ ...printSettings, method: e.target.value as any })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                >
-                  <option value="iframe">Browser Print (Recommended)</option>
-                  <option value="preview">Preview Only</option>
-                  <option value="browser">USB/Serial Printer</option>
-                  <option value="bluetooth">Bluetooth Printer</option>
-                </select>
-                <p className="text-xs text-gray-500 mt-1">
-                  {printSettings.method === 'iframe' && 'Works with most thermal printers via Windows/Mac print drivers'}
-                  {printSettings.method === 'preview' && 'Opens preview in new window'}
-                  {printSettings.method === 'browser' && 'Direct USB connection (Chrome/Edge only)'}
-                  {printSettings.method === 'bluetooth' && 'For mobile Bluetooth printers'}
-                </p>
-              </div>
-
-              <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3">
-                <p className="text-sm text-yellow-800">
-                  <strong>Note:</strong> Make sure your thermal printer is connected and turned on before printing.
-                </p>
-              </div>
-
-              <div className="flex gap-3 pt-4">
-                <button
-                  onClick={handlePrint}
-                  className="flex-1 bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 font-medium"
-                >
-                  Print Now
-                </button>
-                <button
-                  onClick={() => setShowPrintPreview(false)}
-                  className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 font-medium"
-                >
+              <div className="flex gap-3 mt-6">
+                <Button onClick={() => setShowPrintSettings(false)} variant="secondary" fullWidth>
                   Cancel
-                </button>
+                </Button>
+                <Button onClick={() => confirmSave(true)} variant="primary" fullWidth loading={saving}>
+                  Save & Print
+                </Button>
               </div>
-            </div>
+            </Card>
           </div>
         </div>
       )}
