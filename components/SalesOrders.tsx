@@ -41,7 +41,11 @@ type SalesOrder = {
   created_at: string;
 };
 
-const SalesOrders = () => {
+type SalesOrdersProps = {
+  onNavigate?: (page: string) => void;
+};
+
+const SalesOrders = ({ onNavigate }: SalesOrdersProps = {}) => {
   const { theme } = useTheme();
   const toast = useToast();
   
@@ -518,15 +522,22 @@ const SalesOrders = () => {
         .update({ status: 'converted' })
         .eq('id', convertingOrder.id);
 
-      toast.success('Opening Sales Invoice', 'Please complete the invoice with payment details.');
+      toast.success('Opening Sales Invoice', 'Loading order data...');
       setShowConvertConfirm(false);
       setConvertingOrder(null);
       await loadOrders();
 
-      // Inform user to go to Sales Invoice page
-      setTimeout(() => {
-        toast.info('Next Step', 'Please go to Sales Invoice page to complete the invoice.');
-      }, 1000);
+      // Navigate to Sales Invoice page
+      if (onNavigate) {
+        setTimeout(() => {
+          onNavigate('sales');
+        }, 500);
+      } else {
+        // Fallback message if navigation not available
+        setTimeout(() => {
+          toast.info('Next Step', 'Please go to Sales Invoice page to complete the invoice.');
+        }, 1000);
+      }
     } catch (err: any) {
       console.error('Error converting order:', err);
       toast.error('Failed to convert', err.message || 'Could not convert order.');
