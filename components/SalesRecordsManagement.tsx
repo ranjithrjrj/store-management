@@ -4,6 +4,7 @@
 'use client';
 import React, { useState, useEffect } from 'react';
 import { FileText, Search, X, Eye, Edit2, Trash2, Printer, ShoppingCart } from 'lucide-react';
+import { printInvoice } from '@/lib/thermalPrinter';
 import { supabase } from '@/lib/supabase';
 import { Button, Card, Input, Badge, EmptyState, LoadingSpinner, ConfirmDialog, useToast } from '@/components/ui';
 import { useTheme } from '@/contexts/ThemeContext';
@@ -53,10 +54,32 @@ const SalesRecordsManagement = () => {
   const [deletingInvoice, setDeletingInvoice] = useState<{ id: string; invoice_number: string } | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadingItems, setLoadingItems] = useState(false);
+  const [showPrintSettings, setShowPrintSettings] = useState(false);
+  const [printingInvoice, setPrintingInvoice] = useState<SalesInvoice | null>(null);
+  const [printSettings, setPrintSettings] = useState({
+    width: '80mm' as '58mm' | '80mm',
+    method: 'iframe' as 'browser' | 'iframe' | 'bluetooth' | 'preview'
+  });
+  const [storeSettings, setStoreSettings] = useState<any>(null);
+  const [printing, setPrinting] = useState(false);
 
   useEffect(() => {
     loadInvoices();
+    loadStoreSettings();
   }, []);
+
+  async function loadStoreSettings() {
+    try {
+      const { data } = await supabase
+        .from('store_settings')
+        .select('*')
+        .limit(1);
+      
+      setStoreSettings(data?.[0] || null);
+    } catch (err) {
+      console.error('Error loading store settings:', err);
+    }
+  }
 
   async function loadInvoices() {
     try {
@@ -109,6 +132,79 @@ const SalesRecordsManagement = () => {
     setViewingInvoice(invoice);
     setShowViewModal(true);
     await loadInvoiceItems(invoice.id);
+  };
+
+  const handleReprint = (invoice: SalesInvoice) => {
+    setPrintingInvoice(invoice);
+    setShowPrintSettings(true);
+  };
+
+  const handleConfirmPrint = async () => {
+    if (!printingInvoice || !storeSettings) return;
+
+    try {
+      setPrinting(true);
+      
+      // Load items
+      const { data: items } = await supabase
+        .from('sales_invoice_items')
+        .select(`
+          *,
+          item:items(name)
+        `)
+        .eq('invoice_id', printingInvoice.id);
+
+      if (!items || items.length === 0) {
+        throw new Error('No items found');
+      }
+
+      await printInvoice(
+        {
+          store_name: storeSettings.store_name,
+          address: storeSettings.address,
+          city: storeSettings.city,
+          state: storeSettings.state,
+          pincode: storeSettings.pincode,
+          phone: storeSettings.phone,
+          gstin: storeSettings.gstin
+        },
+        {
+          invoice_number: printingInvoice.invoice_number,
+          invoice_date: printingInvoice.invoice_date,
+          customer_name: printingInvoice.customer_name,
+          customer_phone: printingInvoice.customer_phone,
+          customer_gstin: printingInvoice.customer_gstin,
+          items: items.map(item => ({
+            name: item.item?.name || 'Unknown Item',
+            quantity: item.quantity,
+            rate: item.rate,
+            gst_rate: item.gst_rate,
+            total: item.total_amount
+          })),
+          subtotal: printingInvoice.subtotal,
+          discount_amount: printingInvoice.discount_amount,
+          cgst_amount: printingInvoice.cgst_amount,
+          sgst_amount: printingInvoice.sgst_amount,
+          igst_amount: printingInvoice.igst_amount,
+          round_off: printingInvoice.round_off,
+          total_amount: printingInvoice.total_amount,
+          payment_method: printingInvoice.payment_method
+        },
+        {
+          width: printSettings.width,
+          method: printSettings.method
+        }
+      );
+
+      toast.success('Printing!', `Invoice ${printingInvoice.invoice_number} sent to printer.`);
+      setShowPrintSettings(false);
+      setPrintingInvoice(null);
+    } catch (err: any) {
+      console.error('Error printing:', err);
+      toast.error('Print failed', err.message || 'Could not print invoice.');
+    } finally {
+      setPrinting(false);
+    }
   };
 
   const handleDeleteClick = (invoice: SalesInvoice) => {
@@ -246,6 +342,13 @@ const SalesRecordsManagement = () => {
                       title="View"
                     >
                       <Eye size={18} />
+                    </button>
+                    <button
+                      onClick={() => handleReprint(invoice)}
+                      className="p-2.5 rounded-lg bg-blue-50 text-blue-600 hover:bg-blue-100 transition-colors"
+                      title="Reprint"
+                    >
+                      <Printer size={18} />
                     </button>
                     <button
                       onClick={() => handleDeleteClick(invoice)}
@@ -444,6 +547,73 @@ const SalesRecordsManagement = () => {
           cancelText="Cancel"
           variant="danger"
         />
+      )}
+
+      {/* Print Settings Modal */}
+      {showPrintSettings && printingInvoice && (
+        <div className="fixed inset-0 bg-black/20 backdrop-blur-sm flex items-start justify-center p-4 z-50 overflow-y-auto">
+          <div className="min-h-screen w-full flex items-center justify-center py-8">
+            <Card className="w-full max-w-md">
+              <div className="flex items-center justify-between mb-6">
+                <h3 className="text-xl font-bold text-slate-900">Print Settings</h3>
+                <button
+                  onClick={() => setShowPrintSettings(false)}
+                  className="p-2 rounded-lg hover:bg-slate-100"
+                >
+                  <X size={24} />
+                </button>
+              </div>
+
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-semibold text-slate-700 mb-2">Paper Width</label>
+                  <div className="flex gap-3">
+                    <button
+                      onClick={() => setPrintSettings({ ...printSettings, width: '58mm' })}
+                      className={`flex-1 px-4 py-3 rounded-xl font-medium ${
+                        printSettings.width === '58mm'
+                          ? 'bg-blue-600 text-white'
+                          : 'bg-slate-100 text-slate-600'
+                      }`}
+                    >
+                      58mm
+                    </button>
+                    <button
+                      onClick={() => setPrintSettings({ ...printSettings, width: '80mm' })}
+                      className={`flex-1 px-4 py-3 rounded-xl font-medium ${
+                        printSettings.width === '80mm'
+                          ? 'bg-blue-600 text-white'
+                          : 'bg-slate-100 text-slate-600'
+                      }`}
+                    >
+                      80mm
+                    </button>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-semibold text-slate-700 mb-2">Print Method</label>
+                  <Select
+                    value={printSettings.method}
+                    onChange={(e) => setPrintSettings({ ...printSettings, method: e.target.value as any })}
+                  >
+                    <option value="iframe">Browser Print (Recommended)</option>
+                    <option value="preview">Preview Only</option>
+                  </Select>
+                </div>
+              </div>
+
+              <div className="flex gap-3 mt-6">
+                <Button onClick={() => setShowPrintSettings(false)} variant="secondary" fullWidth>
+                  Cancel
+                </Button>
+                <Button onClick={handleConfirmPrint} variant="primary" fullWidth loading={printing}>
+                  Print
+                </Button>
+              </div>
+            </Card>
+          </div>
+        </div>
       )}
     </div>
   );
