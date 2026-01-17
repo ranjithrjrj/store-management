@@ -42,7 +42,7 @@ type SalesOrder = {
 };
 
 type SalesOrdersProps = {
-  onNavigate?: (page: string) => void;
+  onNavigate?: (page: 'sales') => void;
 };
 
 const SalesOrders = ({ onNavigate }: SalesOrdersProps = {}) => {
