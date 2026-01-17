@@ -18,6 +18,7 @@ import PurchaseOrders from '@/components/PurchaseOrders';
 import PurchaseRecording from '@/components/PurchaseRecording';
 import PurchaseRecordsManagement from '@/components/PurchaseRecordsManagement';
 import PurchasePayments from '@/components/PurchasePayments';
+import SalesOrders from '@/components/SalesOrders';
 import SalesInvoice from '@/components/SalesInvoice';
 import SalesRecordsManagement from '@/components/SalesRecordsManagement';
 import ReturnsManagement from '@/components/ReturnsManagement';
@@ -28,7 +29,7 @@ import Reports from '@/components/Reports';
 import TaxReports from '@/components/TaxReports';
 import Settings from '@/components/Settings';
 
-type Page = 'dashboard' | 'inventory' | 'items' | 'categories' | 'units' | 'purchase-order' | 'purchase-record' | 'purchase-records' | 'purchase-payments' | 'sales' | 'sales-records' | 'returns' | 'expenses' | 'vendors' | 'customers' | 'reports' | 'tax-reports' | 'settings';
+type Page = 'dashboard' | 'inventory' | 'items' | 'categories' | 'units' | 'purchase-order' | 'purchase-record' | 'purchase-records' | 'purchase-payments' | 'sales-orders' | 'sales' | 'sales-records' | 'returns' | 'expenses' | 'vendors' | 'customers' | 'reports' | 'tax-reports' | 'settings';
 
 const AppContent = () => {
   const { theme } = useTheme();
@@ -121,6 +122,7 @@ const AppContent = () => {
       icon: FileText,
       isSection: true,
       submenu: [
+        { id: 'sales-orders', label: 'Sales Orders' },
         { id: 'sales', label: 'Sales Invoice' },
         { id: 'sales-records', label: 'Sales Records' },
         { id: 'returns', label: 'Returns & Refunds' }
@@ -165,6 +167,7 @@ const AppContent = () => {
       case 'purchase-record': return <PurchaseRecording />;
       case 'purchase-records': return <PurchaseRecordsManagement />;
       case 'purchase-payments': return <PurchasePayments />;
+      case 'sales-orders': return <SalesOrders />;
       case 'sales': return <SalesInvoice />;
       case 'sales-records': return <SalesRecordsManagement />;
       case 'returns': return <ReturnsManagement />;
