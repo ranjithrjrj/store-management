@@ -52,7 +52,58 @@ const SalesInvoice = () => {
 
   useEffect(() => {
     loadData();
+    checkForConvertingOrder();
   }, []);
+
+  async function checkForConvertingOrder() {
+    try {
+      const convertingOrderData = sessionStorage.getItem('converting_order');
+      if (convertingOrderData) {
+        const orderData = JSON.parse(convertingOrderData);
+        
+        // Pre-fill form with order data
+        setFormData({
+          customer_id: '',
+          customer_name: orderData.customer_name,
+          customer_phone: orderData.customer_phone,
+          customer_gstin: orderData.customer_gstin,
+          customer_state: orderData.customer_state,
+          invoice_date: new Date().toISOString().split('T')[0],
+          payment_method: 'cash',
+          notes: orderData.notes
+        });
+
+        setIsIntrastate(orderData.customer_state === 'Tamil Nadu');
+
+        // Load items with current stock
+        const itemsWithStock = await Promise.all(
+          orderData.items.map(async (item: any) => {
+            const stock = await getItemStock(item.item_id);
+            return {
+              id: Date.now().toString() + Math.random(),
+              item_id: item.item_id,
+              item_name: item.item_name,
+              available_stock: stock,
+              quantity: item.quantity,
+              rate: item.rate,
+              discount_percent: item.discount_percent,
+              gst_rate: item.gst_rate,
+              amount: (item.quantity * item.rate) - ((item.quantity * item.rate * item.discount_percent) / 100)
+            };
+          })
+        );
+
+        setItems(itemsWithStock);
+
+        // Clear from sessionStorage
+        sessionStorage.removeItem('converting_order');
+
+        toast.success('Order loaded!', `Order ${orderData.order_number} data has been loaded. Please review and complete the invoice.`);
+      }
+    } catch (err) {
+      console.error('Error loading converting order:', err);
+    }
+  }
 
   async function loadData() {
     try {
