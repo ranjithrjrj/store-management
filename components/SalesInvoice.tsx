@@ -266,6 +266,12 @@ const SalesInvoice = () => {
       return;
     }
 
+    // Validate credit sales require registered customer
+    if (formData.payment_method === 'credit' && !formData.customer_id) {
+      toast.warning('Credit sales require registered customer', 'Please select a registered customer for credit sales.');
+      return;
+    }
+
     try {
       setSaving(true);
       setShowPrintSettings(false);
@@ -289,7 +295,7 @@ const SalesInvoice = () => {
         round_off: totals.roundOff,
         total_amount: totals.total,
         payment_method: formData.payment_method,
-        payment_status: 'paid',
+        payment_status: formData.payment_method === 'credit' ? 'credit' : 'paid',
         is_printed: true,
         notes: formData.notes
       };
@@ -328,6 +334,26 @@ const SalesInvoice = () => {
         .insert(invoiceItems);
 
       if (itemsError) throw itemsError;
+
+      // Record payment (for all payment types)
+      if (formData.payment_method !== 'credit') {
+        const paymentNumber = `SP-${Date.now()}`;
+        const { error: paymentError } = await supabase
+          .from('sales_payments')
+          .insert({
+            payment_number: paymentNumber,
+            invoice_id: invoice.id,
+            payment_date: formData.invoice_date,
+            amount: totals.total,
+            payment_method: formData.payment_method,
+            notes: 'Full payment on invoice creation'
+          });
+
+        if (paymentError) {
+          console.error('Error recording payment:', paymentError);
+          // Don't fail the whole transaction if payment record fails
+        }
+      }
 
       // Reduce inventory
       for (const item of items) {
