@@ -26,6 +26,7 @@ type SalesOrder = {
   customer_id?: string;
   customer_name: string;
   customer_phone?: string;
+  customer_gstin?: string;
   customer_state: string;
   order_date: string;
   expected_delivery?: string;
@@ -65,6 +66,7 @@ const SalesOrders = () => {
   const [formData, setFormData] = useState({
     customer_name: '',
     customer_phone: '',
+    customer_gstin: '',
     customer_state: 'Tamil Nadu',
     order_date: new Date().toISOString().split('T')[0],
     expected_delivery: '',
@@ -168,6 +170,7 @@ const SalesOrders = () => {
         ...formData,
         customer_name: customer.name,
         customer_phone: customer.phone || '',
+        customer_gstin: customer.gstin || '',
         customer_state: customer.state || 'Tamil Nadu'
       });
       setIsIntrastate(customer.state === 'Tamil Nadu');
@@ -259,6 +262,7 @@ const SalesOrders = () => {
     setFormData({
       customer_name: '',
       customer_phone: '',
+      customer_gstin: '',
       customer_state: 'Tamil Nadu',
       order_date: new Date().toISOString().split('T')[0],
       expected_delivery: '',
@@ -275,6 +279,7 @@ const SalesOrders = () => {
     setFormData({
       customer_name: order.customer_name,
       customer_phone: order.customer_phone || '',
+      customer_gstin: order.customer_gstin || '',
       customer_state: order.customer_state,
       order_date: order.order_date,
       expected_delivery: order.expected_delivery || '',
@@ -327,6 +332,7 @@ const SalesOrders = () => {
           .update({
             customer_name: formData.customer_name,
             customer_phone: formData.customer_phone || null,
+            customer_gstin: formData.customer_gstin || null,
             customer_state: formData.customer_state,
             order_date: formData.order_date,
             expected_delivery: formData.expected_delivery || null,
@@ -375,6 +381,7 @@ const SalesOrders = () => {
             order_number: orderNumber,
             customer_name: formData.customer_name,
             customer_phone: formData.customer_phone || null,
+            customer_gstin: formData.customer_gstin || null,
             customer_state: formData.customer_state,
             order_date: formData.order_date,
             expected_delivery: formData.expected_delivery || null,
@@ -821,6 +828,12 @@ const SalesOrders = () => {
                       onChange={(e) => setFormData({ ...formData, customer_phone: e.target.value })}
                     />
                     <Input
+                      label="GSTIN"
+                      placeholder="Optional"
+                      value={formData.customer_gstin}
+                      onChange={(e) => setFormData({ ...formData, customer_gstin: e.target.value })}
+                    />
+                    <Input
                       label="State"
                       placeholder="State"
                       value={formData.customer_state}
@@ -1034,6 +1047,12 @@ const SalesOrders = () => {
                       <div>
                         <p className="text-slate-500 font-medium">Phone</p>
                         <p className="text-slate-900 font-bold">{viewingOrder.customer_phone}</p>
+                      </div>
+                    )}
+                    {viewingOrder.customer_gstin && (
+                      <div>
+                        <p className="text-slate-500 font-medium">GSTIN</p>
+                        <p className="text-slate-900 font-bold">{viewingOrder.customer_gstin}</p>
                       </div>
                     )}
                     <div>
