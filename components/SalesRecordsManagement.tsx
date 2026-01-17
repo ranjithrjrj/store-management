@@ -46,7 +46,6 @@ const SalesRecordsManagement = () => {
   
   const [invoices, setInvoices] = useState<SalesInvoice[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
-  const [activeTab, setActiveTab] = useState<'saved' | 'printed'>('saved');
   const [showViewModal, setShowViewModal] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [viewingInvoice, setViewingInvoice] = useState<SalesInvoice | null>(null);
@@ -113,10 +112,6 @@ const SalesRecordsManagement = () => {
   };
 
   const handleDeleteClick = (invoice: SalesInvoice) => {
-    if (invoice.is_printed) {
-      toast.warning('Cannot delete', 'Printed invoices cannot be deleted. Use Returns page instead.');
-      return;
-    }
     setDeletingInvoice({ id: invoice.id, invoice_number: invoice.invoice_number });
     setShowDeleteConfirm(true);
   };
@@ -148,13 +143,8 @@ const SalesRecordsManagement = () => {
       invoice.invoice_number.toLowerCase().includes(searchTerm.toLowerCase()) ||
       invoice.customer_name.toLowerCase().includes(searchTerm.toLowerCase());
     
-    const matchesTab = activeTab === 'saved' ? !invoice.is_printed : invoice.is_printed;
-    
-    return matchesSearch && matchesTab;
+    return matchesSearch;
   });
-
-  const savedCount = invoices.filter(i => !i.is_printed).length;
-  const printedCount = invoices.filter(i => i.is_printed).length;
 
   if (loading) {
     return (
@@ -183,32 +173,8 @@ const SalesRecordsManagement = () => {
           </div>
         </div>
 
-        {/* Tabs */}
+        {/* Search */}
         <Card padding="md">
-          <div className="flex gap-3 mb-4">
-            <button
-              onClick={() => setActiveTab('saved')}
-              className={`flex-1 px-4 py-3 rounded-xl font-medium transition-all ${
-                activeTab === 'saved'
-                  ? 'bg-emerald-600 text-white shadow-md'
-                  : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-              }`}
-            >
-              Saved Invoices ({savedCount})
-            </button>
-            <button
-              onClick={() => setActiveTab('printed')}
-              className={`flex-1 px-4 py-3 rounded-xl font-medium transition-all ${
-                activeTab === 'printed'
-                  ? 'bg-emerald-600 text-white shadow-md'
-                  : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-              }`}
-            >
-              <Printer size={18} className="inline mr-2" />
-              Printed Invoices ({printedCount})
-            </button>
-          </div>
-
           <Input
             placeholder="Search by invoice number or customer..."
             value={searchTerm}
@@ -226,12 +192,12 @@ const SalesRecordsManagement = () => {
         {filteredInvoices.length === 0 ? (
           <Card>
             <EmptyState
-              icon={activeTab === 'saved' ? <FileText size={64} /> : <Printer size={64} />}
-              title={searchTerm ? "No invoices found" : `No ${activeTab} invoices yet`}
+              icon={<FileText size={64} />}
+              title={searchTerm ? "No invoices found" : "No invoices yet"}
               description={
                 searchTerm
                   ? "Try adjusting your search"
-                  : `${activeTab === 'saved' ? 'Saved' : 'Printed'} invoices will appear here`
+                  : "Sales invoices will appear here"
               }
             />
           </Card>
@@ -242,20 +208,13 @@ const SalesRecordsManagement = () => {
                 <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                   <div className="flex-1">
                     <div className="flex items-center gap-3 mb-3">
-                      <div className={`p-2 rounded-lg ${invoice.is_printed ? 'bg-blue-50' : 'bg-emerald-50'}`}>
-                        {invoice.is_printed ? (
-                          <Printer className="text-blue-600" size={20} />
-                        ) : (
-                          <FileText className="text-emerald-600" size={20} />
-                        )}
+                      <div className="p-2 bg-emerald-50 rounded-lg">
+                        <FileText className="text-emerald-600" size={20} />
                       </div>
                       <div>
                         <h3 className="font-bold text-slate-900">{invoice.invoice_number}</h3>
                         <p className="text-sm text-slate-600">{invoice.customer_name}</p>
                       </div>
-                      {invoice.is_printed && (
-                        <Badge variant="primary" size="sm">Printed</Badge>
-                      )}
                     </div>
                     
                     <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
@@ -288,35 +247,18 @@ const SalesRecordsManagement = () => {
                     >
                       <Eye size={18} />
                     </button>
-                    {!invoice.is_printed && (
-                      <button
-                        onClick={() => handleDeleteClick(invoice)}
-                        className="p-2.5 rounded-lg bg-red-50 text-red-600 hover:bg-red-100 transition-colors"
-                        title="Delete"
-                      >
-                        <Trash2 size={18} />
-                      </button>
-                    )}
+                    <button
+                      onClick={() => handleDeleteClick(invoice)}
+                      className="p-2.5 rounded-lg bg-red-50 text-red-600 hover:bg-red-100 transition-colors"
+                      title="Delete"
+                    >
+                      <Trash2 size={18} />
+                    </button>
                   </div>
                 </div>
               </Card>
             ))}
           </div>
-        )}
-
-        {/* Info Note for Printed Invoices */}
-        {activeTab === 'printed' && filteredInvoices.length > 0 && (
-          <Card padding="md">
-            <div className="flex items-start gap-3">
-              <div className="p-2 bg-blue-50 rounded-lg">
-                <FileText className="text-blue-600" size={18} />
-              </div>
-              <div className="text-sm text-slate-600">
-                <p className="font-semibold text-slate-900 mb-1">Note about printed invoices:</p>
-                <p>Printed invoices can only be viewed. To edit or delete, please use the Returns & Refunds page to process returns.</p>
-              </div>
-            </div>
-          </Card>
         )}
       </div>
 
@@ -497,7 +439,7 @@ const SalesRecordsManagement = () => {
           }}
           onConfirm={handleDeleteConfirm}
           title="Delete Invoice"
-          message={`Are you sure you want to delete invoice "${deletingInvoice.invoice_number}"? This action cannot be undone.`}
+          message={`Are you sure you want to delete invoice "${deletingInvoice.invoice_number}"? This will permanently remove the invoice. For customer returns, please use the Returns page instead. This action cannot be undone.`}
           confirmText="Delete"
           cancelText="Cancel"
           variant="danger"
