@@ -474,21 +474,111 @@ const SalesOrders = () => {
     try {
       setSaving(true);
 
+      // Load order items first
+      const { data: orderItemsData } = await supabase
+        .from('sales_order_items')
+        .select(`
+          *,
+          item:items(name, gst_rate)
+        `)
+        .eq('order_id', convertingOrder.id);
+
+      if (!orderItemsData || orderItemsData.length === 0) {
+        throw new Error('No items found in order');
+      }
+
+      // Create invoice
+      const invoiceNumber = `INV-${Date.now()}`;
+      const isIntrastate = convertingOrder.customer_state === 'Tamil Nadu';
+
+      const { data: invoice, error: invoiceError } = await supabase
+        .from('sales_invoices')
+        .insert({
+          invoice_number: invoiceNumber,
+          customer_id: convertingOrder.customer_id,
+          customer_name: convertingOrder.customer_name,
+          customer_phone: convertingOrder.customer_phone,
+          customer_state: convertingOrder.customer_state,
+          invoice_date: new Date().toISOString().split('T')[0],
+          subtotal: convertingOrder.subtotal,
+          discount_amount: convertingOrder.discount_amount,
+          cgst_amount: convertingOrder.cgst_amount,
+          sgst_amount: convertingOrder.sgst_amount,
+          igst_amount: convertingOrder.igst_amount,
+          round_off: 0,
+          total_amount: convertingOrder.total_amount,
+          payment_method: 'cash',
+          payment_status: 'pending',
+          is_printed: false,
+          notes: `Converted from ${convertingOrder.order_number}`
+        })
+        .select()
+        .single();
+
+      if (invoiceError) throw invoiceError;
+
+      // Create invoice items
+      const invoiceItems = orderItemsData.map(item => {
+        const discountAmount = (item.quantity * item.rate * item.discount_percent) / 100;
+        const taxableAmount = (item.quantity * item.rate) - discountAmount;
+        const gstAmount = (taxableAmount * item.gst_rate) / 100;
+
+        return {
+          invoice_id: invoice.id,
+          item_id: item.item_id,
+          quantity: item.quantity,
+          rate: item.rate,
+          discount_percent: item.discount_percent,
+          discount_amount: discountAmount,
+          taxable_amount: taxableAmount,
+          gst_rate: item.gst_rate,
+          cgst_amount: isIntrastate ? gstAmount / 2 : 0,
+          sgst_amount: isIntrastate ? gstAmount / 2 : 0,
+          igst_amount: !isIntrastate ? gstAmount : 0,
+          total_amount: item.total_amount
+        };
+      });
+
+      const { error: itemsError } = await supabase
+        .from('sales_invoice_items')
+        .insert(invoiceItems);
+
+      if (itemsError) throw itemsError;
+
+      // Reduce inventory
+      for (const item of orderItemsData) {
+        let remaining = item.quantity;
+        const { data: batches } = await supabase
+          .from('inventory_batches')
+          .select('*')
+          .eq('item_id', item.item_id)
+          .gt('quantity', 0)
+          .order('expiry_date', { ascending: true, nullsFirst: false });
+
+        for (const batch of batches || []) {
+          if (remaining <= 0) break;
+          const deduct = Math.min(batch.quantity, remaining);
+          await supabase
+            .from('inventory_batches')
+            .update({ quantity: batch.quantity - deduct })
+            .eq('id', batch.id);
+          remaining -= deduct;
+        }
+      }
+
       // Mark order as converted
-      const { error: updateError } = await supabase
+      await supabase
         .from('sales_orders')
         .update({ status: 'converted' })
         .eq('id', convertingOrder.id);
 
-      if (updateError) throw updateError;
-
-      toast.success('Order converted!', 'You can now create the invoice from Sales Invoice page.');
+      toast.success('Order converted!', `Invoice ${invoiceNumber} has been created from order ${convertingOrder.order_number}.`);
       setShowConvertConfirm(false);
       setConvertingOrder(null);
       await loadOrders();
     } catch (err: any) {
       console.error('Error converting order:', err);
-      toast.error('Failed to convert', err.message || 'Could not convert order.');
+      toast.error('Failed to convert', err.message || 'Could not convert order to invoice.');
     } finally {
       setSaving(false);
     }
@@ -1087,8 +1177,8 @@ const SalesOrders = () => {
           }}
           onConfirm={handleConvertConfirm}
           title="Convert to Invoice"
-          message={`Mark order "${convertingOrder.order_number}" as converted? You can then create the invoice from the Sales Invoice page.`}
-          confirmText="Convert"
+          message={`Convert order "${convertingOrder.order_number}" to sales invoice? This will create an invoice, deduct inventory, and mark the order as converted.`}
+          confirmText="Convert to Invoice"
           cancelText="Cancel"
           variant="primary"
         />
