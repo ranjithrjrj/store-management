@@ -126,7 +126,7 @@ const AppContent = () => {
         { id: 'sales-orders', label: 'Sales Orders' },
         { id: 'sales', label: 'Sales Invoice' },
         { id: 'sales-records', label: 'Sales Records' },
-        { id: 'credit-payments', label: 'Credit Payments' },
+        { id: 'credit-payments', label: 'Credits & Payments' },
         { id: 'returns', label: 'Returns & Refunds' }
       ]
     },
@@ -357,4 +357,4 @@ const ComingSoon = ({ page }: { page: string }) => {
   );
 };
 
-export default App;
+export default App
