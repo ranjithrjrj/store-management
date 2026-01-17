@@ -167,7 +167,7 @@ const AppContent = () => {
       case 'purchase-record': return <PurchaseRecording />;
       case 'purchase-records': return <PurchaseRecordsManagement />;
       case 'purchase-payments': return <PurchasePayments />;
-      case 'sales-orders': return <SalesOrders />;
+      case 'sales-orders': return <SalesOrders onNavigate={handlePageChange} />;
       case 'sales': return <SalesInvoice />;
       case 'sales-records': return <SalesRecordsManagement />;
       case 'returns': return <ReturnsManagement />;
