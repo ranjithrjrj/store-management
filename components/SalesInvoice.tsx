@@ -224,7 +224,7 @@ const SalesInvoice = () => {
 
       const invoiceData = {
         invoice_number: invoiceNumber,
-        customer_id: customerType === 'registered' ? formData.customer_id : null,
+        customer_id: formData.customer_id || null,
         customer_name: formData.customer_name,
         customer_phone: formData.customer_phone || null,
         customer_gstin: formData.customer_gstin || null,
