@@ -205,18 +205,6 @@ const SalesInvoice = () => {
     };
   };
 
-  const handleSaveInvoice = () => {
-    if (items.length === 0) {
-      toast.warning('Add items', 'Please add at least one item.');
-      return;
-    }
-    if (!formData.customer_name.trim()) {
-      toast.warning('Customer name required', 'Please enter customer name.');
-      return;
-    }
-    setShowSaveConfirm(true);
-  };
-
   const confirmSave = async () => {
     if (items.length === 0) {
       toast.warning('Add items', 'Please add at least one item.');
