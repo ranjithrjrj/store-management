@@ -21,6 +21,7 @@ import PurchasePayments from '@/components/PurchasePayments';
 import SalesOrders from '@/components/SalesOrders';
 import SalesInvoice from '@/components/SalesInvoice';
 import SalesRecordsManagement from '@/components/SalesRecordsManagement';
+import CreditPayments from '@/components/CreditPayments';
 import ReturnsManagement from '@/components/ReturnsManagement';
 import ExpensesManagement from '@/components/ExpensesManagement';
 import VendorsManagement from '@/components/VendorsManagement';
@@ -29,7 +30,7 @@ import Reports from '@/components/Reports';
 import TaxReports from '@/components/TaxReports';
 import Settings from '@/components/Settings';
 
-type Page = 'dashboard' | 'inventory' | 'items' | 'categories' | 'units' | 'purchase-order' | 'purchase-record' | 'purchase-records' | 'purchase-payments' | 'sales-orders' | 'sales' | 'sales-records' | 'returns' | 'expenses' | 'vendors' | 'customers' | 'reports' | 'tax-reports' | 'settings';
+type Page = 'dashboard' | 'inventory' | 'items' | 'categories' | 'units' | 'purchase-order' | 'purchase-record' | 'purchase-records' | 'purchase-payments' | 'sales-orders' | 'sales' | 'sales-records' | 'credit-payments' | 'returns' | 'expenses' | 'vendors' | 'customers' | 'reports' | 'tax-reports' | 'settings';
 
 const AppContent = () => {
   const { theme } = useTheme();
@@ -125,6 +126,7 @@ const AppContent = () => {
         { id: 'sales-orders', label: 'Sales Orders' },
         { id: 'sales', label: 'Sales Invoice' },
         { id: 'sales-records', label: 'Sales Records' },
+        { id: 'credit-payments', label: 'Credit Payments' },
         { id: 'returns', label: 'Returns & Refunds' }
       ]
     },
@@ -170,6 +172,7 @@ const AppContent = () => {
       case 'sales-orders': return <SalesOrders onNavigate={handlePageChange} />;
       case 'sales': return <SalesInvoice />;
       case 'sales-records': return <SalesRecordsManagement />;
+      case 'credit-payments': return <CreditPayments />;
       case 'returns': return <ReturnsManagement />;
       case 'expenses': return <ExpensesManagement />;
       case 'vendors': return <VendorsManagement />;
