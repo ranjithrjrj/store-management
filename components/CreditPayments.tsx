@@ -190,7 +190,7 @@ const CreditPayments = () => {
 
       const paymentNumber = `CP-${Date.now()}`;
 
-      // Insert payment
+      // Insert payment to credit_payments
       const { error: paymentError } = await supabase
         .from('credit_payments')
         .insert({
@@ -204,6 +204,24 @@ const CreditPayments = () => {
         });
 
       if (paymentError) throw paymentError;
+
+      // Also record in sales_payments for unified tracking
+      const { error: salesPaymentError } = await supabase
+        .from('sales_payments')
+        .insert({
+          payment_number: paymentNumber,
+          invoice_id: selectedInvoice.id,
+          payment_date: paymentForm.payment_date,
+          amount: paymentForm.amount,
+          payment_method: paymentForm.payment_method,
+          reference_number: paymentForm.reference_number || null,
+          notes: paymentForm.notes || null
+        });
+
+      if (salesPaymentError) {
+        console.error('Error recording to sales_payments:', salesPaymentError);
+        // Don't fail the transaction
+      }
 
       // Calculate new payment status
       const newPaidAmount = selectedInvoice.paid_amount + paymentForm.amount;
