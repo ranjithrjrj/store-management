@@ -15,7 +15,7 @@ type SalesInvoice = {
   customer_name: string;
   customer_phone?: string;
   customer_gstin?: string;
-  customer_state: string;
+  place_of_supply?: string;
   invoice_date: string;
   subtotal: number;
   discount_amount: number;
@@ -409,10 +409,12 @@ const SalesRecordsManagement = () => {
                         <p className="text-slate-900 font-bold">{viewingInvoice.customer_gstin}</p>
                       </div>
                     )}
-                    <div>
-                      <p className="text-slate-500 font-medium">State</p>
-                      <p className="text-slate-900 font-bold">{viewingInvoice.customer_state}</p>
-                    </div>
+                    {viewingInvoice.place_of_supply && (
+                      <div>
+                        <p className="text-slate-500 font-medium">Place of Supply</p>
+                        <p className="text-slate-900 font-bold">{viewingInvoice.place_of_supply}</p>
+                      </div>
+                    )}
                     <div>
                       <p className="text-slate-500 font-medium">Invoice Date</p>
                       <p className="text-slate-900 font-bold">{new Date(viewingInvoice.invoice_date).toLocaleDateString()}</p>
