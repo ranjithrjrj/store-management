@@ -46,7 +46,7 @@ export class ThermalPrinter {
   
   constructor(width: '58mm' | '80mm' = '80mm') {
     this.width = width;
-    this.maxChars = width === '58mm' ? 32 : 48;
+    this.maxChars = width === '58mm' ? 32 : 42;
   }
 
   // Format text to fit printer width
@@ -108,16 +108,18 @@ export class ThermalPrinter {
     output += this.separator('=') + '\n';
 
     // Items header
-    output += 'ITEM' + ' '.repeat(this.maxChars - 22) + 'QTY   RATE  TOTAL\n';
+    const headerPadding = this.maxChars - 20;
+    output += 'ITEM' + ' '.repeat(headerPadding) + 'QTY  RATE TOTAL\n';
     output += this.separator('-') + '\n';
 
     // Items
     invoice.items.forEach(item => {
-      const itemLine = item.name.substring(0, this.maxChars - 22);
+      const maxItemLen = this.maxChars - 18;
+      const itemLine = item.name.substring(0, maxItemLen);
       const qtyStr = item.quantity.toString().padStart(3);
-      const rateStr = item.rate.toFixed(2).padStart(6);
-      const totalStr = item.total.toFixed(2).padStart(7);
-      output += itemLine + ' '.repeat(this.maxChars - itemLine.length - 17) + qtyStr + rateStr + totalStr + '\n';
+      const rateStr = item.rate.toFixed(0).padStart(5);
+      const totalStr = item.total.toFixed(0).padStart(6);
+      output += itemLine + ' '.repeat(this.maxChars - itemLine.length - 15) + qtyStr + ' ' + rateStr + ' ' + totalStr + '\n';
       
       if (item.gst_rate > 0) {
         output += `  (GST ${item.gst_rate}%)\n`;
