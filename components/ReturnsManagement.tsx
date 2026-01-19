@@ -183,6 +183,29 @@ const ReturnsManagement = () => {
 
   const handleView = async (returnRecord: SalesReturn) => {
     setViewingReturn(returnRecord);
+    
+    // Load return items
+    try {
+      const { data: returnItems } = await supabase
+        .from('sales_return_items')
+        .select('*, item:items(name, unit:units(abbreviation))')
+        .eq('return_id', returnRecord.id);
+      
+      setReturnItems(returnItems?.map(item => ({
+        id: item.id,
+        item_id: item.item_id,
+        item_name: item.item?.name || 'Unknown',
+        original_quantity: 0,
+        return_quantity: item.quantity,
+        rate: item.rate,
+        gst_rate: item.gst_rate,
+        discount_percent: item.discount_percent,
+        amount: item.total_amount
+      })) || []);
+    } catch (err) {
+      console.error('Error loading return items:', err);
+    }
+    
     setShowViewModal(true);
   };
 
@@ -1301,6 +1324,33 @@ This action cannot be undone.`}
                     <div className="mt-4">
                       <p className="text-slate-600 text-sm">Notes</p>
                       <p className="text-slate-900 mt-1 italic">{viewingReturn.notes}</p>
+                    </div>
+                  )}
+                </div>
+
+                {/* Returned Items */}
+                <div className="pt-6 border-t border-slate-200">
+                  <h4 className="font-semibold text-slate-900 mb-4">Returned Items</h4>
+                  {returnItems.length === 0 ? (
+                    <p className="text-sm text-slate-500 italic py-4 text-center bg-slate-50 rounded-lg">
+                      No items loaded
+                    </p>
+                  ) : (
+                    <div className="space-y-2">
+                      {returnItems.filter(item => item.return_quantity > 0).map((item) => (
+                        <div key={item.id} className="flex items-center justify-between p-3 bg-slate-50 rounded-lg text-sm">
+                          <div className="flex-1">
+                            <p className="font-medium text-slate-900">{item.item_name}</p>
+                            <p className="text-slate-600 text-xs mt-0.5">
+                              Qty: {item.return_quantity} @ ₹{item.rate} • GST: {item.gst_rate}%
+                              {item.discount_percent > 0 && ` • Discount: ${item.discount_percent}%`}
+                            </p>
+                          </div>
+                          <div className="text-right">
+                            <p className="font-semibold text-slate-900">₹{item.amount.toFixed(2)}</p>
+                          </div>
+                        </div>
+                      ))}
                     </div>
                   )}
                 </div>
