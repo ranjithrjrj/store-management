@@ -1,9 +1,9 @@
-// FILE PATH: components/CreditPayments.tsx
-// Credit Payments - Manage customer credit sales and payments
+// FILE PATH: components/CreditsManagement.tsx
+// Credits & Credit Notes Management - Track credit sales and credit notes from returns
 
 'use client';
 import React, { useState, useEffect } from 'react';
-import { DollarSign, Plus, Search, X, Eye, AlertCircle, CreditCard, User, Filter, ArrowUpDown } from 'lucide-react';
+import { CreditCard, Plus, Search, X, Eye, AlertCircle, DollarSign, User, Filter, Calendar } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { Button, Card, Input, Select, Badge, EmptyState, LoadingSpinner, ConfirmDialog, useToast } from '@/components/ui';
 import { useTheme } from '@/contexts/ThemeContext';
@@ -19,6 +19,23 @@ type CreditInvoice = {
   paid_amount: number;
   pending_amount: number;
   payment_status: string;
+  created_at: string;
+};
+
+type CreditNote = {
+  id: string;
+  credit_note_number: string;
+  return_id: string;
+  original_invoice_id?: string;
+  customer_id?: string;
+  customer_name?: string;
+  issue_date: string;
+  amount: number;
+  used_amount: number;
+  balance_amount: number;
+  expiry_date?: string;
+  status: string;
+  notes?: string;
   created_at: string;
 };
 
@@ -38,13 +55,13 @@ type CreditPayment = {
   created_at: string;
 };
 
-const CreditPayments = () => {
+const CreditsManagement = () => {
   const { theme } = useTheme();
   const toast = useToast();
   
-  const [activeTab, setActiveTab] = useState<'invoices' | 'payments'>('invoices');
+  const [activeTab, setActiveTab] = useState<'invoices' | 'credit-notes'>('invoices');
   const [creditInvoices, setCreditInvoices] = useState<CreditInvoice[]>([]);
-  const [allPayments, setAllPayments] = useState<CreditPayment[]>([]);
+  const [creditNotes, setCreditNotes] = useState<CreditNote[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterStatus, setFilterStatus] = useState('all');
   const [showPaymentModal, setShowPaymentModal] = useState(false);
@@ -53,8 +70,10 @@ const CreditPayments = () => {
   const [showFilterModal, setShowFilterModal] = useState(false);
   const [selectedInvoice, setSelectedInvoice] = useState<CreditInvoice | null>(null);
   const [viewingInvoice, setViewingInvoice] = useState<CreditInvoice | null>(null);
+  const [viewingCreditNote, setViewingCreditNote] = useState<CreditNote | null>(null);
   const [invoiceItems, setInvoiceItems] = useState<any[]>([]);
   const [invoicePayments, setInvoicePayments] = useState<CreditPayment[]>([]);
+  const [creditNoteUsage, setCreditNoteUsage] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadingDetails, setLoadingDetails] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -80,9 +99,15 @@ const CreditPayments = () => {
   });
 
   useEffect(() => {
-    loadCreditInvoices();
-    loadAllPayments();
+    loadData();
   }, []);
+
+  async function loadData() {
+    await Promise.all([
+      loadCreditInvoices(),
+      loadCreditNotes()
+    ]);
+  }
 
   async function loadCreditInvoices() {
     try {
@@ -124,20 +149,27 @@ const CreditPayments = () => {
     }
   }
 
-  async function loadAllPayments() {
+  async function loadCreditNotes() {
     try {
       const { data, error } = await supabase
-        .from('sales_payments')
+        .from('credit_notes')
         .select(`
           *,
-          invoice:sales_invoices(invoice_number, customer_name)
+          customer:customers(name)
         `)
-        .order('payment_date', { ascending: false });
+        .order('issue_date', { ascending: false });
 
       if (error) throw error;
-      setAllPayments(data || []);
+
+      const notesWithCustomer = (data || []).map(note => ({
+        ...note,
+        customer_name: note.customer?.name || 'Unknown'
+      }));
+
+      setCreditNotes(notesWithCustomer);
     } catch (err: any) {
-      console.error('Error loading payments:', err);
+      console.error('Error loading credit notes:', err);
+      toast.error('Failed to load', 'Could not load credit notes.');
     }
   }
 
@@ -164,6 +196,28 @@ const CreditPayments = () => {
       setInvoicePayments(paymentsData.data || []);
     } catch (err: any) {
       console.error('Error loading invoice details:', err);
+    } finally {
+      setLoadingDetails(false);
+    }
+  }
+
+  async function loadCreditNoteUsage(creditNoteId: string) {
+    try {
+      setLoadingDetails(true);
+      
+      const { data, error } = await supabase
+        .from('credit_note_usage')
+        .select(`
+          *,
+          invoice:sales_invoices(invoice_number, customer_name)
+        `)
+        .eq('credit_note_id', creditNoteId)
+        .order('usage_date', { ascending: false });
+
+      if (error) throw error;
+      setCreditNoteUsage(data || []);
+    } catch (err: any) {
+      console.error('Error loading credit note usage:', err);
     } finally {
       setLoadingDetails(false);
     }
@@ -233,7 +287,6 @@ const CreditPayments = () => {
 
       if (salesPaymentError) {
         console.error('Error recording to sales_payments:', salesPaymentError);
-        // Don't fail the transaction
       }
 
       // Calculate new payment status
@@ -251,7 +304,6 @@ const CreditPayments = () => {
 
       toast.success('Payment recorded!', `Payment ${paymentNumber} has been saved.`);
       await loadCreditInvoices();
-      await loadAllPayments();
       setShowPaymentModal(false);
       setSelectedInvoice(null);
     } catch (err: any) {
@@ -264,8 +316,16 @@ const CreditPayments = () => {
 
   const handleViewInvoice = async (invoice: CreditInvoice) => {
     setViewingInvoice(invoice);
+    setViewingCreditNote(null);
     setShowViewModal(true);
     await loadInvoiceDetails(invoice.id);
+  };
+
+  const handleViewCreditNote = async (creditNote: CreditNote) => {
+    setViewingCreditNote(creditNote);
+    setViewingInvoice(null);
+    setShowViewModal(true);
+    await loadCreditNoteUsage(creditNote.id);
   };
 
   const filteredInvoices = creditInvoices.filter(invoice => {
@@ -278,41 +338,43 @@ const CreditPayments = () => {
     return matchesSearch && matchesStatus;
   });
 
-  const filteredPayments = allPayments.filter(payment => {
-    const searchLower = searchTerm.toLowerCase();
+  const filteredCreditNotes = creditNotes.filter(note => {
     const matchesSearch = 
-      payment.payment_number.toLowerCase().includes(searchLower) ||
-      payment.invoice?.invoice_number.toLowerCase().includes(searchLower) ||
-      payment.invoice?.customer_name.toLowerCase().includes(searchLower);
+      note.credit_note_number.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (note.customer_name && note.customer_name.toLowerCase().includes(searchTerm.toLowerCase()));
+
+    const matchesStatus = filterStatus === 'all' || note.status === filterStatus;
 
     // Apply advanced filters
-    if (filters.startDate && payment.payment_date < filters.startDate) return false;
-    if (filters.endDate && payment.payment_date > filters.endDate) return false;
-    if (filters.minAmount && payment.amount < parseFloat(filters.minAmount)) return false;
-    if (filters.maxAmount && payment.amount > parseFloat(filters.maxAmount)) return false;
-    if (filters.paymentMethod !== 'all' && payment.payment_method !== filters.paymentMethod) return false;
-    if (filters.customerName && !payment.invoice?.customer_name.toLowerCase().includes(filters.customerName.toLowerCase())) return false;
+    if (filters.startDate && note.issue_date < filters.startDate) return false;
+    if (filters.endDate && note.issue_date > filters.endDate) return false;
+    if (filters.minAmount && note.balance_amount < parseFloat(filters.minAmount)) return false;
+    if (filters.maxAmount && note.balance_amount > parseFloat(filters.maxAmount)) return false;
+    if (filters.customerName && note.customer_name && !note.customer_name.toLowerCase().includes(filters.customerName.toLowerCase())) return false;
 
-    return matchesSearch;
+    return matchesSearch && matchesStatus;
   }).sort((a, b) => {
     if (sortBy === 'date') {
-      const dateA = new Date(a.payment_date).getTime();
-      const dateB = new Date(b.payment_date).getTime();
+      const dateA = new Date(a.issue_date).getTime();
+      const dateB = new Date(b.issue_date).getTime();
       return sortOrder === 'desc' ? dateB - dateA : dateA - dateB;
     } else {
-      return sortOrder === 'desc' ? b.amount - a.amount : a.amount - b.amount;
+      return sortOrder === 'desc' ? b.balance_amount - a.balance_amount : a.balance_amount - b.balance_amount;
     }
   });
 
   const totalCredit = creditInvoices.reduce((sum, inv) => sum + inv.pending_amount, 0);
   const totalPaid = creditInvoices.reduce((sum, inv) => sum + inv.paid_amount, 0);
+  const totalCreditNoteBalance = creditNotes
+    .filter(n => n.status === 'active')
+    .reduce((sum, n) => sum + n.balance_amount, 0);
 
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-slate-50">
         <div className="text-center">
           <LoadingSpinner size="lg" />
-          <p className="mt-4 text-slate-600 font-medium">Loading credit data...</p>
+          <p className="mt-4 text-slate-600 font-medium">Loading credits...</p>
         </div>
       </div>
     );
@@ -328,24 +390,24 @@ const CreditPayments = () => {
               <CreditCard className={theme.classes.textPrimary} size={28} />
             </div>
             <div>
-              <h1 className="text-2xl font-bold text-slate-900">Credits & Payments</h1>
-              <p className="text-slate-600 text-sm mt-0.5">Manage credit sales and track all payments received</p>
+              <h1 className="text-2xl font-bold text-slate-900">Credits & Credit Notes</h1>
+              <p className="text-slate-600 text-sm mt-0.5">Manage credit sales and track credit notes from returns</p>
             </div>
           </div>
 
           {/* Summary Cards */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div className={`${theme.classes.bgPrimaryLight} rounded-xl p-4`}>
-              <p className={`text-sm ${theme.classes.textPrimary} font-medium`}>Total Credit Outstanding</p>
+              <p className={`text-sm ${theme.classes.textPrimary} font-medium`}>Credit Sales Outstanding</p>
               <p className={`text-2xl font-bold ${theme.classes.textPrimary} mt-1`}>₹{totalCredit.toLocaleString()}</p>
             </div>
             <div className="bg-green-50 rounded-xl p-4">
-              <p className="text-sm text-green-600 font-medium">Total Paid</p>
+              <p className="text-sm text-green-600 font-medium">Payments Received</p>
               <p className="text-2xl font-bold text-green-700 mt-1">₹{totalPaid.toLocaleString()}</p>
             </div>
             <div className="bg-blue-50 rounded-xl p-4">
-              <p className="text-sm text-blue-600 font-medium">Credit Invoices</p>
-              <p className="text-2xl font-bold text-blue-700 mt-1">{creditInvoices.length}</p>
+              <p className="text-sm text-blue-600 font-medium">Credit Note Balance</p>
+              <p className="text-2xl font-bold text-blue-700 mt-1">₹{totalCreditNoteBalance.toLocaleString()}</p>
             </div>
           </div>
         </div>
@@ -364,20 +426,20 @@ const CreditPayments = () => {
               Credit Invoices ({creditInvoices.length})
             </button>
             <button
-              onClick={() => setActiveTab('payments')}
+              onClick={() => setActiveTab('credit-notes')}
               className={`flex-1 px-4 py-3 rounded-xl font-medium transition-all ${
-                activeTab === 'payments'
+                activeTab === 'credit-notes'
                   ? `${theme.classes.bgPrimary} text-white shadow-md`
                   : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
               }`}
             >
-              All Payments ({allPayments.length})
+              Credit Notes ({creditNotes.length})
             </button>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <Input
-              placeholder="Search by invoice number or customer..."
+              placeholder="Search by number or customer..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               leftIcon={<Search size={18} />}
@@ -388,7 +450,7 @@ const CreditPayments = () => {
               ) : undefined}
             />
             <div className="flex gap-2">
-              {activeTab === 'invoices' && (
+              {activeTab === 'invoices' ? (
                 <Select
                   value={filterStatus}
                   onChange={(e) => setFilterStatus(e.target.value)}
@@ -398,9 +460,18 @@ const CreditPayments = () => {
                   <option value="credit">Credit (Unpaid)</option>
                   <option value="partial">Partial Payment</option>
                 </Select>
-              )}
-              {activeTab === 'payments' && (
+              ) : (
                 <>
+                  <Select
+                    value={filterStatus}
+                    onChange={(e) => setFilterStatus(e.target.value)}
+                    className="flex-1"
+                  >
+                    <option value="all">All Status</option>
+                    <option value="active">Active</option>
+                    <option value="expired">Expired</option>
+                    <option value="used">Fully Used</option>
+                  </Select>
                   <Button
                     onClick={() => setShowFilterModal(true)}
                     variant="secondary"
@@ -420,8 +491,8 @@ const CreditPayments = () => {
                   >
                     <option value="date-desc">Date (Newest First)</option>
                     <option value="date-asc">Date (Oldest First)</option>
-                    <option value="amount-desc">Amount (High to Low)</option>
-                    <option value="amount-asc">Amount (Low to High)</option>
+                    <option value="amount-desc">Balance (High to Low)</option>
+                    <option value="amount-asc">Balance (Low to High)</option>
                   </Select>
                 </>
               )}
@@ -511,64 +582,94 @@ const CreditPayments = () => {
           </>
         )}
 
-        {/* Payment History Tab */}
-        {activeTab === 'payments' && (
+        {/* Credit Notes Tab */}
+        {activeTab === 'credit-notes' && (
           <>
-            {filteredPayments.length === 0 ? (
+            {filteredCreditNotes.length === 0 ? (
               <Card>
                 <EmptyState
                   icon={<DollarSign size={64} />}
-                  title={searchTerm ? "No payments found" : "No payment history"}
+                  title={searchTerm ? "No credit notes found" : "No credit notes"}
                   description={
                     searchTerm
                       ? "Try adjusting your search"
-                      : "Payment records will appear here"
+                      : "Credit notes from returns will appear here"
                   }
                 />
               </Card>
             ) : (
               <div className="space-y-3">
-                {filteredPayments.map((payment) => (
-                  <Card key={payment.id} hover padding="lg">
-                    <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-                      <div className="flex-1">
-                        <div className="flex items-center gap-3 mb-3">
-                          <div className="p-2 bg-green-50 rounded-lg">
-                            <DollarSign className="text-green-600" size={20} />
+                {filteredCreditNotes.map((note) => {
+                  const isExpired = note.expiry_date && new Date(note.expiry_date) < new Date();
+                  const isFullyUsed = note.balance_amount <= 0;
+
+                  return (
+                    <Card key={note.id} hover padding="lg">
+                      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                        <div className="flex-1">
+                          <div className="flex items-center gap-3 mb-3">
+                            <div className={`p-2 ${isExpired || isFullyUsed ? 'bg-slate-100' : 'bg-blue-50'} rounded-lg`}>
+                              <DollarSign className={isExpired || isFullyUsed ? 'text-slate-400' : 'text-blue-600'} size={20} />
+                            </div>
+                            <div>
+                              <h3 className="font-bold text-slate-900">{note.credit_note_number}</h3>
+                              {note.customer_name && (
+                                <p className="text-sm text-slate-600">{note.customer_name}</p>
+                              )}
+                            </div>
+                            <Badge
+                              variant={
+                                isFullyUsed ? 'neutral' :
+                                isExpired ? 'danger' : 'success'
+                              }
+                              size="sm"
+                            >
+                              {isFullyUsed ? 'Fully Used' : isExpired ? 'Expired' : note.status}
+                            </Badge>
                           </div>
-                          <div>
-                            <h3 className="font-bold text-slate-900">{payment.payment_number}</h3>
-                            <p className="text-sm text-slate-600">
-                              {payment.invoice?.customer_name} - {payment.invoice?.invoice_number}
-                            </p>
+                          
+                          <div className="grid grid-cols-2 md:grid-cols-5 gap-4 text-sm">
+                            <div>
+                              <p className="text-slate-500 font-medium">Issue Date</p>
+                              <p className="text-slate-900 font-semibold">{new Date(note.issue_date).toLocaleDateString()}</p>
+                              <p className="text-slate-600 text-xs">{new Date(note.created_at).toLocaleTimeString()}</p>
+                            </div>
+                            <div>
+                              <p className="text-slate-500 font-medium">Original Amount</p>
+                              <p className="text-slate-900 font-bold">₹{note.amount.toLocaleString()}</p>
+                            </div>
+                            <div>
+                              <p className="text-slate-500 font-medium">Used</p>
+                              <p className="text-red-600 font-bold">₹{note.used_amount.toLocaleString()}</p>
+                            </div>
+                            <div>
+                              <p className="text-slate-500 font-medium">Balance</p>
+                              <p className="text-blue-600 font-bold text-lg">₹{note.balance_amount.toLocaleString()}</p>
+                            </div>
+                            {note.expiry_date && (
+                              <div>
+                                <p className="text-slate-500 font-medium">Expires</p>
+                                <p className={`font-semibold ${isExpired ? 'text-red-600' : 'text-slate-900'}`}>
+                                  {new Date(note.expiry_date).toLocaleDateString()}
+                                </p>
+                              </div>
+                            )}
                           </div>
                         </div>
-                        
-                        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
-                          <div>
-                            <p className="text-slate-500 font-medium">Date & Time</p>
-                            <p className="text-slate-900 font-semibold">{new Date(payment.payment_date).toLocaleDateString()}</p>
-                            <p className="text-slate-600 text-xs">{new Date(payment.created_at).toLocaleTimeString()}</p>
-                          </div>
-                          <div>
-                            <p className="text-slate-500 font-medium">Amount</p>
-                            <p className="text-green-600 font-bold text-lg">₹{payment.amount.toLocaleString()}</p>
-                          </div>
-                          <div>
-                            <p className="text-slate-500 font-medium">Method</p>
-                            <Badge variant="neutral" size="sm">{payment.payment_method}</Badge>
-                          </div>
-                          {payment.reference_number && (
-                            <div>
-                              <p className="text-slate-500 font-medium">Reference</p>
-                              <p className="text-slate-900 font-semibold">{payment.reference_number}</p>
-                            </div>
-                          )}
+
+                        <div className="flex gap-2">
+                          <button
+                            onClick={() => handleViewCreditNote(note)}
+                            className="p-2.5 rounded-lg bg-slate-100 text-slate-600 hover:bg-slate-200 transition-colors"
+                            title="View Usage History"
+                          >
+                            <Eye size={18} />
+                          </button>
                         </div>
                       </div>
-                    </div>
-                  </Card>
-                ))}
+                    </Card>
+                  );
+                })}
               </div>
             )}
           </>
@@ -606,7 +707,7 @@ const CreditPayments = () => {
                     </div>
                     <div>
                       <p className="text-sm text-slate-600">Pending</p>
-                      <p className="text-xl font-bold text-orange-600">₹{selectedInvoice.pending_amount.toLocaleString()}</p>
+                      <p className={`text-xl font-bold ${theme.classes.textPrimary}`}>₹{selectedInvoice.pending_amount.toLocaleString()}</p>
                     </div>
                   </div>
                 </div>
@@ -695,108 +796,6 @@ Remaining: ₹${(selectedInvoice.pending_amount - paymentForm.amount).toLocaleSt
         />
       )}
 
-      {/* Filter Modal */}
-      {showFilterModal && (
-        <div className="fixed inset-0 bg-black/20 backdrop-blur-sm flex items-start justify-center p-4 z-50 overflow-y-auto">
-          <div className="min-h-screen w-full flex items-center justify-center py-8">
-            <Card className="w-full max-w-2xl">
-              <div className="flex items-center justify-between mb-6">
-                <div className="flex items-center gap-3">
-                  <div className={`p-2.5 ${theme.classes.bgPrimaryLight} rounded-xl`}>
-                    <Filter className={theme.classes.textPrimary} size={24} />
-                  </div>
-                  <h3 className="text-xl font-bold text-slate-900">Filter Payments</h3>
-                </div>
-                <button
-                  onClick={() => setShowFilterModal(false)}
-                  className="p-2 rounded-lg hover:bg-slate-100"
-                >
-                  <X size={24} />
-                </button>
-              </div>
-
-              <div className="space-y-4">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <Input
-                    label="Start Date"
-                    type="date"
-                    value={filters.startDate}
-                    onChange={(e) => setFilters({ ...filters, startDate: e.target.value })}
-                  />
-                  <Input
-                    label="End Date"
-                    type="date"
-                    value={filters.endDate}
-                    onChange={(e) => setFilters({ ...filters, endDate: e.target.value })}
-                  />
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <Input
-                    label="Min Amount"
-                    type="number"
-                    placeholder="0"
-                    value={filters.minAmount}
-                    onChange={(e) => setFilters({ ...filters, minAmount: e.target.value })}
-                  />
-                  <Input
-                    label="Max Amount"
-                    type="number"
-                    placeholder="No limit"
-                    value={filters.maxAmount}
-                    onChange={(e) => setFilters({ ...filters, maxAmount: e.target.value })}
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-semibold text-slate-700 mb-2">Payment Method</label>
-                  <Select
-                    value={filters.paymentMethod}
-                    onChange={(e) => setFilters({ ...filters, paymentMethod: e.target.value })}
-                  >
-                    <option value="all">All Methods</option>
-                    <option value="cash">Cash</option>
-                    <option value="card">Card</option>
-                    <option value="upi">UPI</option>
-                    <option value="bank_transfer">Bank Transfer</option>
-                    <option value="cheque">Cheque</option>
-                  </Select>
-                </div>
-
-                <Input
-                  label="Customer Name"
-                  placeholder="Filter by customer name"
-                  value={filters.customerName}
-                  onChange={(e) => setFilters({ ...filters, customerName: e.target.value })}
-                />
-              </div>
-
-              <div className="flex gap-3 mt-6">
-                <Button
-                  onClick={() => {
-                    setFilters({
-                      startDate: '',
-                      endDate: '',
-                      minAmount: '',
-                      maxAmount: '',
-                      paymentMethod: 'all',
-                      customerName: ''
-                    });
-                  }}
-                  variant="secondary"
-                  fullWidth
-                >
-                  Clear Filters
-                </Button>
-                <Button onClick={() => setShowFilterModal(false)} variant="primary" fullWidth>
-                  Apply Filters
-                </Button>
-              </div>
-            </Card>
-          </div>
-        </div>
-      )}
-
       {/* View Invoice Modal */}
       {showViewModal && viewingInvoice && (
         <div className="fixed inset-0 bg-black/20 backdrop-blur-sm flex items-start justify-center p-4 z-50 overflow-y-auto">
@@ -877,7 +876,7 @@ Remaining: ₹${(selectedInvoice.pending_amount - paymentForm.amount).toLocaleSt
                       </div>
                       <div className="flex justify-between pt-3 border-t-2 border-slate-300">
                         <span className="font-bold text-lg">Pending Amount</span>
-                        <span className="font-bold text-2xl text-orange-600">₹{viewingInvoice.pending_amount.toFixed(2)}</span>
+                        <span className={`font-bold text-2xl ${theme.classes.textPrimary}`}>₹{viewingInvoice.pending_amount.toFixed(2)}</span>
                       </div>
                     </div>
                   </div>
@@ -893,8 +892,197 @@ Remaining: ₹${(selectedInvoice.pending_amount - paymentForm.amount).toLocaleSt
           </div>
         </div>
       )}
+
+      {/* View Credit Note Modal */}
+      {showViewModal && viewingCreditNote && (
+        <div className="fixed inset-0 bg-black/20 backdrop-blur-sm flex items-start justify-center p-4 z-50 overflow-y-auto">
+          <div className="min-h-screen w-full flex items-center justify-center py-8">
+            <Card className="w-full max-w-4xl">
+              <div className="flex items-center justify-between mb-6">
+                <div>
+                  <h3 className="text-2xl font-bold text-slate-900">{viewingCreditNote.credit_note_number}</h3>
+                  <p className="text-slate-600">{viewingCreditNote.customer_name}</p>
+                </div>
+                <button
+                  onClick={() => setShowViewModal(false)}
+                  className="p-2 rounded-lg hover:bg-slate-100"
+                >
+                  <X size={24} />
+                </button>
+              </div>
+
+              {loadingDetails ? (
+                <div className="text-center py-8">
+                  <LoadingSpinner />
+                </div>
+              ) : (
+                <div className="space-y-6">
+                  {/* Credit Note Details */}
+                  <div className="bg-slate-50 rounded-xl p-5">
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <p className="text-sm text-slate-600">Issue Date</p>
+                        <p className="font-semibold text-slate-900">{new Date(viewingCreditNote.issue_date).toLocaleDateString()}</p>
+                      </div>
+                      {viewingCreditNote.expiry_date && (
+                        <div>
+                          <p className="text-sm text-slate-600">Expiry Date</p>
+                          <p className="font-semibold text-slate-900">{new Date(viewingCreditNote.expiry_date).toLocaleDateString()}</p>
+                        </div>
+                      )}
+                      <div>
+                        <p className="text-sm text-slate-600">Original Amount</p>
+                        <p className="font-bold text-slate-900">₹{viewingCreditNote.amount.toLocaleString()}</p>
+                      </div>
+                      <div>
+                        <p className="text-sm text-slate-600">Status</p>
+                        <Badge variant={viewingCreditNote.status === 'active' ? 'success' : 'neutral'} size="sm">
+                          {viewingCreditNote.status}
+                        </Badge>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Usage History */}
+                  <div>
+                    <h4 className="font-bold text-slate-900 mb-4">Usage History</h4>
+                    {creditNoteUsage.length === 0 ? (
+                      <p className="text-slate-500 text-center py-4">Not used yet</p>
+                    ) : (
+                      <div className="space-y-2">
+                        {creditNoteUsage.map((usage) => (
+                          <div key={usage.id} className="flex justify-between items-center p-3 bg-blue-50 rounded-lg">
+                            <div>
+                              <p className="font-semibold text-slate-900">{usage.invoice?.invoice_number}</p>
+                              <p className="text-sm text-slate-600">
+                                {new Date(usage.usage_date).toLocaleDateString()} - {usage.invoice?.customer_name}
+                              </p>
+                            </div>
+                            <p className="font-bold text-blue-600">-₹{usage.amount_used.toLocaleString()}</p>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Balance Summary */}
+                  <div className="bg-slate-50 rounded-xl p-5">
+                    <div className="space-y-3">
+                      <div className="flex justify-between">
+                        <span className="text-slate-700">Original Amount</span>
+                        <span className="font-semibold">₹{viewingCreditNote.amount.toFixed(2)}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-slate-700">Used Amount</span>
+                        <span className="font-semibold text-red-600">-₹{viewingCreditNote.used_amount.toFixed(2)}</span>
+                      </div>
+                      <div className="flex justify-between pt-3 border-t-2 border-slate-300">
+                        <span className="font-bold text-lg">Balance Available</span>
+                        <span className="font-bold text-2xl text-blue-600">₹{viewingCreditNote.balance_amount.toFixed(2)}</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              <div className="mt-6">
+                <Button onClick={() => setShowViewModal(false)} variant="secondary" fullWidth>
+                  Close
+                </Button>
+              </div>
+            </Card>
+          </div>
+        </div>
+      )}
+
+      {/* Filter Modal */}
+      {showFilterModal && (
+        <div className="fixed inset-0 bg-black/20 backdrop-blur-sm flex items-start justify-center p-4 z-50 overflow-y-auto">
+          <div className="min-h-screen w-full flex items-center justify-center py-8">
+            <Card className="w-full max-w-2xl">
+              <div className="flex items-center justify-between mb-6">
+                <div className="flex items-center gap-3">
+                  <div className={`p-2.5 ${theme.classes.bgPrimaryLight} rounded-xl`}>
+                    <Filter className={theme.classes.textPrimary} size={24} />
+                  </div>
+                  <h3 className="text-xl font-bold text-slate-900">Filter Credit Notes</h3>
+                </div>
+                <button
+                  onClick={() => setShowFilterModal(false)}
+                  className="p-2 rounded-lg hover:bg-slate-100"
+                >
+                  <X size={24} />
+                </button>
+              </div>
+
+              <div className="space-y-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <Input
+                    label="Start Date"
+                    type="date"
+                    value={filters.startDate}
+                    onChange={(e) => setFilters({ ...filters, startDate: e.target.value })}
+                  />
+                  <Input
+                    label="End Date"
+                    type="date"
+                    value={filters.endDate}
+                    onChange={(e) => setFilters({ ...filters, endDate: e.target.value })}
+                  />
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <Input
+                    label="Min Balance"
+                    type="number"
+                    placeholder="0"
+                    value={filters.minAmount}
+                    onChange={(e) => setFilters({ ...filters, minAmount: e.target.value })}
+                  />
+                  <Input
+                    label="Max Balance"
+                    type="number"
+                    placeholder="No limit"
+                    value={filters.maxAmount}
+                    onChange={(e) => setFilters({ ...filters, maxAmount: e.target.value })}
+                  />
+                </div>
+
+                <Input
+                  label="Customer Name"
+                  placeholder="Filter by customer name"
+                  value={filters.customerName}
+                  onChange={(e) => setFilters({ ...filters, customerName: e.target.value })}
+                />
+              </div>
+
+              <div className="flex gap-3 mt-6">
+                <Button
+                  onClick={() => {
+                    setFilters({
+                      startDate: '',
+                      endDate: '',
+                      minAmount: '',
+                      maxAmount: '',
+                      paymentMethod: 'all',
+                      customerName: ''
+                    });
+                  }}
+                  variant="secondary"
+                  fullWidth
+                >
+                  Clear Filters
+                </Button>
+                <Button onClick={() => setShowFilterModal(false)} variant="primary" fullWidth>
+                  Apply Filters
+                </Button>
+              </div>
+            </Card>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
 
-export default CreditPayments;
+export default CreditsManagement;
