@@ -1,9 +1,9 @@
 // FILE PATH: components/SalesInvoice.tsx
-// Modern Sales Invoice with inventory check, proper GST, confirmations
+// Modern Sales Invoice with inventory check, proper GST, credit note support
 
 'use client';
 import React, { useState, useEffect } from 'react';
-import { Plus, Trash2, Printer, Save, ShoppingCart, User, Package, Calendar, AlertTriangle } from 'lucide-react';
+import { Plus, Trash2, Printer, Save, ShoppingCart, User, Package, Calendar, AlertTriangle, DollarSign } from 'lucide-react';
 import { printInvoice } from '@/lib/thermalPrinter';
 import { supabase } from '@/lib/supabase';
 import { Button, Card, Input, Select, Badge, LoadingSpinner, ConfirmDialog, useToast } from '@/components/ui';
@@ -50,6 +50,11 @@ const SalesInvoice = () => {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
 
+  // Credit note states
+  const [availableCreditNotes, setAvailableCreditNotes] = useState<any[]>([]);
+  const [selectedCreditNote, setSelectedCreditNote] = useState<string>('');
+  const [creditNoteAmount, setCreditNoteAmount] = useState(0);
+
   useEffect(() => {
     loadData();
     checkForConvertingOrder();
@@ -61,7 +66,6 @@ const SalesInvoice = () => {
       if (convertingOrderData) {
         const orderData = JSON.parse(convertingOrderData);
         
-        // Pre-fill form with order data
         setFormData({
           customer_id: '',
           customer_name: orderData.customer_name,
@@ -75,7 +79,6 @@ const SalesInvoice = () => {
 
         setIsIntrastate(orderData.customer_state === 'Tamil Nadu');
 
-        // Load items with current stock
         const itemsWithStock = await Promise.all(
           orderData.items.map(async (item: any) => {
             const stock = await getItemStock(item.item_id);
@@ -94,10 +97,7 @@ const SalesInvoice = () => {
         );
 
         setItems(itemsWithStock);
-
-        // Clear from sessionStorage
         sessionStorage.removeItem('converting_order');
-
         toast.success('Order loaded!', `Order ${orderData.order_number} data has been loaded. Please review and complete the invoice.`);
       }
     } catch (err) {
@@ -129,6 +129,32 @@ const SalesInvoice = () => {
     }
   }
 
+  async function loadCustomerCreditNotes(customerId: string) {
+    if (!customerId) {
+      setAvailableCreditNotes([]);
+      setSelectedCreditNote('');
+      setCreditNoteAmount(0);
+      return;
+    }
+    
+    try {
+      const { data, error } = await supabase
+        .from('credit_notes')
+        .select('*')
+        .eq('customer_id', customerId)
+        .eq('status', 'active')
+        .gt('balance_amount', 0)
+        .gte('expiry_date', new Date().toISOString().split('T')[0])
+        .order('issue_date', { ascending: false });
+      
+      if (error) throw error;
+      setAvailableCreditNotes(data || []);
+    } catch (err) {
+      console.error('Error loading credit notes:', err);
+      setAvailableCreditNotes([]);
+    }
+  }
+
   async function getItemStock(itemId: string): Promise<number> {
     try {
       const { data } = await supabase
@@ -144,7 +170,7 @@ const SalesInvoice = () => {
     }
   }
 
-  const handleCustomerChange = (customerId: string) => {
+  const handleCustomerChange = async (customerId: string) => {
     const customer = customers.find(c => c.id === customerId);
     if (customer) {
       setFormData({
@@ -156,6 +182,11 @@ const SalesInvoice = () => {
         customer_state: customer.state || 'Tamil Nadu'
       });
       setIsIntrastate(customer.state === 'Tamil Nadu');
+      
+      // Load credit notes for this customer
+      if (customer.id) {
+        await loadCustomerCreditNotes(customer.id);
+      }
     }
   };
 
@@ -272,6 +303,19 @@ const SalesInvoice = () => {
       return;
     }
 
+    // Validate credit note selection
+    if (formData.payment_method === 'credit_note') {
+      if (!selectedCreditNote) {
+        toast.warning('Select credit note', 'Please select a credit note to use.');
+        return;
+      }
+      const totals = calculateTotals();
+      if (creditNoteAmount < totals.total) {
+        toast.warning('Insufficient credit', 'Credit note does not cover full invoice amount. Please use a different payment method for the remaining balance.');
+        return;
+      }
+    }
+
     try {
       setSaving(true);
       setShowPrintSettings(false);
@@ -335,8 +379,45 @@ const SalesInvoice = () => {
 
       if (itemsError) throw itemsError;
 
-      // Record payment (for all payment types)
-      if (formData.payment_method !== 'credit') {
+      // Record payment based on method
+      if (formData.payment_method === 'credit_note' && selectedCreditNote) {
+        // Handle credit note usage
+        const creditNote = availableCreditNotes.find(n => n.id === selectedCreditNote);
+        
+        // Record credit note usage
+        const { error: usageError } = await supabase
+          .from('credit_note_usage')
+          .insert({
+            credit_note_id: selectedCreditNote,
+            invoice_id: invoice.id,
+            usage_date: formData.invoice_date,
+            amount_used: creditNoteAmount,
+            notes: `Applied to invoice ${invoiceNumber}`
+          });
+
+        if (usageError) {
+          console.error('Error recording credit note usage:', usageError);
+        }
+        
+        // Record as payment in sales_payments
+        const { error: paymentError } = await supabase
+          .from('sales_payments')
+          .insert({
+            payment_number: `CNP-${Date.now()}`,
+            invoice_id: invoice.id,
+            payment_date: formData.invoice_date,
+            amount: creditNoteAmount,
+            payment_method: 'credit_note',
+            reference_number: creditNote?.credit_note_number,
+            notes: `Credit note ${creditNote?.credit_note_number} applied`
+          });
+
+        if (paymentError) {
+          console.error('Error recording credit note payment:', paymentError);
+        }
+
+      } else if (formData.payment_method !== 'credit') {
+        // Regular payments (cash, card, UPI, etc.)
         const paymentNumber = `SP-${Date.now()}`;
         const { error: paymentError } = await supabase
           .from('sales_payments')
@@ -351,7 +432,6 @@ const SalesInvoice = () => {
 
         if (paymentError) {
           console.error('Error recording payment:', paymentError);
-          // Don't fail the whole transaction if payment record fails
         }
       }
 
@@ -419,6 +499,7 @@ const SalesInvoice = () => {
         );
       }
 
+      // Reset form
       setFormData({
         customer_id: '',
         customer_name: '',
@@ -430,6 +511,9 @@ const SalesInvoice = () => {
         notes: ''
       });
       setItems([]);
+      setAvailableCreditNotes([]);
+      setSelectedCreditNote('');
+      setCreditNoteAmount(0);
     } catch (err: any) {
       console.error('Error saving invoice:', err);
       toast.error('Failed to save', err.message || 'Could not save invoice.');
@@ -457,8 +541,8 @@ const SalesInvoice = () => {
         {/* Header */}
         <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6">
           <div className="flex items-center gap-3">
-            <div className="p-3 bg-emerald-100 rounded-xl">
-              <ShoppingCart className="text-emerald-700" size={28} />
+            <div className={`p-3 ${theme.classes.bgPrimaryLight} rounded-xl`}>
+              <ShoppingCart className={theme.classes.textPrimary} size={28} />
             </div>
             <div>
               <h1 className="text-2xl font-bold text-slate-900">Sales Invoice</h1>
@@ -481,12 +565,10 @@ const SalesInvoice = () => {
                 const value = e.target.value;
                 setFormData({ ...formData, customer_name: value });
                 
-                // Check if selected from list
                 const customer = customers.find(c => c.name === value);
                 if (customer) {
                   handleCustomerChange(customer.id);
                 } else {
-                  // Walk-in or manual entry
                   setFormData({
                     ...formData,
                     customer_id: '',
@@ -496,6 +578,9 @@ const SalesInvoice = () => {
                     customer_state: 'Tamil Nadu'
                   });
                   setIsIntrastate(true);
+                  setAvailableCreditNotes([]);
+                  setSelectedCreditNote('');
+                  setCreditNoteAmount(0);
                 }
               }}
               leftIcon={<User size={18} />}
@@ -550,9 +635,74 @@ const SalesInvoice = () => {
                 <option value="card">Card</option>
                 <option value="upi">UPI</option>
                 <option value="credit">Credit</option>
+                <option value="credit_note">Credit Note</option>
               </Select>
             </div>
           </div>
+
+          {/* Credit Note Selector */}
+          {formData.payment_method === 'credit_note' && (
+            <div className="mt-4 space-y-4">
+              {availableCreditNotes.length === 0 ? (
+                <div className="bg-orange-50 p-4 rounded-xl">
+                  <p className="text-sm text-orange-700 font-medium">
+                    No active credit notes available for this customer
+                  </p>
+                </div>
+              ) : (
+                <>
+                  <div>
+                    <label className="block text-sm font-semibold text-slate-700 mb-2">
+                      Select Credit Note <span className="text-red-500">*</span>
+                    </label>
+                    <Select
+                      value={selectedCreditNote}
+                      onChange={(e) => {
+                        setSelectedCreditNote(e.target.value);
+                        const note = availableCreditNotes.find(n => n.id === e.target.value);
+                        if (note) {
+                          const amountToUse = Math.min(note.balance_amount, totals.total);
+                          setCreditNoteAmount(amountToUse);
+                        } else {
+                          setCreditNoteAmount(0);
+                        }
+                      }}
+                    >
+                      <option value="">Select credit note</option>
+                      {availableCreditNotes.map(note => (
+                        <option key={note.id} value={note.id}>
+                          {note.credit_note_number} - Balance: ₹{note.balance_amount.toLocaleString()} 
+                          (Expires: {new Date(note.expiry_date).toLocaleDateString()})
+                        </option>
+                      ))}
+                    </Select>
+                  </div>
+                  
+                  {selectedCreditNote && (
+                    <div className="bg-blue-50 p-4 rounded-xl space-y-2">
+                      <div className="flex justify-between">
+                        <span className="text-sm font-medium text-blue-900">Invoice Total:</span>
+                        <span className="text-sm font-bold text-blue-900">₹{totals.total.toLocaleString()}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-sm font-medium text-blue-900">Credit Applied:</span>
+                        <span className="text-sm font-bold text-green-600">-₹{creditNoteAmount.toLocaleString()}</span>
+                      </div>
+                      <div className="flex justify-between pt-2 border-t border-blue-200">
+                        <span className="text-sm font-bold text-blue-900">Amount Due:</span>
+                        <span className="text-sm font-bold text-blue-900">₹{(totals.total - creditNoteAmount).toLocaleString()}</span>
+                      </div>
+                      {creditNoteAmount < totals.total && (
+                        <p className="text-xs text-orange-600 mt-2">
+                          ⚠️ Remaining ₹{(totals.total - creditNoteAmount).toLocaleString()} needs separate payment
+                        </p>
+                      )}
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+          )}
         </Card>
 
         {/* Items */}
@@ -712,8 +862,20 @@ const SalesInvoice = () => {
               )}
               <div className="flex justify-between text-xl font-bold text-slate-900 pt-3 border-t-2 border-slate-300">
                 <span>Total</span>
-                <span className="text-emerald-600">₹{totals.total.toFixed(2)}</span>
+                <span className={theme.classes.textPrimary}>₹{totals.total.toFixed(2)}</span>
               </div>
+              {formData.payment_method === 'credit_note' && selectedCreditNote && (
+                <>
+                  <div className="flex justify-between text-green-600 font-semibold">
+                    <span>Credit Note Applied</span>
+                    <span>-₹{creditNoteAmount.toFixed(2)}</span>
+                  </div>
+                  <div className="flex justify-between text-xl font-bold text-slate-900 pt-3 border-t-2 border-slate-300">
+                    <span>Amount Due</span>
+                    <span className="text-blue-600">₹{(totals.total - creditNoteAmount).toFixed(2)}</span>
+                  </div>
+                </>
+              )}
             </div>
           </Card>
         )}
@@ -754,7 +916,7 @@ const SalesInvoice = () => {
                       onClick={() => setPrintSettings({ ...printSettings, width: '58mm' })}
                       className={`flex-1 px-4 py-3 rounded-xl font-medium ${
                         printSettings.width === '58mm'
-                          ? 'bg-emerald-600 text-white'
+                          ? `${theme.classes.bgPrimary} text-white`
                           : 'bg-slate-100 text-slate-600'
                       }`}
                     >
@@ -764,7 +926,7 @@ const SalesInvoice = () => {
                       onClick={() => setPrintSettings({ ...printSettings, width: '80mm' })}
                       className={`flex-1 px-4 py-3 rounded-xl font-medium ${
                         printSettings.width === '80mm'
-                          ? 'bg-emerald-600 text-white'
+                          ? `${theme.classes.bgPrimary} text-white`
                           : 'bg-slate-100 text-slate-600'
                       }`}
                     >
