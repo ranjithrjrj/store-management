@@ -3,7 +3,7 @@
 
 'use client';
 import React, { useState, useEffect } from 'react';
-import { RotateCcw, Plus, Search, Calendar, DollarSign, Edit2, Trash2, X, Filter, Package, AlertCircle } from 'lucide-react';
+import { RotateCcw, Plus, Search, Calendar, DollarSign, Edit2, Trash2, X, Filter, Package, AlertCircle, Eye } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { Button, Card, Input, Select, Badge, EmptyState, LoadingSpinner, ConfirmDialog, useToast } from '@/components/ui';
 import { useTheme } from '@/contexts/ThemeContext';
@@ -47,7 +47,9 @@ const ReturnsManagement = () => {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [showFilterModal, setShowFilterModal] = useState(false);
   const [showProcessConfirm, setShowProcessConfirm] = useState(false);
+  const [showViewModal, setShowViewModal] = useState(false);
   const [editingReturn, setEditingReturn] = useState<SalesReturn | null>(null);
+  const [viewingReturn, setViewingReturn] = useState<SalesReturn | null>(null);
   const [deletingReturn, setDeletingReturn] = useState<{ id: string; return_number: string } | null>(null);
   const [processingReturn, setProcessingReturn] = useState<SalesReturn | null>(null);
   const [loading, setLoading] = useState(true);
@@ -177,6 +179,11 @@ const ReturnsManagement = () => {
     }
 
     setShowModal(true);
+  };
+
+  const handleView = async (returnRecord: SalesReturn) => {
+    setViewingReturn(returnRecord);
+    setShowViewModal(true);
   };
 
   const handleInvoiceSelect = async (invoiceId: string) => {
@@ -838,6 +845,13 @@ const ReturnsManagement = () => {
                   </div>
 
                   <div className="flex gap-2">
+                    <button
+                      onClick={() => handleView(returnRecord)}
+                      className="p-2.5 rounded-lg bg-slate-100 text-slate-600 hover:bg-slate-200 transition-colors"
+                      title="View Details"
+                    >
+                      <Eye size={18} />
+                    </button>
                     {returnRecord.refund_status === 'pending' && (
                       <>
                         <button
@@ -1223,6 +1237,122 @@ This action cannot be undone.`}
           cancelText="Cancel"
           variant="danger"
         />
+      )}
+
+      {/* View Modal */}
+      {showViewModal && viewingReturn && (
+        <div className="fixed inset-0 bg-black/20 backdrop-blur-sm flex items-start justify-center p-4 z-50 overflow-y-auto">
+          <div className="min-h-screen w-full flex items-center justify-center py-8">
+            <Card className="w-full max-w-3xl">
+              <div className="flex items-center justify-between mb-6">
+                <h3 className="text-xl font-bold text-slate-900">Return Details - {viewingReturn.return_number}</h3>
+                <button onClick={() => setShowViewModal(false)} className="p-2 rounded-lg hover:bg-slate-100">
+                  <X size={24} />
+                </button>
+              </div>
+
+              <div className="space-y-6">
+                {/* Basic Info */}
+                <div>
+                  <div className="flex items-center justify-between mb-4">
+                    <h4 className="font-semibold text-slate-900">Return Information</h4>
+                    <Badge
+                      variant={
+                        viewingReturn.refund_status === 'completed' ? 'success' :
+                        viewingReturn.refund_status === 'pending' ? 'warning' : 'danger'
+                      }
+                    >
+                      {viewingReturn.refund_status}
+                    </Badge>
+                  </div>
+                  <div className="grid grid-cols-2 gap-4 text-sm">
+                    <div>
+                      <p className="text-slate-600">Return Number</p>
+                      <p className="font-medium text-slate-900 mt-1">{viewingReturn.return_number}</p>
+                    </div>
+                    <div>
+                      <p className="text-slate-600">Return Date</p>
+                      <p className="font-medium text-slate-900 mt-1">{new Date(viewingReturn.return_date).toLocaleDateString()}</p>
+                    </div>
+                    {viewingReturn.customer_name && (
+                      <div>
+                        <p className="text-slate-600">Customer</p>
+                        <p className="font-medium text-slate-900 mt-1">{viewingReturn.customer_name}</p>
+                      </div>
+                    )}
+                    {viewingReturn.original_invoice_number && (
+                      <div>
+                        <p className="text-slate-600">Original Invoice</p>
+                        <p className="font-medium text-slate-900 mt-1">{viewingReturn.original_invoice_number}</p>
+                      </div>
+                    )}
+                    <div>
+                      <p className="text-slate-600">Refund Method</p>
+                      <Badge variant="neutral" className="mt-1">{viewingReturn.refund_method}</Badge>
+                    </div>
+                    <div>
+                      <p className="text-slate-600">Restockable</p>
+                      <Badge variant={viewingReturn.is_restockable ? 'success' : 'danger'} className="mt-1">
+                        {viewingReturn.is_restockable ? 'Yes' : 'No'}
+                      </Badge>
+                    </div>
+                  </div>
+                  {viewingReturn.notes && (
+                    <div className="mt-4">
+                      <p className="text-slate-600 text-sm">Notes</p>
+                      <p className="text-slate-900 mt-1 italic">{viewingReturn.notes}</p>
+                    </div>
+                  )}
+                </div>
+
+                {/* Amount Details */}
+                <div className="pt-6 border-t border-slate-200">
+                  <h4 className="font-semibold text-slate-900 mb-4">Amount Details</h4>
+                  <div className="space-y-3 bg-slate-50 p-4 rounded-lg">
+                    <div className="flex justify-between text-sm">
+                      <span className="text-slate-600">Total Amount</span>
+                      <span className="font-bold text-slate-900">₹{viewingReturn.total_amount.toLocaleString()}</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Timeline */}
+                <div className="pt-6 border-t border-slate-200">
+                  <h4 className="font-semibold text-slate-900 mb-4">Timeline</h4>
+                  <div className="space-y-3">
+                    <div className="flex items-center gap-3 text-sm">
+                      <div className="w-2 h-2 rounded-full bg-green-500"></div>
+                      <div className="flex-1">
+                        <p className="font-medium text-slate-900">Return Created</p>
+                        <p className="text-slate-600">{new Date(viewingReturn.created_at).toLocaleString()}</p>
+                      </div>
+                    </div>
+                    {viewingReturn.refund_status === 'completed' && (
+                      <div className="flex items-center gap-3 text-sm">
+                        <div className="w-2 h-2 rounded-full bg-blue-500"></div>
+                        <div className="flex-1">
+                          <p className="font-medium text-slate-900">Return Processed</p>
+                          <p className="text-slate-600">Refund completed and inventory updated</p>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex gap-3 mt-6 pt-6 border-t border-slate-200">
+                <Button onClick={() => setShowViewModal(false)} variant="secondary" fullWidth>
+                  Close
+                </Button>
+                {viewingReturn.refund_status === 'pending' && (
+                  <Button onClick={() => { setShowViewModal(false); handleEdit(viewingReturn); }} variant="primary" fullWidth>
+                    Edit Return
+                  </Button>
+                )}
+              </div>
+            </Card>
+          </div>
+        </div>
       )}
     </div>
   );
