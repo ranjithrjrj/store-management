@@ -3,7 +3,7 @@
 
 'use client';
 import React, { useState, useEffect } from 'react';
-import { FileText, Search, X, Eye, Edit2, Trash2, Printer, ShoppingCart } from 'lucide-react';
+import { FileText, Search, X, Eye, Edit2, Trash2, Printer, ShoppingCart, Filter } from 'lucide-react';
 import { printInvoice } from '@/lib/thermalPrinter';
 import { supabase } from '@/lib/supabase';
 import { Button, Card, Input, Select, Badge, EmptyState, LoadingSpinner, ConfirmDialog, useToast } from '@/components/ui';
@@ -49,6 +49,7 @@ const SalesRecordsManagement = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [showViewModal, setShowViewModal] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [showFilterModal, setShowFilterModal] = useState(false);
   const [viewingInvoice, setViewingInvoice] = useState<SalesInvoice | null>(null);
   const [invoiceItems, setInvoiceItems] = useState<InvoiceItem[]>([]);
   const [deletingInvoice, setDeletingInvoice] = useState<{ id: string; invoice_number: string } | null>(null);
@@ -62,6 +63,19 @@ const SalesRecordsManagement = () => {
   });
   const [storeSettings, setStoreSettings] = useState<any>(null);
   const [printing, setPrinting] = useState(false);
+
+  // Filter and sort states
+  const [filters, setFilters] = useState({
+    startDate: '',
+    endDate: '',
+    minAmount: '',
+    maxAmount: '',
+    paymentMethod: 'all',
+    paymentStatus: 'all',
+    customerName: ''
+  });
+  const [sortBy, setSortBy] = useState<'date' | 'amount'>('date');
+  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
 
   useEffect(() => {
     loadInvoices();
@@ -88,7 +102,7 @@ const SalesRecordsManagement = () => {
       const { data, error } = await supabase
         .from('sales_invoices')
         .select('*')
-        .order('invoice_date', { ascending: false });
+        .order('created_at', { ascending: false });
 
       if (error) throw error;
       setInvoices(data || []);
@@ -239,7 +253,24 @@ const SalesRecordsManagement = () => {
       invoice.invoice_number.toLowerCase().includes(searchTerm.toLowerCase()) ||
       invoice.customer_name.toLowerCase().includes(searchTerm.toLowerCase());
     
+    // Apply advanced filters
+    if (filters.startDate && invoice.invoice_date < filters.startDate) return false;
+    if (filters.endDate && invoice.invoice_date > filters.endDate) return false;
+    if (filters.minAmount && invoice.total_amount < parseFloat(filters.minAmount)) return false;
+    if (filters.maxAmount && invoice.total_amount > parseFloat(filters.maxAmount)) return false;
+    if (filters.paymentMethod !== 'all' && invoice.payment_method !== filters.paymentMethod) return false;
+    if (filters.paymentStatus !== 'all' && invoice.payment_status !== filters.paymentStatus) return false;
+    if (filters.customerName && !invoice.customer_name.toLowerCase().includes(filters.customerName.toLowerCase())) return false;
+
     return matchesSearch;
+  }).sort((a, b) => {
+    if (sortBy === 'date') {
+      const dateA = new Date(a.invoice_date).getTime();
+      const dateB = new Date(b.invoice_date).getTime();
+      return sortOrder === 'desc' ? dateB - dateA : dateA - dateB;
+    } else {
+      return sortOrder === 'desc' ? b.total_amount - a.total_amount : a.total_amount - b.total_amount;
+    }
   });
 
   if (loading) {
@@ -259,8 +290,8 @@ const SalesRecordsManagement = () => {
         {/* Header */}
         <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6">
           <div className="flex items-center gap-3">
-            <div className="p-3 bg-emerald-100 rounded-xl">
-              <ShoppingCart className="text-emerald-700" size={28} />
+            <div className={`p-3 ${theme.classes.bgPrimaryLight} rounded-xl`}>
+              <ShoppingCart className={theme.classes.textPrimary} size={28} />
             </div>
             <div>
               <h1 className="text-2xl font-bold text-slate-900">Sales Records</h1>
@@ -269,19 +300,45 @@ const SalesRecordsManagement = () => {
           </div>
         </div>
 
-        {/* Search */}
+        {/* Search & Filters */}
         <Card padding="md">
-          <Input
-            placeholder="Search by invoice number or customer..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            leftIcon={<Search size={18} />}
-            rightIcon={searchTerm ? (
-              <button onClick={() => setSearchTerm('')} className="text-slate-400 hover:text-slate-600">
-                <X size={18} />
-              </button>
-            ) : undefined}
-          />
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <Input
+              placeholder="Search by invoice number or customer..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              leftIcon={<Search size={18} />}
+              rightIcon={searchTerm ? (
+                <button onClick={() => setSearchTerm('')} className="text-slate-400 hover:text-slate-600">
+                  <X size={18} />
+                </button>
+              ) : undefined}
+            />
+            <div className="flex gap-2">
+              <Button
+                onClick={() => setShowFilterModal(true)}
+                variant="secondary"
+                icon={<Filter size={18} />}
+                className="flex-1"
+              >
+                Filters
+              </Button>
+              <Select
+                value={`${sortBy}-${sortOrder}`}
+                onChange={(e) => {
+                  const [sort, order] = e.target.value.split('-');
+                  setSortBy(sort as 'date' | 'amount');
+                  setSortOrder(order as 'asc' | 'desc');
+                }}
+                className="flex-1"
+              >
+                <option value="date-desc">Date (Newest First)</option>
+                <option value="date-asc">Date (Oldest First)</option>
+                <option value="amount-desc">Amount (High to Low)</option>
+                <option value="amount-asc">Amount (Low to High)</option>
+              </Select>
+            </div>
+          </div>
         </Card>
 
         {/* Invoices List */}
@@ -304,23 +361,30 @@ const SalesRecordsManagement = () => {
                 <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                   <div className="flex-1">
                     <div className="flex items-center gap-3 mb-3">
-                      <div className="p-2 bg-emerald-50 rounded-lg">
-                        <FileText className="text-emerald-600" size={20} />
+                      <div className={`p-2 ${theme.classes.bgPrimaryLight} rounded-lg`}>
+                        <FileText className={theme.classes.textPrimary} size={20} />
                       </div>
                       <div>
                         <h3 className="font-bold text-slate-900">{invoice.invoice_number}</h3>
                         <p className="text-sm text-slate-600">{invoice.customer_name}</p>
                       </div>
+                      <Badge 
+                        variant={invoice.payment_status === 'paid' ? 'success' : invoice.payment_status === 'credit' ? 'danger' : 'warning'} 
+                        size="sm"
+                      >
+                        {invoice.payment_status}
+                      </Badge>
                     </div>
                     
                     <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
                       <div>
-                        <p className="text-slate-500 font-medium">Date</p>
+                        <p className="text-slate-500 font-medium">Date & Time</p>
                         <p className="text-slate-900 font-semibold">{new Date(invoice.invoice_date).toLocaleDateString()}</p>
+                        <p className="text-slate-600 text-xs">{new Date(invoice.created_at).toLocaleTimeString()}</p>
                       </div>
                       <div>
                         <p className="text-slate-500 font-medium">Amount</p>
-                        <p className="text-emerald-600 font-bold text-lg">₹{invoice.total_amount.toLocaleString()}</p>
+                        <p className={`${theme.classes.textPrimary} font-bold text-lg`}>₹{invoice.total_amount.toLocaleString()}</p>
                       </div>
                       <div>
                         <p className="text-slate-500 font-medium">Payment</p>
@@ -549,6 +613,126 @@ const SalesRecordsManagement = () => {
           cancelText="Cancel"
           variant="danger"
         />
+      )}
+
+      {/* Filter Modal */}
+      {showFilterModal && (
+        <div className="fixed inset-0 bg-black/20 backdrop-blur-sm flex items-start justify-center p-4 z-50 overflow-y-auto">
+          <div className="min-h-screen w-full flex items-center justify-center py-8">
+            <Card className="w-full max-w-2xl">
+              <div className="flex items-center justify-between mb-6">
+                <div className="flex items-center gap-3">
+                  <div className={`p-2.5 ${theme.classes.bgPrimaryLight} rounded-xl`}>
+                    <Filter className={theme.classes.textPrimary} size={24} />
+                  </div>
+                  <h3 className="text-xl font-bold text-slate-900">Filter Invoices</h3>
+                </div>
+                <button
+                  onClick={() => setShowFilterModal(false)}
+                  className="p-2 rounded-lg hover:bg-slate-100"
+                >
+                  <X size={24} />
+                </button>
+              </div>
+
+              <div className="space-y-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <Input
+                    label="Start Date"
+                    type="date"
+                    value={filters.startDate}
+                    onChange={(e) => setFilters({ ...filters, startDate: e.target.value })}
+                  />
+                  <Input
+                    label="End Date"
+                    type="date"
+                    value={filters.endDate}
+                    onChange={(e) => setFilters({ ...filters, endDate: e.target.value })}
+                  />
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <Input
+                    label="Min Amount"
+                    type="number"
+                    placeholder="0"
+                    value={filters.minAmount}
+                    onChange={(e) => setFilters({ ...filters, minAmount: e.target.value })}
+                  />
+                  <Input
+                    label="Max Amount"
+                    type="number"
+                    placeholder="No limit"
+                    value={filters.maxAmount}
+                    onChange={(e) => setFilters({ ...filters, maxAmount: e.target.value })}
+                  />
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-semibold text-slate-700 mb-2">Payment Method</label>
+                    <Select
+                      value={filters.paymentMethod}
+                      onChange={(e) => setFilters({ ...filters, paymentMethod: e.target.value })}
+                    >
+                      <option value="all">All Methods</option>
+                      <option value="cash">Cash</option>
+                      <option value="card">Card</option>
+                      <option value="upi">UPI</option>
+                      <option value="credit">Credit</option>
+                      <option value="bank_transfer">Bank Transfer</option>
+                      <option value="cheque">Cheque</option>
+                    </Select>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-semibold text-slate-700 mb-2">Payment Status</label>
+                    <Select
+                      value={filters.paymentStatus}
+                      onChange={(e) => setFilters({ ...filters, paymentStatus: e.target.value })}
+                    >
+                      <option value="all">All Status</option>
+                      <option value="paid">Paid</option>
+                      <option value="credit">Credit</option>
+                      <option value="partial">Partial</option>
+                      <option value="pending">Pending</option>
+                    </Select>
+                  </div>
+                </div>
+
+                <Input
+                  label="Customer Name"
+                  placeholder="Filter by customer name"
+                  value={filters.customerName}
+                  onChange={(e) => setFilters({ ...filters, customerName: e.target.value })}
+                />
+              </div>
+
+              <div className="flex gap-3 mt-6">
+                <Button
+                  onClick={() => {
+                    setFilters({
+                      startDate: '',
+                      endDate: '',
+                      minAmount: '',
+                      maxAmount: '',
+                      paymentMethod: 'all',
+                      paymentStatus: 'all',
+                      customerName: ''
+                    });
+                  }}
+                  variant="secondary"
+                  fullWidth
+                >
+                  Clear Filters
+                </Button>
+                <Button onClick={() => setShowFilterModal(false)} variant="primary" fullWidth>
+                  Apply Filters
+                </Button>
+              </div>
+            </Card>
+          </div>
+        </div>
       )}
 
       {/* Print Settings Modal */}
