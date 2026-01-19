@@ -56,8 +56,9 @@ const ItemsManagement = () => {
   const [itemTransactions, setItemTransactions] = useState<{
     purchases: any[];
     sales: any[];
+    returns: any[];
     loading: boolean;
-  }>({ purchases: [], sales: [], loading: false });
+  }>({ purchases: [], sales: [], returns: [], loading: false });
   const [deletingItem, setDeletingItem] = useState<{ id: string; name: string } | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -188,7 +189,7 @@ const ItemsManagement = () => {
     setShowViewModal(true);
     setOpenDropdown(null);
     
-    setItemTransactions({ purchases: [], sales: [], loading: true });
+    setItemTransactions({ purchases: [], sales: [], returns: [], loading: true });
     
     try {
       const { data: purchases, error: purchaseError } = await supabase
@@ -221,15 +222,35 @@ const ItemsManagement = () => {
 
       if (salesError) throw salesError;
 
+      const { data: returns, error: returnsError } = await supabase
+        .from('sales_return_items')
+        .select(`
+          *,
+          sales_return:sales_returns(
+            return_date,
+            return_number,
+            is_restockable,
+            sales_invoice:sales_invoices(
+              invoice_number,
+              customer:customers(name)
+            )
+          )
+        `)
+        .eq('item_id', item.id)
+        .order('created_at', { ascending: false });
+
+      if (returnsError) throw returnsError;
+
       setItemTransactions({
         purchases: purchases || [],
         sales: sales || [],
+        returns: returns || [],
         loading: false
       });
     } catch (err: any) {
       console.error('Error loading transactions:', err);
       toast.error('Failed to load', 'Could not load transaction history.');
-      setItemTransactions({ purchases: [], sales: [], loading: false });
+      setItemTransactions({ purchases: [], sales: [], returns: [], loading: false });
     }
   };
 
@@ -1023,8 +1044,48 @@ const ItemsManagement = () => {
                         )}
                       </div>
 
+                      {/* Returns */}
+                      <div>
+                        <div className="flex items-center justify-between mb-3">
+                          <h5 className="text-sm font-semibold text-slate-900">Returns</h5>
+                          <Badge variant="warning" size="sm">{itemTransactions.returns.length}</Badge>
+                        </div>
+                        {itemTransactions.returns.length === 0 ? (
+                          <p className="text-sm text-slate-500 italic py-4 text-center bg-slate-50 rounded-lg">
+                            No return history
+                          </p>
+                        ) : (
+                          <div className="space-y-2 max-h-64 overflow-y-auto">
+                            {itemTransactions.returns.map((returnItem, idx) => (
+                              <div key={idx} className="flex items-center justify-between p-3 bg-orange-50 rounded-lg text-sm">
+                                <div className="flex-1">
+                                  <div className="flex items-center gap-2 mb-1">
+                                    <span className="font-medium text-slate-900">
+                                      {returnItem.sales_return?.sales_invoice?.customer?.name || 'Walk-in Customer'}
+                                    </span>
+                                    <Badge variant="neutral" size="sm">
+                                      {returnItem.sales_return?.return_number || 'N/A'}
+                                    </Badge>
+                                    {returnItem.sales_return?.is_restockable && (
+                                      <Badge variant="success" size="sm">Restockable</Badge>
+                                    )}
+                                  </div>
+                                  <p className="text-xs text-slate-600">
+                                    {new Date(returnItem.sales_return?.return_date).toLocaleDateString()} • 
+                                    Qty: {returnItem.quantity} @ ₹{returnItem.unit_price}
+                                  </p>
+                                </div>
+                                <div className="text-right">
+                                  <p className="font-semibold text-orange-600">-₹{returnItem.total_amount}</p>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+
                       {/* Summary */}
-                      <div className="grid grid-cols-2 gap-4 pt-4 border-t border-slate-200">
+                      <div className="grid grid-cols-3 gap-4 pt-4 border-t border-slate-200">
                         <div className="text-center p-3 bg-blue-50 rounded-lg">
                           <p className="text-xs text-slate-600 mb-1">Total Purchased</p>
                           <p className="text-lg font-bold text-blue-900">
@@ -1035,6 +1096,12 @@ const ItemsManagement = () => {
                           <p className="text-xs text-slate-600 mb-1">Total Sold</p>
                           <p className="text-lg font-bold text-green-900">
                             {itemTransactions.sales.reduce((sum, s) => sum + s.quantity, 0)} {viewingItem.unit?.abbreviation || 'units'}
+                          </p>
+                        </div>
+                        <div className="text-center p-3 bg-orange-50 rounded-lg">
+                          <p className="text-xs text-slate-600 mb-1">Total Returned</p>
+                          <p className="text-lg font-bold text-orange-900">
+                            {itemTransactions.returns.reduce((sum, r) => sum + r.quantity, 0)} {viewingItem.unit?.abbreviation || 'units'}
                           </p>
                         </div>
                       </div>
