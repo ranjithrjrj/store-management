@@ -213,7 +213,6 @@ const SalesPaymentsManagement = () => {
           customer_name: printingInvoice.customer_name,
           customer_phone: printingInvoice.customer_phone,
           customer_gstin: printingInvoice.customer_gstin,
-          place_of_supply: printingInvoice.place_of_supply,
           items: itemsData || [],
           subtotal: printingInvoice.subtotal,
           discount_amount: printingInvoice.discount_amount,
