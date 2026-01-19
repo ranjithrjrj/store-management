@@ -16,12 +16,7 @@ import CategoriesManagement from '@/components/CategoriesManagement';
 import UnitsManagement from '@/components/UnitsManagement';
 import PurchaseOrders from '@/components/PurchaseOrders';
 import PurchaseRecording from '@/components/PurchaseRecording';
-import PurchaseRecordsManagement from '@/components/PurchaseRecordsManagement';
-import PurchasePayments from '@/components/PurchasePayments';
-import SalesOrders from '@/components/SalesOrders';
 import SalesInvoice from '@/components/SalesInvoice';
-import SalesPaymentsManagement from '@/components/SalesPaymentsManagement';
-import CreditsManagement from '@/components/CreditsManagement';
 import ReturnsManagement from '@/components/ReturnsManagement';
 import ExpensesManagement from '@/components/ExpensesManagement';
 import VendorsManagement from '@/components/VendorsManagement';
@@ -30,7 +25,7 @@ import Reports from '@/components/Reports';
 import TaxReports from '@/components/TaxReports';
 import Settings from '@/components/Settings';
 
-type Page = 'dashboard' | 'inventory' | 'items' | 'categories' | 'units' | 'purchase-order' | 'purchase-record' | 'purchase-records' | 'purchase-payments' | 'sales-orders' | 'sales' | 'sales-payments' | 'credits' | 'returns' | 'expenses' | 'vendors' | 'customers' | 'reports' | 'tax-reports' | 'settings';
+type Page = 'dashboard' | 'inventory' | 'items' | 'categories' | 'units' | 'purchase-order' | 'purchase-record' | 'sales' | 'returns' | 'expenses' | 'vendors' | 'customers' | 'reports' | 'tax-reports' | 'settings';
 
 const AppContent = () => {
   const { theme } = useTheme();
@@ -48,6 +43,13 @@ const AppContent = () => {
   useEffect(() => {
     loadStoreSettings();
   }, []);
+
+  // Update document title when store name loads
+  useEffect(() => {
+    if (storeInfo.name && storeInfo.name !== 'Loading...') {
+      document.title = storeInfo.name;
+    }
+  }, [storeInfo.name]);
 
   // Auto-expand section containing current page
   useEffect(() => {
@@ -111,9 +113,7 @@ const AppContent = () => {
       isSection: true,
       submenu: [
         { id: 'purchase-order', label: 'Purchase Orders' },
-        { id: 'purchase-record', label: 'Record Purchase' },
-        { id: 'purchase-records', label: 'Purchase Records' },
-        { id: 'purchase-payments', label: 'Purchase Payments' }
+        { id: 'purchase-record', label: 'Purchase Recording' }
       ]
     },
     
@@ -123,10 +123,7 @@ const AppContent = () => {
       icon: FileText,
       isSection: true,
       submenu: [
-        { id: 'sales-orders', label: 'Sales Orders' },
         { id: 'sales', label: 'Sales Invoice' },
-        { id: 'sales-payments', label: 'Sales & Payments' },
-        { id: 'credits', label: 'Credits & Credit Notes' },
         { id: 'returns', label: 'Returns & Refunds' }
       ]
     },
@@ -167,12 +164,7 @@ const AppContent = () => {
       case 'units': return <UnitsManagement />;
       case 'purchase-order': return <PurchaseOrders />;
       case 'purchase-record': return <PurchaseRecording />;
-      case 'purchase-records': return <PurchaseRecordsManagement />;
-      case 'purchase-payments': return <PurchasePayments />;
-      case 'sales-orders': return <SalesOrders onNavigate={handlePageChange} />;
       case 'sales': return <SalesInvoice />;
-      case 'sales-payments': return <SalesPaymentsManagement />;
-      case 'credits': return <CreditsManagement />;
       case 'returns': return <ReturnsManagement />;
       case 'expenses': return <ExpensesManagement />;
       case 'vendors': return <VendorsManagement />;
