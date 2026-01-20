@@ -10,13 +10,25 @@ import { useTheme } from '@/contexts/ThemeContext';
 
 type Expense = {
   id: string;
-  description: string;
-  amount: number;
-  category: string;
+  expense_number: string;
+  category_id: string;
+  category?: { id: string; name: string };
   expense_date: string;
-  payment_method: string;
+  amount: number;
+  payment_method?: string;
+  reference_number?: string;
+  vendor_name?: string;
+  description?: string;
   notes?: string;
+  is_recurring?: boolean;
+  recurrence_period?: string;
+  next_due_date?: string;
   created_at: string;
+};
+
+type ExpenseCategory = {
+  id: string;
+  name: string;
 };
 
 const ExpensesManagement = () => {
@@ -24,6 +36,7 @@ const ExpensesManagement = () => {
   const toast = useToast();
   
   const [expenses, setExpenses] = useState<Expense[]>([]);
+  const [categories, setCategories] = useState<ExpenseCategory[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterCategory, setFilterCategory] = useState('all');
   const [filterPaymentMethod, setFilterPaymentMethod] = useState('all');
@@ -41,46 +54,47 @@ const ExpensesManagement = () => {
   
   const [formData, setFormData] = useState({
     description: '',
+    vendor_name: '',
     amount: 0,
-    category: '',
+    category_id: '',
     expense_date: new Date().toISOString().split('T')[0],
     payment_method: 'cash',
+    reference_number: '',
     notes: ''
   });
-
-  const categoryGroups = {
-    'Facilities': ['Rent', 'Electricity', 'Water', 'Internet', 'Phone', 'Cleaning', 'Security'],
-    'Human Resources': ['Salaries', 'Wages', 'Employee Benefits', 'Training', 'Recruitment'],
-    'Inventory & Supplies': ['Inventory Purchase', 'Raw Materials', 'Packaging', 'Office Supplies'],
-    'Marketing & Sales': ['Advertising', 'Social Media', 'Promotions', 'Website', 'Print Materials'],
-    'Transportation': ['Fuel', 'Vehicle Maintenance', 'Shipping', 'Delivery Charges', 'Freight'],
-    'Maintenance & Repairs': ['Equipment Repair', 'Building Maintenance', 'Plumbing', 'Electrical Work'],
-    'Financial & Legal': ['Bank Charges', 'Interest', 'Insurance', 'Taxes', 'License Fees', 'Legal Fees', 'Accounting'],
-    'Professional Services': ['Consulting', 'IT Services', 'Audit Fees', 'Professional Memberships'],
-    'Equipment & Assets': ['Equipment Purchase', 'Furniture', 'Tools', 'Computers', 'Software', 'Subscriptions'],
-    'Travel & Entertainment': ['Travel', 'Accommodation', 'Meals', 'Client Entertainment', 'Team Events'],
-    'Miscellaneous': ['Donations', 'Penalties', 'Losses', 'Miscellaneous', 'Other']
-  };
 
   const paymentMethods = ['cash', 'card', 'upi', 'bank_transfer', 'cheque'];
 
   useEffect(() => {
-    loadExpenses();
+    loadData();
   }, []);
 
-  async function loadExpenses() {
+  async function loadData() {
     try {
       setLoading(true);
       
-      const { data, error } = await supabase
-        .from('expenses')
+      // Load categories
+      const { data: categoriesData, error: catError } = await supabase
+        .from('expense_categories')
         .select('*')
+        .order('name');
+
+      if (catError) throw catError;
+      setCategories(categoriesData || []);
+
+      // Load expenses
+      const { data: expensesData, error: expError } = await supabase
+        .from('expenses')
+        .select(`
+          *,
+          category:expense_categories(id, name)
+        `)
         .order('expense_date', { ascending: false });
 
-      if (error) throw error;
-      setExpenses(data || []);
+      if (expError) throw expError;
+      setExpenses(expensesData || []);
     } catch (err: any) {
-      console.error('Error loading expenses:', err);
+      console.error('Error loading data:', err);
       toast.error('Failed to load', 'Could not load expenses.');
     } finally {
       setLoading(false);
@@ -91,10 +105,12 @@ const ExpensesManagement = () => {
     setEditingExpense(null);
     setFormData({
       description: '',
+      vendor_name: '',
       amount: 0,
-      category: '',
+      category_id: '',
       expense_date: new Date().toISOString().split('T')[0],
       payment_method: 'cash',
+      reference_number: '',
       notes: ''
     });
     setShowModal(true);
@@ -103,11 +119,13 @@ const ExpensesManagement = () => {
   const handleEdit = (expense: Expense) => {
     setEditingExpense(expense);
     setFormData({
-      description: expense.description,
+      description: expense.description || '',
+      vendor_name: expense.vendor_name || '',
       amount: expense.amount,
-      category: expense.category,
+      category_id: expense.category_id,
       expense_date: expense.expense_date,
-      payment_method: expense.payment_method,
+      payment_method: expense.payment_method || 'cash',
+      reference_number: expense.reference_number || '',
       notes: expense.notes || ''
     });
     setShowModal(true);
@@ -127,7 +145,7 @@ const ExpensesManagement = () => {
         return;
       }
 
-      if (!formData.category) {
+      if (!formData.category_id) {
         toast.warning('Category required', 'Please select a category.');
         return;
       }
@@ -141,15 +159,20 @@ const ExpensesManagement = () => {
         if (error) throw error;
         toast.success('Updated!', `Expense "${formData.description}" has been updated.`);
       } else {
+        const expenseData = {
+          ...formData,
+          expense_number: `EXP-${Date.now()}`
+        };
+
         const { error } = await supabase
           .from('expenses')
-          .insert(formData);
+          .insert(expenseData);
 
         if (error) throw error;
         toast.success('Created!', `Expense "${formData.description}" has been added.`);
       }
 
-      await loadExpenses();
+      await loadData();
       setShowModal(false);
     } catch (err: any) {
       console.error('Error saving expense:', err);
@@ -174,7 +197,7 @@ const ExpensesManagement = () => {
         .eq('id', deletingExpense.id);
 
       if (error) throw error;
-      await loadExpenses();
+      await loadData();
       toast.success('Deleted', `Expense "${deletingExpense.description}" has been removed.`);
       setShowDeleteConfirm(false);
       setDeletingExpense(null);
@@ -186,9 +209,11 @@ const ExpensesManagement = () => {
 
   const filteredExpenses = expenses
     .filter(expense => {
-      const matchesSearch = expense.description.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                           expense.category.toLowerCase().includes(searchTerm.toLowerCase());
-      const matchesCategory = filterCategory === 'all' || expense.category === filterCategory;
+      const categoryName = expense.category?.name || '';
+      const matchesSearch = (expense.description || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+                           categoryName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                           (expense.vendor_name || '').toLowerCase().includes(searchTerm.toLowerCase());
+      const matchesCategory = filterCategory === 'all' || expense.category_id === filterCategory;
       const matchesPayment = filterPaymentMethod === 'all' || expense.payment_method === filterPaymentMethod;
       
       const expenseDate = new Date(expense.expense_date);
@@ -207,8 +232,8 @@ const ExpensesManagement = () => {
         aVal = a.amount;
         bVal = b.amount;
       } else {
-        aVal = a.category;
-        bVal = b.category;
+        aVal = a.category?.name || '';
+        bVal = b.category?.name || '';
       }
       
       if (sortOrder === 'asc') {
@@ -220,7 +245,8 @@ const ExpensesManagement = () => {
 
   const totalExpenses = filteredExpenses.reduce((sum, exp) => sum + exp.amount, 0);
   const categoryTotals = filteredExpenses.reduce((acc, exp) => {
-    acc[exp.category] = (acc[exp.category] || 0) + exp.amount;
+    const catName = exp.category?.name || 'Uncategorized';
+    acc[catName] = (acc[catName] || 0) + exp.amount;
     return acc;
   }, {} as Record<string, number>);
   const topCategory = Object.entries(categoryTotals).sort((a, b) => b[1] - a[1])[0];
@@ -350,13 +376,13 @@ const ExpensesManagement = () => {
         <div className="flex flex-wrap gap-2">
           {filterCategory !== 'all' && (
             <Badge variant="primary">
-              Category: {filterCategory}
+              Category: {categories.find(c => c.id === filterCategory)?.name || filterCategory}
               <button onClick={() => setFilterCategory('all')} className="ml-2">×</button>
             </Badge>
           )}
           {filterPaymentMethod !== 'all' && (
             <Badge variant="primary">
-              Payment: {filterPaymentMethod}
+              Payment: {filterPaymentMethod.replace('_', ' ')}
               <button onClick={() => setFilterPaymentMethod('all')} className="ml-2">×</button>
             </Badge>
           )}
@@ -426,16 +452,19 @@ const ExpensesManagement = () => {
                       {new Date(expense.expense_date).toLocaleDateString('en-IN')}
                     </td>
                     <td className="px-4 py-3">
-                      <p className="text-sm font-medium text-gray-900">{expense.description}</p>
+                      <p className="text-sm font-medium text-gray-900">{expense.description || expense.vendor_name || 'N/A'}</p>
+                      {expense.vendor_name && expense.description && (
+                        <p className="text-xs text-gray-500 mt-1">Vendor: {expense.vendor_name}</p>
+                      )}
                       {expense.notes && (
                         <p className="text-xs text-gray-500 mt-1">{expense.notes}</p>
                       )}
                     </td>
                     <td className="px-4 py-3">
-                      <Badge variant="neutral" size="sm">{expense.category}</Badge>
+                      <Badge variant="neutral" size="sm">{expense.category?.name || 'Uncategorized'}</Badge>
                     </td>
                     <td className="px-4 py-3 text-sm text-gray-600 capitalize">
-                      {expense.payment_method.replace('_', ' ')}
+                      {(expense.payment_method || 'cash').replace('_', ' ')}
                     </td>
                     <td className="px-4 py-3 text-sm font-semibold text-gray-900">
                       ₹{expense.amount.toLocaleString('en-IN')}
@@ -487,14 +516,24 @@ const ExpensesManagement = () => {
             </div>
 
             <div className="space-y-4">
-              <Input
-                label="Description"
-                placeholder="e.g., Office supplies"
-                value={formData.description}
-                onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                required
-                leftIcon={<FileText size={18} />}
-              />
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <Input
+                  label="Description"
+                  placeholder="e.g., Office supplies purchase"
+                  value={formData.description}
+                  onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                  required
+                  leftIcon={<FileText size={18} />}
+                />
+
+                <Input
+                  label="Vendor Name"
+                  placeholder="e.g., ABC Suppliers"
+                  value={formData.vendor_name}
+                  onChange={(e) => setFormData({ ...formData, vendor_name: e.target.value })}
+                  leftIcon={<FileText size={18} />}
+                />
+              </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <Input
@@ -519,17 +558,13 @@ const ExpensesManagement = () => {
 
                 <Select
                   label="Category"
-                  value={formData.category}
-                  onChange={(e) => setFormData({ ...formData, category: e.target.value })}
+                  value={formData.category_id}
+                  onChange={(e) => setFormData({ ...formData, category_id: e.target.value })}
                   required
                 >
                   <option value="">Select category</option>
-                  {Object.entries(categoryGroups).map(([group, subcats]) => (
-                    <optgroup key={group} label={group}>
-                      {subcats.map(subcat => (
-                        <option key={subcat} value={subcat}>{subcat}</option>
-                      ))}
-                    </optgroup>
+                  {categories.map(cat => (
+                    <option key={cat.id} value={cat.id}>{cat.name}</option>
                   ))}
                 </Select>
 
@@ -545,6 +580,14 @@ const ExpensesManagement = () => {
                   <option value="bank_transfer">Bank Transfer</option>
                   <option value="cheque">Cheque</option>
                 </Select>
+
+                <Input
+                  label="Reference Number"
+                  placeholder="e.g., CHQ123, REF456"
+                  value={formData.reference_number}
+                  onChange={(e) => setFormData({ ...formData, reference_number: e.target.value })}
+                  leftIcon={<FileText size={18} />}
+                />
               </div>
 
               <Textarea
@@ -586,12 +629,8 @@ const ExpensesManagement = () => {
                 onChange={(e) => setFilterCategory(e.target.value)}
               >
                 <option value="all">All Categories</option>
-                {Object.entries(categoryGroups).map(([group, subcats]) => (
-                  <optgroup key={group} label={group}>
-                    {subcats.map(subcat => (
-                      <option key={subcat} value={subcat}>{subcat}</option>
-                    ))}
-                  </optgroup>
+                {categories.map(cat => (
+                  <option key={cat.id} value={cat.id}>{cat.name}</option>
                 ))}
               </Select>
 
