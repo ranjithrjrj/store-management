@@ -10,10 +10,9 @@ import { useTheme } from '@/contexts/ThemeContext';
 
 type PurchaseRecord = {
   id: string;
-  record_number: string;
+  invoice_number: string;
   vendor_id: string;
   vendor?: { name: string };
-  invoice_number: string;
   invoice_date: string;
   received_date: string;
   subtotal: number;
@@ -23,6 +22,8 @@ type PurchaseRecord = {
   total_amount: number;
   payment_status: string;
   notes?: string;
+  po_id?: string;
+  po_number?: string;
   created_at: string;
 };
 
@@ -49,7 +50,7 @@ const PurchaseRecordsManagement = () => {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [viewingRecord, setViewingRecord] = useState<PurchaseRecord | null>(null);
   const [recordItems, setRecordItems] = useState<PurchaseRecordItem[]>([]);
-  const [deletingRecord, setDeletingRecord] = useState<{ id: string; record_number: string } | null>(null);
+  const [deletingRecord, setDeletingRecord] = useState<{ id: string; invoice_number: string } | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadingItems, setLoadingItems] = useState(false);
 
@@ -62,7 +63,7 @@ const PurchaseRecordsManagement = () => {
       setLoading(true);
       
       const { data, error } = await supabase
-        .from('purchase_records')
+        .from('purchase_invoices')
         .select(`
           *,
           vendor:vendors(name)
@@ -84,12 +85,12 @@ const PurchaseRecordsManagement = () => {
       setLoadingItems(true);
       
       const { data, error } = await supabase
-        .from('purchase_record_items')
+        .from('purchase_invoice_items')
         .select(`
           *,
           item:items(name)
         `)
-        .eq('purchase_record_id', recordId);
+        .eq('purchase_invoice_id', recordId);
 
       if (error) throw error;
       
@@ -114,7 +115,7 @@ const PurchaseRecordsManagement = () => {
   };
 
   const handleDeleteClick = (record: PurchaseRecord) => {
-    setDeletingRecord({ id: record.id, record_number: record.record_number });
+    setDeletingRecord({ id: record.id, invoice_number: record.invoice_number });
     setShowDeleteConfirm(true);
   };
 
@@ -123,13 +124,13 @@ const PurchaseRecordsManagement = () => {
 
     try {
       const { error } = await supabase
-        .from('purchase_records')
+        .from('purchase_invoices')
         .delete()
         .eq('id', deletingRecord.id);
 
       if (error) throw error;
 
-      toast.success('Deleted!', `Record ${deletingRecord.record_number} has been deleted.`);
+      toast.success('Deleted!', `Record ${deletingRecord.invoice_number} has been deleted.`);
       await loadRecords();
     } catch (err: any) {
       console.error('Error deleting record:', err);
@@ -142,7 +143,7 @@ const PurchaseRecordsManagement = () => {
 
   const filteredRecords = records.filter(record => {
     const matchesSearch = 
-      record.record_number.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      record.invoice_number.toLowerCase().includes(searchTerm.toLowerCase()) ||
       record.invoice_number.toLowerCase().includes(searchTerm.toLowerCase()) ||
       record.vendor?.name.toLowerCase().includes(searchTerm.toLowerCase());
     
@@ -250,7 +251,7 @@ const PurchaseRecordsManagement = () => {
                         <ShoppingBag className="text-white" size={20} />
                       </div>
                       <div>
-                        <h3 className="font-bold text-gray-900 text-lg">{record.record_number}</h3>
+                        <h3 className="font-bold text-gray-900 text-lg">{record.invoice_number}</h3>
                         <p className="text-sm text-gray-600">Invoice: {record.invoice_number}</p>
                       </div>
                       <Badge variant={statusColors[record.payment_status] || 'neutral'} size="sm">
@@ -321,7 +322,7 @@ const PurchaseRecordsManagement = () => {
                     <FileText className="text-white" size={24} />
                   </div>
                   <div>
-                    <h3 className="text-2xl font-bold text-gray-900">{viewingRecord.record_number}</h3>
+                    <h3 className="text-2xl font-bold text-gray-900">{viewingRecord.invoice_number}</h3>
                     <p className="text-gray-600">Purchase Record Details</p>
                   </div>
                 </div>
@@ -360,6 +361,17 @@ const PurchaseRecordsManagement = () => {
                         {viewingRecord.payment_status}
                       </Badge>
                     </div>
+                    {viewingRecord.po_number && (
+                      <div>
+                        <p className="text-gray-500 font-medium">From Purchase Order</p>
+                        <div className="flex items-center gap-2">
+                          <Badge variant="success" size="sm">
+                            {viewingRecord.po_number}
+                          </Badge>
+                          <span className="text-xs text-gray-500">Received from PO</span>
+                        </div>
+                      </div>
+                    )}
                   </div>
                   {viewingRecord.notes && (
                     <div className="mt-4">
@@ -472,7 +484,7 @@ const PurchaseRecordsManagement = () => {
           }}
           onConfirm={handleDeleteConfirm}
           title="Delete Purchase Record"
-          message={`Are you sure you want to delete record "${deletingRecord.record_number}"? This will also delete all items. This action cannot be undone.`}
+          message={`Are you sure you want to delete record "${deletingRecord.invoice_number}"? This will also delete all items. This action cannot be undone.`}
           confirmText="Delete"
           cancelText="Cancel"
           variant="danger"
