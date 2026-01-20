@@ -235,9 +235,8 @@ const PurchaseInvoices = () => {
       const { data: purchase, error: purchaseError } = await supabase
         .from('purchase_invoices')
         .insert({
-          record_number: `PR-${Date.now()}`,
-          vendor_id: formData.vendor_id,
           invoice_number: formData.invoice_number,
+          vendor_id: formData.vendor_id,
           invoice_date: formData.invoice_date,
           received_date: formData.received_date,
           subtotal: totals.subtotal,
@@ -259,7 +258,7 @@ const PurchaseInvoices = () => {
         const { error: itemError } = await supabase
           .from('purchase_invoice_items')
           .insert({
-            purchase_record_id: purchase.id,
+            purchase_invoice_id: purchase.id,
             item_id: item.item_id,
             quantity: item.quantity,
             rate: item.rate,
