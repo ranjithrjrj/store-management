@@ -1,5 +1,5 @@
-// FILE PATH: components/PurchaseRecording.tsx
-// Purchase Recording with modern aesthetic UI
+// FILE PATH: components/PurchaseInvoices.tsx
+// Purchase Invoices with modern aesthetic UI
 
 'use client';
 import React, { useState, useEffect } from 'react';
@@ -20,7 +20,7 @@ type PurchaseItem = {
   amount: number;
 };
 
-const PurchaseRecording = () => {
+const PurchaseInvoices = () => {
   const { theme } = useTheme();
   const toast = useToast();
   
@@ -37,6 +37,7 @@ const PurchaseRecording = () => {
   const [isIntrastate, setIsIntrastate] = useState(true);
   const [showAddItemModal, setShowAddItemModal] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
+  const [linkedPO, setLinkedPO] = useState<any>(null);
   
   const [vendors, setVendors] = useState<any[]>([]);
   const [availableItems, setAvailableItems] = useState<any[]>([]);
@@ -57,6 +58,14 @@ const PurchaseRecording = () => {
 
   useEffect(() => {
     loadData();
+    
+    // Check if we're receiving from a PO
+    const receivePO = sessionStorage.getItem('receivePO');
+    if (receivePO) {
+      const poData = JSON.parse(receivePO);
+      loadPOForReceiving(poData);
+      sessionStorage.removeItem('receivePO');
+    }
   }, []);
 
   async function loadData() {
@@ -86,6 +95,52 @@ const PurchaseRecording = () => {
       toast.error('Failed to load', 'Could not load vendors and items.');
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function loadPOForReceiving(poData: any) {
+    try {
+      setLinkedPO(poData);
+      
+      // Pre-fill vendor
+      setFormData(prev => ({
+        ...prev,
+        vendor_id: poData.vendor_id
+      }));
+      
+      // Load PO items
+      const { data: poItems } = await supabase
+        .from('purchase_order_items')
+        .select(`
+          *,
+          item:items(name, gst_rate, unit:units(abbreviation))
+        `)
+        .eq('po_id', poData.po_id);
+      
+      if (poItems) {
+        const prefilledItems: PurchaseItem[] = poItems.map((item: any) => ({
+          id: crypto.randomUUID(),
+          item_id: item.item_id,
+          item_name: item.item.name,
+          batch_number: '',
+          expiry_date: '',
+          quantity: item.quantity - (item.received_quantity || 0), // Remaining qty
+          rate: item.rate,
+          gst_rate: item.gst_rate,
+          amount: (item.quantity - (item.received_quantity || 0)) * item.rate
+        }));
+        
+        setItems(prefilledItems);
+      }
+      
+      // Check vendor state code for tax type
+      const vendor = poData.vendor_state_code;
+      setIsIntrastate(vendor === '33');
+      
+      toast.success('PO Loaded!', `Receiving goods for PO ${poData.po_number}`);
+    } catch (err: any) {
+      console.error('Error loading PO:', err);
+      toast.error('Failed to load PO', 'Could not load purchase order data.');
     }
   }
 
@@ -178,7 +233,7 @@ const PurchaseRecording = () => {
       const totals = calculateTotals();
 
       const { data: purchase, error: purchaseError } = await supabase
-        .from('purchase_records')
+        .from('purchase_invoices')
         .insert({
           record_number: `PR-${Date.now()}`,
           vendor_id: formData.vendor_id,
@@ -191,7 +246,9 @@ const PurchaseRecording = () => {
           igst_amount: totals.igst,
           total_amount: totals.total,
           payment_status: formData.payment_status,
-          notes: formData.notes
+          notes: formData.notes,
+          po_id: linkedPO?.po_id || null,
+          po_number: linkedPO?.po_number || null
         })
         .select()
         .single();
@@ -200,7 +257,7 @@ const PurchaseRecording = () => {
 
       for (const item of items) {
         const { error: itemError } = await supabase
-          .from('purchase_record_items')
+          .from('purchase_invoice_items')
           .insert({
             purchase_record_id: purchase.id,
             item_id: item.item_id,
@@ -215,6 +272,46 @@ const PurchaseRecording = () => {
         if (itemError) throw itemError;
       }
 
+      // If linked to PO, update PO status and received quantities
+      if (linkedPO) {
+        for (const item of items) {
+          // Get current received quantity
+          const { data: poItem } = await supabase
+            .from('purchase_order_items')
+            .select('received_quantity')
+            .eq('po_id', linkedPO.po_id)
+            .eq('item_id', item.item_id)
+            .single();
+
+          const newReceivedQty = (poItem?.received_quantity || 0) + item.quantity;
+
+          await supabase
+            .from('purchase_order_items')
+            .update({ received_quantity: newReceivedQty })
+            .eq('po_id', linkedPO.po_id)
+            .eq('item_id', item.item_id);
+        }
+        
+        // Check if PO is fully/partially received
+        const { data: poItems } = await supabase
+          .from('purchase_order_items')
+          .select('quantity, received_quantity')
+          .eq('po_id', linkedPO.po_id);
+        
+        const fullyReceived = poItems?.every(i => (i.received_quantity || 0) >= i.quantity);
+        const partiallyReceived = poItems?.some(i => (i.received_quantity || 0) > 0);
+        
+        const newStatus = fullyReceived ? 'received' : 
+                          partiallyReceived ? 'partial' : 'pending';
+        
+        await supabase
+          .from('purchase_orders')
+          .update({ status: newStatus })
+          .eq('id', linkedPO.po_id);
+          
+        toast.success('PO Updated!', `Purchase Order ${linkedPO.po_number} marked as ${newStatus}`);
+      }
+
       toast.success('Purchase recorded!', `Invoice ${formData.invoice_number} has been saved.`);
       
       setFormData({
@@ -226,6 +323,7 @@ const PurchaseRecording = () => {
         notes: ''
       });
       setItems([]);
+      setLinkedPO(null);
 
     } catch (err: any) {
       console.error('Error recording purchase:', err);
@@ -260,7 +358,7 @@ const PurchaseRecording = () => {
                 <ShoppingBag className="text-white" size={32} />
               </div>
               <div>
-                <h1 className="text-3xl md:text-4xl font-bold text-white tracking-tight">Purchase Recording</h1>
+                <h1 className="text-3xl md:text-4xl font-bold text-white tracking-tight">Purchase Invoices</h1>
                 <p className="text-white/90 mt-1">Record new purchase with invoice details</p>
               </div>
             </div>
@@ -268,6 +366,24 @@ const PurchaseRecording = () => {
           <div className="absolute top-0 right-0 w-64 h-64 bg-white/10 rounded-full blur-3xl"></div>
           <div className="absolute bottom-0 left-0 w-64 h-64 bg-white/10 rounded-full blur-3xl"></div>
         </div>
+
+        {/* PO Indicator Banner */}
+        {linkedPO && (
+          <div className="backdrop-blur-xl bg-gradient-to-r from-green-50 to-emerald-50 rounded-2xl shadow-lg border-2 border-green-200 p-5 transition-all hover:shadow-xl">
+            <div className="flex items-center gap-4">
+              <div className="p-3 bg-green-100 rounded-xl">
+                <Package className="text-green-600" size={28} />
+              </div>
+              <div className="flex-1">
+                <div className="flex items-center gap-2 mb-1">
+                  <p className="text-lg font-bold text-green-900">Receiving from PO: {linkedPO.po_number}</p>
+                  <Badge variant="success" size="sm">Linked</Badge>
+                </div>
+                <p className="text-sm text-green-700">Items and vendor pre-filled from purchase order</p>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Purchase Details Card - Glassmorphism */}
         <div className="backdrop-blur-xl bg-white/70 rounded-3xl shadow-2xl border border-white/20 p-6 md:p-8 transition-all hover:shadow-3xl">
@@ -687,4 +803,4 @@ const PurchaseRecording = () => {
   );
 };
 
-export default PurchaseRecording;
+export default PurchaseInvoices;
