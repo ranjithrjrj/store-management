@@ -16,7 +16,7 @@ import CategoriesManagement from '@/components/CategoriesManagement';
 import UnitsManagement from '@/components/UnitsManagement';
 import PurchaseOrders from '@/components/PurchaseOrders';
 import PurchasePayments from '@/components/PurchasePayments';
-import PurchaseRecording from '@/components/PurchaseRecording';
+import PurchaseInvoices from '@/components/PurchaseInvoices';
 import PurchaseRecordsManagement from '@/components/PurchaseRecordsManagement';
 import SalesInvoice from '@/components/SalesInvoice';
 import SalesOrders from '@/components/SalesOrders';
@@ -30,7 +30,7 @@ import TaxReports from '@/components/TaxReports';
 import Settings from '@/components/Settings';
 
 type Page = 'dashboard' | 'inventory' | 'items' | 'categories' | 'units' | 
-  'purchase-order' | 'purchase-payments' | 'purchase-record' | 'purchase-records' | 
+  'purchase-order' | 'purchase-payments' | 'purchase-invoices' | 'purchase-records' | 
   'sales' | 'sales-orders' | 'sales-payments' | 'returns' | 
   'expenses' | 'vendors' | 'customers' | 'reports' | 'tax-reports' | 'settings';
 
@@ -121,7 +121,7 @@ const AppContent = () => {
       submenu: [
         { id: 'purchase-order', label: 'Purchase Orders' },
         { id: 'purchase-payments', label: 'Purchase Payments' },
-        { id: 'purchase-record', label: 'Purchase Recording' },
+        { id: 'purchase-invoices', label: 'Purchase Invoices' },
         { id: 'purchase-records', label: 'Purchase Records' }
       ]
     },
@@ -173,9 +173,9 @@ const AppContent = () => {
       case 'items': return <ItemsManagement />;
       case 'categories': return <CategoriesManagement />;
       case 'units': return <UnitsManagement />;
-      case 'purchase-order': return <PurchaseOrders />;
+      case 'purchase-order': return <PurchaseOrders onNavigate={setCurrentPage} />;
       case 'purchase-payments': return <PurchasePayments />;
-      case 'purchase-record': return <PurchaseRecording />;
+      case 'purchase-invoices': return <PurchaseInvoices />;
       case 'purchase-records': return <PurchaseRecordsManagement />;
       case 'sales': return <SalesInvoice />;
       case 'sales-orders': return <SalesOrders />;
