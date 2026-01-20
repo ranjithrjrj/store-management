@@ -546,12 +546,6 @@ const PurchasePayments = () => {
         )}
 
         {/* Payments List */}
-              </button>
-            ) : undefined}
-          />
-        </Card>
-
-        {/* Payments List */}
         {filteredPayments.length === 0 ? (
           <Card>
             <EmptyState
