@@ -479,7 +479,7 @@ const ExpensesManagement = () => {
                           <Edit2 size={16} />
                         </button>
                         <button
-                          onClick={() => handleDeleteClick(expense.id, expense.description)}
+                          onClick={() => handleDeleteClick(expense.id, expense.description || expense.vendor_name || 'Expense')}
                           className="text-red-600 hover:bg-red-50 p-2 rounded-lg transition-colors"
                           title="Delete"
                         >
