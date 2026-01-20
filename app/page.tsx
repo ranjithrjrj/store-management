@@ -10,8 +10,7 @@ import { ToastProvider } from '@/components/ui';
 
 // Import all components
 import Dashboard from '@/components/Dashboard';
-import Inventory from '@/components/Inventory';
-import ItemsManagement from '@/components/ItemsManagement';
+import InventoryManagement from '@/components/InventoryManagement';
 import CategoriesManagement from '@/components/CategoriesManagement';
 import UnitsManagement from '@/components/UnitsManagement';
 import PurchaseOrders from '@/components/PurchaseOrders';
@@ -29,7 +28,7 @@ import Reports from '@/components/Reports';
 import TaxReports from '@/components/TaxReports';
 import Settings from '@/components/Settings';
 
-type Page = 'dashboard' | 'inventory' | 'items' | 'categories' | 'units' | 
+type Page = 'dashboard' | 'inventory' | 'categories' | 'units' | 
   'purchase-order' | 'purchase-payments' | 'purchase-invoices' | 'purchase-records' | 
   'sales' | 'sales-orders' | 'sales-payments' | 'returns' | 
   'expenses' | 'vendors' | 'customers' | 'reports' | 'tax-reports' | 'settings';
@@ -102,12 +101,11 @@ const AppContent = () => {
     
     { 
       id: 'items-section', 
-      label: 'Items & Inventory', 
+      label: 'Inventory', 
       icon: Package,
       isSection: true,
       submenu: [
-        { id: 'inventory', label: 'Inventory Overview' },
-        { id: 'items', label: 'Items' },
+        { id: 'inventory', label: 'Inventory & Items' },
         { id: 'categories', label: 'Categories' },
         { id: 'units', label: 'Units' }
       ]
@@ -169,8 +167,7 @@ const AppContent = () => {
   const renderPage = () => {
     switch(currentPage) {
       case 'dashboard': return <Dashboard />;
-      case 'inventory': return <Inventory />;
-      case 'items': return <ItemsManagement />;
+      case 'inventory': return <InventoryManagement />;
       case 'categories': return <CategoriesManagement />;
       case 'units': return <UnitsManagement />;
       case 'purchase-order': return <PurchaseOrders onNavigate={setCurrentPage} />;
