@@ -11,9 +11,8 @@ import { useTheme } from '@/contexts/ThemeContext';
 type Payment = {
   id: string;
   payment_number: string;
-  purchase_record_id: string;
-  purchase_record?: {
-    record_number: string;
+  purchase_invoice_id: string;
+  purchase_invoice?: {
     invoice_number: string;
     total_amount: number;
     vendor?: { name: string };
@@ -28,7 +27,6 @@ type Payment = {
 
 type PurchaseRecord = {
   id: string;
-  record_number: string;
   invoice_number: string;
   vendor_id: string;
   vendor?: { name: string };
@@ -87,8 +85,7 @@ const PurchasePayments = () => {
         .from('purchase_payments')
         .select(`
           *,
-          purchase_record:purchase_records(
-            record_number,
+          purchase_invoice:purchase_invoices(
             invoice_number,
             total_amount,
             vendor:vendors(name)
@@ -126,7 +123,7 @@ const PurchasePayments = () => {
       setLoadingRecords(true);
       
       let query = supabase
-        .from('purchase_records')
+        .from('purchase_invoices')
         .select(`
           *,
           vendor:vendors(name)
@@ -147,7 +144,7 @@ const PurchasePayments = () => {
           const { data: payments } = await supabase
             .from('purchase_payments')
             .select('amount')
-            .eq('purchase_record_id', record.id);
+            .eq('purchase_invoice_id', record.id);
 
           const paid_amount = payments?.reduce((sum, p) => sum + p.amount, 0) || 0;
           const pending_amount = record.total_amount - paid_amount;
@@ -174,12 +171,12 @@ const PurchasePayments = () => {
       setLoadingItems(true);
       
       const { data, error } = await supabase
-        .from('purchase_record_items')
+        .from('purchase_invoice_items')
         .select(`
           *,
           item:items(name, unit:units(abbreviation))
         `)
-        .eq('purchase_record_id', recordId);
+        .eq('purchase_invoice_id', recordId);
 
       if (error) throw error;
       setRecordItems(data || []);
@@ -262,7 +259,7 @@ const PurchasePayments = () => {
         .from('purchase_payments')
         .insert({
           payment_number: paymentNumber,
-          purchase_record_id: selectedRecord.id,
+          purchase_invoice_id: selectedRecord.id,
           payment_date: paymentForm.payment_date,
           amount: paymentForm.amount,
           payment_method: paymentForm.payment_method,
@@ -279,7 +276,7 @@ const PurchasePayments = () => {
 
       // Update purchase record payment status
       const { error: updateError } = await supabase
-        .from('purchase_records')
+        .from('purchase_invoices')
         .update({ payment_status: newStatus })
         .eq('id', selectedRecord.id);
 
@@ -376,8 +373,8 @@ const PurchasePayments = () => {
     const searchLower = searchTerm.toLowerCase();
     return (
       payment.payment_number.toLowerCase().includes(searchLower) ||
-      payment.purchase_record?.invoice_number.toLowerCase().includes(searchLower) ||
-      payment.purchase_record?.vendor?.name.toLowerCase().includes(searchLower)
+      payment.purchase_invoice?.invoice_number.toLowerCase().includes(searchLower) ||
+      payment.purchase_invoice?.vendor?.name.toLowerCase().includes(searchLower)
     );
   });
 
@@ -466,7 +463,7 @@ const PurchasePayments = () => {
                       <div>
                         <h3 className="font-bold text-slate-900">{payment.payment_number}</h3>
                         <p className="text-sm text-slate-600">
-                          Invoice: {payment.purchase_record?.invoice_number}
+                          Invoice: {payment.purchase_invoice?.invoice_number}
                         </p>
                       </div>
                     </div>
@@ -474,7 +471,7 @@ const PurchasePayments = () => {
                     <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
                       <div>
                         <p className="text-slate-500 font-medium">Vendor</p>
-                        <p className="text-slate-900 font-semibold">{payment.purchase_record?.vendor?.name}</p>
+                        <p className="text-slate-900 font-semibold">{payment.purchase_invoice?.vendor?.name}</p>
                       </div>
                       <div>
                         <p className="text-slate-500 font-medium">Date</p>
@@ -780,11 +777,11 @@ Remaining: ₹${(selectedRecord.pending_amount - paymentForm.amount).toLocaleStr
                   </div>
                   <div>
                     <p className="text-sm text-slate-500">Invoice</p>
-                    <p className="font-semibold text-slate-900">{viewingPayment.purchase_record?.invoice_number}</p>
+                    <p className="font-semibold text-slate-900">{viewingPayment.purchase_invoice?.invoice_number}</p>
                   </div>
                   <div>
                     <p className="text-sm text-slate-500">Vendor</p>
-                    <p className="font-semibold text-slate-900">{viewingPayment.purchase_record?.vendor?.name}</p>
+                    <p className="font-semibold text-slate-900">{viewingPayment.purchase_invoice?.vendor?.name}</p>
                   </div>
                   <div>
                     <p className="text-sm text-slate-500">Amount</p>
