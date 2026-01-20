@@ -15,10 +15,12 @@ import ItemsManagement from '@/components/ItemsManagement';
 import CategoriesManagement from '@/components/CategoriesManagement';
 import UnitsManagement from '@/components/UnitsManagement';
 import PurchaseOrders from '@/components/PurchaseOrders';
+import PurchasePayments from '@/components/PurchasePayments';
 import PurchaseRecording from '@/components/PurchaseRecording';
+import PurchaseRecordsManagement from '@/components/PurchaseRecordsManagement';
 import SalesInvoice from '@/components/SalesInvoice';
+import SalesOrders from '@/components/SalesOrders';
 import SalesPaymentsManagement from '@/components/SalesPaymentsManagement';
-import CreditsManagement from '@/components/CreditsManagement';
 import ReturnsManagement from '@/components/ReturnsManagement';
 import ExpensesManagement from '@/components/ExpensesManagement';
 import VendorsManagement from '@/components/VendorsManagement';
@@ -27,7 +29,10 @@ import Reports from '@/components/Reports';
 import TaxReports from '@/components/TaxReports';
 import Settings from '@/components/Settings';
 
-type Page = 'dashboard' | 'inventory' | 'items' | 'categories' | 'units' | 'purchase-order' | 'purchase-record' | 'sales' | 'sales-payments' | 'credits' | 'returns' | 'expenses' | 'vendors' | 'customers' | 'reports' | 'tax-reports' | 'settings';
+type Page = 'dashboard' | 'inventory' | 'items' | 'categories' | 'units' | 
+  'purchase-order' | 'purchase-payments' | 'purchase-record' | 'purchase-records' | 
+  'sales' | 'sales-orders' | 'sales-payments' | 'returns' | 
+  'expenses' | 'vendors' | 'customers' | 'reports' | 'tax-reports' | 'settings';
 
 const AppContent = () => {
   const { theme } = useTheme();
@@ -115,7 +120,9 @@ const AppContent = () => {
       isSection: true,
       submenu: [
         { id: 'purchase-order', label: 'Purchase Orders' },
-        { id: 'purchase-record', label: 'Purchase Recording' }
+        { id: 'purchase-payments', label: 'Purchase Payments' },
+        { id: 'purchase-record', label: 'Purchase Recording' },
+        { id: 'purchase-records', label: 'Purchase Records' }
       ]
     },
     
@@ -126,8 +133,8 @@ const AppContent = () => {
       isSection: true,
       submenu: [
         { id: 'sales', label: 'Sales Invoice' },
+        { id: 'sales-orders', label: 'Sales Orders' },
         { id: 'sales-payments', label: 'Sales & Payments' },
-        { id: 'credits', label: 'Credits & Credit Notes' },
         { id: 'returns', label: 'Returns & Refunds' }
       ]
     },
@@ -167,10 +174,12 @@ const AppContent = () => {
       case 'categories': return <CategoriesManagement />;
       case 'units': return <UnitsManagement />;
       case 'purchase-order': return <PurchaseOrders />;
+      case 'purchase-payments': return <PurchasePayments />;
       case 'purchase-record': return <PurchaseRecording />;
+      case 'purchase-records': return <PurchaseRecordsManagement />;
       case 'sales': return <SalesInvoice />;
+      case 'sales-orders': return <SalesOrders />;
       case 'sales-payments': return <SalesPaymentsManagement />;
-      case 'credits': return <CreditsManagement />;
       case 'returns': return <ReturnsManagement />;
       case 'expenses': return <ExpensesManagement />;
       case 'vendors': return <VendorsManagement />;
