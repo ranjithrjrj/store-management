@@ -1,5 +1,5 @@
 // FILE PATH: components/PurchaseOrders.tsx
-// Purchase Orders Management with Select/Textarea components and improved mobile UX
+// Purchase Orders Management with Receive Goods functionality
 
 'use client';
 import React, { useState, useEffect } from 'react';
@@ -23,7 +23,7 @@ type PurchaseOrder = {
   id: string;
   po_number: string;
   vendor_id: string;
-  vendor?: { name: string };
+  vendor?: { name: string; state_code: string };
   po_date: string;
   expected_delivery_date?: string;
   status: 'pending' | 'partial' | 'received' | 'cancelled';
@@ -36,7 +36,11 @@ type PurchaseOrder = {
   created_at: string;
 };
 
-const PurchaseOrders = () => {
+type Props = {
+  onNavigate: (page: string) => void;
+};
+
+const PurchaseOrders = ({ onNavigate }: Props) => {
   const { theme } = useTheme();
   const toast = useToast();
   const [orders, setOrders] = useState<PurchaseOrder[]>([]);
@@ -90,7 +94,7 @@ const PurchaseOrders = () => {
         .from('purchase_orders')
         .select(`
           *,
-          vendor:vendors(name)
+          vendor:vendors(name, state_code)
         `)
         .order('po_date', { ascending: false });
       
@@ -159,6 +163,21 @@ const PurchaseOrders = () => {
       console.error('Error loading PO:', err);
       toast.error('Failed to load', 'Could not load purchase order: ' + err.message);
     }
+  };
+
+  const handleReceiveGoods = (po: PurchaseOrder) => {
+    const vendor = vendors.find(v => v.id === po.vendor_id);
+    
+    sessionStorage.setItem('receivePO', JSON.stringify({
+      po_id: po.id,
+      po_number: po.po_number,
+      vendor_id: po.vendor_id,
+      vendor_state_code: vendor?.state_code || '33',
+      po_date: po.po_date
+    }));
+    
+    toast.success('Opening receiving form...', `Loading PO ${po.po_number}`);
+    onNavigate('purchase-invoices');
   };
 
   const addItem = () => {
@@ -534,6 +553,18 @@ const PurchaseOrders = () => {
                     <td className="px-4 py-3">{getStatusBadge(order.status)}</td>
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-2">
+                        {/* Receive Goods button - only for pending/partial POs */}
+                        {(order.status === 'pending' || order.status === 'partial') && (
+                          <button
+                            onClick={() => handleReceiveGoods(order)}
+                            className="p-2 rounded-lg bg-green-50 text-green-600 hover:bg-green-100 transition-colors"
+                            title="Receive Goods"
+                          >
+                            <Package size={16} />
+                          </button>
+                        )}
+                        
+                        {/* Edit button */}
                         <button
                           onClick={() => handleEdit(order)}
                           className={`${theme.classes.textPrimary} hover:${theme.classes.bgPrimaryLight} p-2 rounded-lg transition-colors`}
@@ -541,6 +572,8 @@ const PurchaseOrders = () => {
                         >
                           <Edit2 size={16} />
                         </button>
+                        
+                        {/* Delete button */}
                         <button
                           onClick={() => handleDeleteClick(order.id, order.po_number)}
                           className="text-red-600 hover:bg-red-50 p-2 rounded-lg transition-colors"
