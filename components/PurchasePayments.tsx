@@ -43,6 +43,12 @@ const PurchasePayments = () => {
   
   const [payments, setPayments] = useState<Payment[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
+  const [filterMethod, setFilterMethod] = useState('all');
+  const [filterDateFrom, setFilterDateFrom] = useState('');
+  const [filterDateTo, setFilterDateTo] = useState('');
+  const [sortBy, setSortBy] = useState('payment_date');
+  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
+  const [showFilterModal, setShowFilterModal] = useState(false);
   const [showAddModal, setShowAddModal] = useState(false);
   const [showViewModal, setShowViewModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
@@ -369,14 +375,56 @@ const PurchasePayments = () => {
     }
   };
 
-  const filteredPayments = payments.filter(payment => {
-    const searchLower = searchTerm.toLowerCase();
-    return (
-      payment.payment_number.toLowerCase().includes(searchLower) ||
-      payment.purchase_invoice?.invoice_number.toLowerCase().includes(searchLower) ||
-      payment.purchase_invoice?.vendor?.name.toLowerCase().includes(searchLower)
-    );
-  });
+  const filteredPayments = payments
+    .filter(payment => {
+      // Search filter
+      const searchLower = searchTerm.toLowerCase();
+      const matchesSearch = 
+        payment.payment_number.toLowerCase().includes(searchLower) ||
+        payment.purchase_invoice?.invoice_number.toLowerCase().includes(searchLower) ||
+        payment.purchase_invoice?.vendor?.name.toLowerCase().includes(searchLower);
+      
+      // Payment method filter
+      const matchesMethod = filterMethod === 'all' || payment.payment_method === filterMethod;
+      
+      // Date range filter
+      const paymentDate = new Date(payment.payment_date);
+      const matchesDateFrom = !filterDateFrom || paymentDate >= new Date(filterDateFrom);
+      const matchesDateTo = !filterDateTo || paymentDate <= new Date(filterDateTo);
+      
+      return matchesSearch && matchesMethod && matchesDateFrom && matchesDateTo;
+    })
+    .sort((a, b) => {
+      let aVal, bVal;
+      
+      switch (sortBy) {
+        case 'payment_date':
+          aVal = new Date(a.payment_date).getTime();
+          bVal = new Date(b.payment_date).getTime();
+          break;
+        case 'amount':
+          aVal = a.amount;
+          bVal = b.amount;
+          break;
+        case 'payment_number':
+          aVal = a.payment_number;
+          bVal = b.payment_number;
+          break;
+        case 'vendor':
+          aVal = a.purchase_invoice?.vendor?.name || '';
+          bVal = b.purchase_invoice?.vendor?.name || '';
+          break;
+        default:
+          aVal = new Date(a.payment_date).getTime();
+          bVal = new Date(b.payment_date).getTime();
+      }
+      
+      if (sortOrder === 'asc') {
+        return aVal > bVal ? 1 : -1;
+      } else {
+        return aVal < bVal ? 1 : -1;
+      }
+    });
 
   if (loading) {
     return (
@@ -415,16 +463,89 @@ const PurchasePayments = () => {
           </div>
         </div>
 
-        {/* Search */}
+        {/* Search and Filters */}
         <Card padding="md">
-          <Input
-            placeholder="Search by payment number, invoice, or vendor..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            leftIcon={<Search size={18} />}
-            rightIcon={searchTerm ? (
-              <button onClick={() => setSearchTerm('')} className="text-slate-400 hover:text-slate-600">
-                <X size={18} />
+          <div className="flex flex-col md:flex-row gap-3">
+            <div className="flex-1">
+              <Input
+                placeholder="Search by payment number, invoice, or vendor..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                leftIcon={<Search size={18} />}
+                rightIcon={searchTerm ? (
+                  <button onClick={() => setSearchTerm('')} className="text-slate-400 hover:text-slate-600">
+                    <X size={18} />
+                  </button>
+                ) : undefined}
+              />
+            </div>
+            
+            <Select
+              value={sortBy}
+              onChange={(e) => setSortBy(e.target.value)}
+              className="md:w-48"
+            >
+              <option value="payment_date">Sort by Date</option>
+              <option value="amount">Sort by Amount</option>
+              <option value="payment_number">Sort by Payment #</option>
+              <option value="vendor">Sort by Vendor</option>
+            </Select>
+            
+            <Button
+              onClick={() => setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc')}
+              variant="secondary"
+              size="md"
+            >
+              {sortOrder === 'desc' ? '↓ Newest' : '↑ Oldest'}
+            </Button>
+            
+            <Button
+              onClick={() => setShowFilterModal(true)}
+              variant="secondary"
+              size="md"
+              className="relative"
+            >
+              🔍 Filters
+              {(filterMethod !== 'all' || filterDateFrom || filterDateTo) && (
+                <span className="absolute -top-1 -right-1 w-5 h-5 bg-blue-600 text-white text-xs rounded-full flex items-center justify-center">
+                  {[filterMethod !== 'all', filterDateFrom, filterDateTo].filter(Boolean).length}
+                </span>
+              )}
+            </Button>
+          </div>
+        </Card>
+
+        {/* Active Filters Display */}
+        {(filterMethod !== 'all' || filterDateFrom || filterDateTo) && (
+          <div className="flex flex-wrap gap-2 px-2">
+            {filterMethod !== 'all' && (
+              <Badge variant="primary">
+                Method: {filterMethod} 
+                <button onClick={() => setFilterMethod('all')} className="ml-2">×</button>
+              </Badge>
+            )}
+            {filterDateFrom && (
+              <Badge variant="primary">
+                From: {new Date(filterDateFrom).toLocaleDateString()}
+                <button onClick={() => setFilterDateFrom('')} className="ml-2">×</button>
+              </Badge>
+            )}
+            {filterDateTo && (
+              <Badge variant="primary">
+                To: {new Date(filterDateTo).toLocaleDateString()}
+                <button onClick={() => setFilterDateTo('')} className="ml-2">×</button>
+              </Badge>
+            )}
+            <button 
+              onClick={() => { setFilterMethod('all'); setFilterDateFrom(''); setFilterDateTo(''); }}
+              className="text-sm text-slate-600 hover:text-slate-900 underline"
+            >
+              Clear all
+            </button>
+          </div>
+        )}
+
+        {/* Payments List */}
               </button>
             ) : undefined}
           />
@@ -908,6 +1029,80 @@ Remaining: ₹${(selectedRecord.pending_amount - paymentForm.amount).toLocaleStr
           cancelText="Cancel"
           variant="danger"
         />
+      )}
+
+      {/* Filter Modal */}
+      {showFilterModal && (
+        <div className="fixed inset-0 bg-black/20 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+          <Card className="w-full max-w-lg">
+            <div className="flex items-center justify-between mb-6">
+              <h3 className="text-xl font-bold text-slate-900">Filter Payments</h3>
+              <button onClick={() => setShowFilterModal(false)} className="text-slate-400 hover:text-slate-600">
+                <X size={24} />
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              {/* Payment Method Filter */}
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-2">Payment Method</label>
+                <Select
+                  value={filterMethod}
+                  onChange={(e) => setFilterMethod(e.target.value)}
+                >
+                  <option value="all">All Methods</option>
+                  <option value="cash">Cash</option>
+                  <option value="card">Card</option>
+                  <option value="upi">UPI</option>
+                  <option value="bank_transfer">Bank Transfer</option>
+                  <option value="cheque">Cheque</option>
+                </Select>
+              </div>
+
+              {/* Date Range Filter */}
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-2">From Date</label>
+                  <Input
+                    type="date"
+                    value={filterDateFrom}
+                    onChange={(e) => setFilterDateFrom(e.target.value)}
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-2">To Date</label>
+                  <Input
+                    type="date"
+                    value={filterDateTo}
+                    onChange={(e) => setFilterDateTo(e.target.value)}
+                  />
+                </div>
+              </div>
+
+              {/* Actions */}
+              <div className="flex gap-3 pt-4">
+                <Button
+                  onClick={() => {
+                    setFilterMethod('all');
+                    setFilterDateFrom('');
+                    setFilterDateTo('');
+                  }}
+                  variant="secondary"
+                  fullWidth
+                >
+                  Clear Filters
+                </Button>
+                <Button
+                  onClick={() => setShowFilterModal(false)}
+                  variant="primary"
+                  fullWidth
+                >
+                  Apply Filters
+                </Button>
+              </div>
+            </div>
+          </Card>
+        </div>
       )}
     </div>
   );
