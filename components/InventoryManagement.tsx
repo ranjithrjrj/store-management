@@ -5,11 +5,12 @@
 import React, { useState, useEffect } from 'react';
 import { 
   Package, Search, AlertTriangle, TrendingUp, DollarSign, X, 
-  Plus, Edit2, Trash2, History, Info, Tag, Filter, ChevronDown
+  Plus, Edit2, Trash2, History, Info, Tag, Filter, ChevronDown, Camera 
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { Button, Card, Input, Textarea, Badge, EmptyState, LoadingSpinner, ConfirmDialog, useToast } from '@/components/ui';
 import { useTheme } from '@/contexts/ThemeContext';
+import BarcodeScanner from './BarcodeScanner';
 
 type Item = {
   id: string;
@@ -246,6 +247,12 @@ const InventoryManagement = () => {
     if (item.current_stock <= item.min_stock_level) return 'low-stock';
     return 'in-stock';
   };
+
+  const handleBarcodeScan = (barcode: string) => {
+  setFormData({ ...formData, barcode });
+  toast.success('Scanned!', `Barcode: ${barcode}`);
+  setShowBarcodeScanner(false);
+};
 
   const getStockBadge = (item: Item) => {
     const status = getStockStatus(item);
@@ -734,14 +741,27 @@ const InventoryManagement = () => {
                 </div>
 
                 <div>
-                  <label className="block text-sm font-semibold text-slate-700 mb-2">Barcode</label>
-                  <input
-                    type="text"
-                    value={formData.barcode}
-                    onChange={(e) => setFormData({ ...formData, barcode: e.target.value })}
-                    className="w-full px-4 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-teal-500"
-                    placeholder="e.g., 123456789"
-                  />
+                  <label className="block text-sm font-semibold text-slate-700 mb-2">
+                    Barcode
+                  </label>
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      value={formData.barcode}
+                      onChange={(e) => setFormData({ ...formData, barcode: e.target.value })}
+                      className="flex-1 px-4 py-2.5 border-2 border-slate-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-teal-500 transition-all"
+                      placeholder="Enter or scan barcode"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowBarcodeScanner(true)}
+                      className="px-4 py-2.5 bg-gradient-to-r from-blue-600 to-blue-700 text-white rounded-lg hover:from-blue-700 hover:to-blue-800 transition-all flex items-center gap-2 shadow-md"
+                    >
+                      <Camera size={18} />
+                      <span className="hidden sm:inline">Scan</span>
+                    </button>
+                  </div>
+                  <p className="text-xs text-slate-500 mt-1">Scan using camera or enter manually</p>
                 </div>
 
                 <div>
@@ -1084,8 +1104,16 @@ const InventoryManagement = () => {
         cancelText="Cancel" 
         variant="danger" 
       />
+    {/* Barcode Scanner Modal */}
+      <BarcodeScanner
+        isOpen={showBarcodeScanner}
+        onClose={() => setShowBarcodeScanner(false)}
+        onScan={handleBarcodeScan}
+      />
     </div>
   );
 };
+
+export default InventoryManagement;
 
 export default InventoryManagement;
