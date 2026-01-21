@@ -5,7 +5,7 @@
 import React, { useState, useEffect } from 'react';
 import { 
   Package, Search, AlertTriangle, TrendingUp, DollarSign, X, 
-  Plus, Edit2, Trash2, History, Info, Tag, Filter, ChevronDown, Camera 
+  Plus, Edit2, Trash2, History, Info, Tag, Filter, ChevronDown, Camera
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { Button, Card, Input, Textarea, Badge, EmptyState, LoadingSpinner, ConfirmDialog, useToast } from '@/components/ui';
@@ -16,7 +16,6 @@ type Item = {
   id: string;
   name: string;
   sku?: string;
-  barcode?: string;
   category_id?: string;
   category?: { id: string; name: string };
   unit_id?: string;
@@ -67,6 +66,7 @@ const InventoryManagement = () => {
   const [showAddModal, setShowAddModal] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [showSortDropdown, setShowSortDropdown] = useState(false);
+  const [showBarcodeScanner, setShowBarcodeScanner] = useState(false);
   const [selectedItem, setSelectedItem] = useState<Item | null>(null);
   const [activeTab, setActiveTab] = useState<'details' | 'stock' | 'history' | 'settings'>('details');
   const [editingItem, setEditingItem] = useState<Item | null>(null);
@@ -242,17 +242,17 @@ const InventoryManagement = () => {
     setFilterCategory('all');
   };
 
+  const handleBarcodeScan = (barcode: string) => {
+    setFormData({ ...formData, barcode });
+    toast.success('Scanned!', `Barcode: ${barcode}`);
+    setShowBarcodeScanner(false);
+  };
+
   const getStockStatus = (item: Item) => {
     if (item.current_stock === 0) return 'out-of-stock';
     if (item.current_stock <= item.min_stock_level) return 'low-stock';
     return 'in-stock';
   };
-
-  const handleBarcodeScan = (barcode: string) => {
-  setFormData({ ...formData, barcode });
-  toast.success('Scanned!', `Barcode: ${barcode}`);
-  setShowBarcodeScanner(false);
-};
 
   const getStockBadge = (item: Item) => {
     const status = getStockStatus(item);
@@ -741,9 +741,7 @@ const InventoryManagement = () => {
                 </div>
 
                 <div>
-                  <label className="block text-sm font-semibold text-slate-700 mb-2">
-                    Barcode
-                  </label>
+                  <label className="block text-sm font-semibold text-slate-700 mb-2">Barcode</label>
                   <div className="flex gap-2">
                     <input
                       type="text"
@@ -1104,7 +1102,8 @@ const InventoryManagement = () => {
         cancelText="Cancel" 
         variant="danger" 
       />
-    {/* Barcode Scanner Modal */}
+
+      {/* Barcode Scanner Modal */}
       <BarcodeScanner
         isOpen={showBarcodeScanner}
         onClose={() => setShowBarcodeScanner(false)}
