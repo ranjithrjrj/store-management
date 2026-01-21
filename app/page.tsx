@@ -170,7 +170,7 @@ const AppContent = () => {
       case 'inventory': return <InventoryManagement />;
       case 'categories': return <CategoriesManagement />;
       case 'units': return <UnitsManagement />;
-      case 'purchase-order': return <PurchaseOrders onNavigate={(page) => setCurrentPage(page)} />;
+      case 'purchase-order': return <PurchaseOrders onNavigate={setCurrentPage} />;
       case 'purchase-payments': return <PurchasePayments />;
       case 'purchase-invoices': return <PurchaseInvoices />;
       case 'purchase-records': return <PurchaseRecordsManagement />;
