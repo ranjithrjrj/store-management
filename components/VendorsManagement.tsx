@@ -1,11 +1,14 @@
 // FILE PATH: components/VendorsManagement.tsx
-// Vendors Management with ConfirmDialog and active/inactive filtering
+// Beautiful Modern Vendors Management - Teal & Gold Theme with Table Layout
 
 'use client';
 import React, { useState, useEffect } from 'react';
-import { Store, Plus, Edit2, Trash2, X, Search, Phone, Mail, MapPin, FileText, CreditCard } from 'lucide-react';
+import { 
+  Store, Plus, Edit2, Trash2, X, Search, Phone, Mail, 
+  MapPin, FileText, CreditCard, Filter, ChevronDown 
+} from 'lucide-react';
 import { supabase, vendorsAPI } from '@/lib/supabase';
-import { Button, Card, Input, Badge, EmptyState, LoadingSpinner, ConfirmDialog, useToast } from '@/components/ui';
+import { Button, Badge, EmptyState, LoadingSpinner, ConfirmDialog, useToast } from '@/components/ui';
 import { useTheme } from '@/contexts/ThemeContext';
 
 type Vendor = {
@@ -31,15 +34,17 @@ const VendorsManagement = () => {
   
   const [vendors, setVendors] = useState<Vendor[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
+  const [filterStatus, setFilterStatus] = useState<'all' | 'active' | 'inactive'>('all');
+  const [sortBy, setSortBy] = useState('name');
+  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
+  const [showFilterModal, setShowFilterModal] = useState(false);
   const [showModal, setShowModal] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
-  const [showEditConfirm, setShowEditConfirm] = useState(false);
-  const [showInactive, setShowInactive] = useState(false);
+  const [showSortDropdown, setShowSortDropdown] = useState(false);
   const [editingVendor, setEditingVendor] = useState<Vendor | null>(null);
   const [deletingVendor, setDeletingVendor] = useState<{ id: string; name: string } | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   
   const [formData, setFormData] = useState<Partial<Vendor>>({
     name: '',
@@ -49,18 +54,17 @@ const VendorsManagement = () => {
     gstin: '',
     address: '',
     city: '',
-    state: '',
-    state_code: '',
+    state: 'Tamil Nadu',
+    state_code: '33',
     pincode: '',
     payment_terms: '',
     is_active: true
   });
 
-  // Helper to normalize is_active from database
   const normalizeBoolean = (value: boolean | string | null | undefined): boolean => {
     if (value === true || value === 'true') return true;
     if (value === false || value === 'false') return false;
-    return true; // Default to true if null or undefined
+    return true;
   };
 
   useEffect(() => {
@@ -70,14 +74,11 @@ const VendorsManagement = () => {
   async function loadVendors() {
     try {
       setLoading(true);
-      setError(null);
-
       const data = await vendorsAPI.getAll();
       setVendors(data || []);
     } catch (err: any) {
       console.error('Error loading vendors:', err);
-      setError(err.message || 'Failed to load vendors');
-      toast.error('Failed to load', 'Could not load vendors. Please refresh.');
+      toast.error('Failed to load', 'Could not load vendors.');
     } finally {
       setLoading(false);
     }
@@ -85,20 +86,7 @@ const VendorsManagement = () => {
 
   const handleAddNew = () => {
     setEditingVendor(null);
-    setFormData({
-      name: '',
-      contact_person: '',
-      phone: '',
-      email: '',
-      gstin: '',
-      address: '',
-      city: '',
-      state: 'Tamil Nadu',
-      state_code: '33',
-      pincode: '',
-      payment_terms: '',
-      is_active: true
-    });
+    setFormData({ name: '', contact_person: '', phone: '', email: '', gstin: '', address: '', city: '', state: 'Tamil Nadu', state_code: '33', pincode: '', payment_terms: '', is_active: true });
     setShowModal(true);
   };
 
@@ -122,20 +110,10 @@ const VendorsManagement = () => {
   };
 
   const handleSubmit = async () => {
-    if (!formData.name?.trim()) {
-      toast.warning('Name required', 'Please enter vendor name.');
-      return;
-    }
-
-    // Show confirmation dialog
-    setShowEditConfirm(true);
-  };
-
-  const handleConfirmSubmit = async () => {
-    setShowEditConfirm(false);
     try {
       setSaving(true);
-
+      if (!formData.name?.trim()) { toast.warning('Name required', 'Please enter vendor name.'); return; }
+      
       if (editingVendor) {
         await vendorsAPI.update(editingVendor.id, formData as any);
         toast.success('Updated!', `Vendor "${formData.name}" has been updated.`);
@@ -143,23 +121,9 @@ const VendorsManagement = () => {
         await vendorsAPI.create(formData as any);
         toast.success('Created!', `Vendor "${formData.name}" has been created.`);
       }
-
+      
       await loadVendors();
       setShowModal(false);
-      setFormData({
-        name: '',
-        contact_person: '',
-        phone: '',
-        email: '',
-        gstin: '',
-        address: '',
-        city: '',
-        state: 'Tamil Nadu',
-        state_code: '33',
-        pincode: '',
-        payment_terms: '',
-        is_active: true
-      });
     } catch (err: any) {
       console.error('Error saving vendor:', err);
       toast.error('Failed to save', err.message || 'Could not save vendor.');
@@ -168,14 +132,10 @@ const VendorsManagement = () => {
     }
   };
 
-  const handleDeleteClick = (id: string, name: string) => {
-    setDeletingVendor({ id, name });
-    setShowDeleteConfirm(true);
-  };
+  const handleDeleteClick = (id: string, name: string) => { setDeletingVendor({ id, name }); setShowDeleteConfirm(true); };
 
   const handleDeleteConfirm = async () => {
     if (!deletingVendor) return;
-
     try {
       await vendorsAPI.delete(deletingVendor.id);
       await loadVendors();
@@ -188,362 +148,543 @@ const VendorsManagement = () => {
     }
   };
 
-  const filteredVendors = vendors.filter(vendor => {
-    const matchesSearch = vendor.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      (vendor.contact_person && vendor.contact_person.toLowerCase().includes(searchTerm.toLowerCase())) ||
-      (vendor.phone && vendor.phone.includes(searchTerm)) ||
-      (vendor.email && vendor.email.toLowerCase().includes(searchTerm.toLowerCase()));
-    
-    const isActive = vendor.is_active === true || vendor.is_active === 'true';
-    const matchesActive = showInactive || isActive;
+  const handleClearFilters = () => {
+    setSearchTerm('');
+    setFilterStatus('all');
+  };
 
-    return matchesSearch && matchesActive;
-  });
+  const filteredVendors = vendors
+    .filter(vendor => {
+      const matchesSearch = 
+        vendor.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        (vendor.contact_person && vendor.contact_person.toLowerCase().includes(searchTerm.toLowerCase())) ||
+        (vendor.phone && vendor.phone.includes(searchTerm)) ||
+        (vendor.email && vendor.email.toLowerCase().includes(searchTerm.toLowerCase()));
+      
+      const isActive = normalizeBoolean(vendor.is_active);
+      const matchesStatus = filterStatus === 'all' || (filterStatus === 'active' ? isActive : !isActive);
 
-  const activeCount = vendors.filter(v => v.is_active === true || v.is_active === 'true').length;
-  const inactiveCount = vendors.filter(v => v.is_active === false || v.is_active === 'false' || v.is_active === null).length;
+      return matchesSearch && matchesStatus;
+    })
+    .sort((a, b) => {
+      let aVal: any, bVal: any;
+      if (sortBy === 'name') { aVal = a.name; bVal = b.name; }
+      else if (sortBy === 'city') { aVal = a.city || ''; bVal = b.city || ''; }
+      else { aVal = new Date(a.created_at).getTime(); bVal = new Date(b.created_at).getTime(); }
+      return sortOrder === 'asc' ? (aVal > bVal ? 1 : -1) : (aVal < bVal ? 1 : -1);
+    });
 
-  if (error && !loading) {
+  const stats = {
+    total: vendors.length,
+    active: vendors.filter(v => normalizeBoolean(v.is_active)).length,
+    inactive: vendors.filter(v => !normalizeBoolean(v.is_active)).length,
+    withGSTIN: vendors.filter(v => v.gstin).length
+  };
+
+  const hasActiveFilters = filterStatus !== 'all' || searchTerm !== '';
+
+  if (loading) {
     return (
-      <div className="space-y-6">
-        <div>
-          <h2 className="text-2xl font-bold text-gray-900">Vendors Management</h2>
-          <p className="text-gray-600 text-sm mt-1">Manage vendor information</p>
-        </div>
-        <Card>
-          <div className="text-center py-8">
-            <div className="text-red-600 mb-4">
-              <Store size={48} className="mx-auto opacity-50" />
-            </div>
-            <h3 className="font-bold text-red-800 mb-2">Failed to Load Vendors</h3>
-            <p className="text-red-600 text-sm mb-4">{error}</p>
-            <Button onClick={loadVendors} variant="primary">Try Again</Button>
+      <div className="min-h-screen bg-gradient-to-br from-teal-50 via-white to-amber-50 flex items-center justify-center p-8">
+        <div className="text-center">
+          <div className="inline-flex p-6 bg-white/90 backdrop-blur-sm rounded-2xl shadow-xl mb-4">
+            <LoadingSpinner size="lg" />
           </div>
-        </Card>
+          <p className="text-slate-700 font-medium">Loading vendors...</p>
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <div>
-          <h2 className="text-2xl font-bold text-gray-900">Vendors Management</h2>
-          <p className="text-gray-600 text-sm mt-1">Manage vendor information</p>
-        </div>
-        <Button onClick={handleAddNew} variant="primary" size="md" icon={<Plus size={18} />}>
-          Add Vendor
-        </Button>
-      </div>
-
-      {/* Search & Filter */}
-      <div className="grid grid-cols-1 md:grid-cols-12 gap-4">
-        <div className="md:col-span-8">
-          <Card padding="md">
-            <Input
-              leftIcon={<Search size={18} />}
-              placeholder="Search vendors by name, contact, phone, or email..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-            />
-          </Card>
-        </div>
+    <div className="min-h-screen bg-gradient-to-br from-teal-50 via-white to-amber-50 p-4 md:p-6 lg:p-8">
+      <div className="max-w-7xl mx-auto space-y-6">
         
-        <div className="md:col-span-4">
-          <Card padding="md">
-            <label className="flex items-center gap-2 cursor-pointer">
-              <input
-                type="checkbox"
-                checked={showInactive}
-                onChange={(e) => setShowInactive(e.target.checked)}
-                className={`rounded ${theme.classes.textPrimary}`}
+        {/* Header */}
+        <div className="bg-white rounded-2xl shadow-lg border border-teal-100 p-6">
+          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+            <div className="flex items-center gap-4">
+              <div className="p-3 bg-gradient-to-br from-teal-500 to-teal-600 rounded-xl shadow-md">
+                <Store className="text-white" size={32} />
+              </div>
+              <div>
+                <h1 className="text-3xl font-bold text-slate-900">Vendors</h1>
+                <p className="text-slate-600 mt-1">Manage vendor information</p>
+              </div>
+            </div>
+            <Button 
+              onClick={handleAddNew} 
+              variant="primary" 
+              size="md" 
+              icon={<Plus size={20} />}
+              className="bg-gradient-to-r from-teal-600 to-teal-700 hover:from-teal-700 hover:to-teal-800 shadow-md"
+            >
+              Add Vendor
+            </Button>
+          </div>
+        </div>
+
+        {/* Stats Cards */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <div className="bg-white rounded-xl shadow-md border border-teal-100 p-4 hover:shadow-lg transition-shadow">
+            <div className="flex items-center justify-between mb-2">
+              <div className="p-2 bg-teal-100 rounded-lg">
+                <Store className="text-teal-600" size={20} />
+              </div>
+              <span className="text-2xl font-bold text-slate-900">{stats.total}</span>
+            </div>
+            <p className="text-sm text-slate-600">Total Vendors</p>
+          </div>
+
+          <div className="bg-white rounded-xl shadow-md border border-green-100 p-4 hover:shadow-lg transition-shadow">
+            <div className="flex items-center justify-between mb-2">
+              <div className="p-2 bg-green-100 rounded-lg">
+                <Store className="text-green-600" size={20} />
+              </div>
+              <span className="text-2xl font-bold text-slate-900">{stats.active}</span>
+            </div>
+            <p className="text-sm text-slate-600">Active</p>
+          </div>
+
+          <div className="bg-white rounded-xl shadow-md border border-slate-100 p-4 hover:shadow-lg transition-shadow">
+            <div className="flex items-center justify-between mb-2">
+              <div className="p-2 bg-slate-100 rounded-lg">
+                <Store className="text-slate-600" size={20} />
+              </div>
+              <span className="text-2xl font-bold text-slate-900">{stats.inactive}</span>
+            </div>
+            <p className="text-sm text-slate-600">Inactive</p>
+          </div>
+
+          <div className="bg-white rounded-xl shadow-md border border-amber-100 p-4 hover:shadow-lg transition-shadow">
+            <div className="flex items-center justify-between mb-2">
+              <div className="p-2 bg-amber-100 rounded-lg">
+                <FileText className="text-amber-600" size={20} />
+              </div>
+              <span className="text-2xl font-bold text-slate-900">{stats.withGSTIN}</span>
+            </div>
+            <p className="text-sm text-slate-600">With GSTIN</p>
+          </div>
+        </div>
+
+        {/* Search & Filter Bar */}
+        <div className="bg-white rounded-xl shadow-md border border-slate-200 p-4">
+          <div className="flex flex-col md:flex-row gap-3">
+            <div className="flex-1">
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={20} />
+                <input
+                  type="text"
+                  placeholder="Search vendors..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="w-full pl-10 pr-10 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-teal-500 transition-all"
+                />
+                {searchTerm && (
+                  <button onClick={() => setSearchTerm('')} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600">
+                    <X size={18} />
+                  </button>
+                )}
+              </div>
+            </div>
+
+            <Button
+              onClick={() => setShowFilterModal(true)}
+              variant="secondary"
+              size="md"
+              icon={<Filter size={18} />}
+              className="relative"
+            >
+              Filters
+              {hasActiveFilters && (
+                <span className="absolute -top-1 -right-1 w-5 h-5 bg-teal-600 text-white text-xs rounded-full flex items-center justify-center">
+                  {[filterStatus !== 'all'].filter(Boolean).length}
+                </span>
+              )}
+            </Button>
+
+            {hasActiveFilters && (
+              <Button onClick={handleClearFilters} variant="secondary" size="md">Clear All</Button>
+            )}
+
+            <div className="relative">
+              <button
+                onClick={() => setShowSortDropdown(!showSortDropdown)}
+                className="flex items-center gap-2 px-4 py-2.5 bg-white border border-slate-300 rounded-lg hover:bg-slate-50 transition-colors"
+              >
+                <span className="text-sm font-medium text-slate-700">
+                  Sort: {sortBy === 'name' ? 'Name' : sortBy === 'city' ? 'City' : 'Date Added'}
+                </span>
+                <ChevronDown size={16} className="text-slate-500" />
+              </button>
+
+              {showSortDropdown && (
+                <div className="absolute right-0 mt-2 w-56 bg-white rounded-lg shadow-xl border border-slate-200 py-2 z-50">
+                  <button onClick={() => { setSortBy('name'); setSortOrder('asc'); setShowSortDropdown(false); }} className="w-full px-4 py-2 text-left text-sm hover:bg-slate-50 flex items-center justify-between">
+                    <span>Name (A-Z)</span>
+                    {sortBy === 'name' && sortOrder === 'asc' && <span className="text-teal-600">✓</span>}
+                  </button>
+                  <button onClick={() => { setSortBy('name'); setSortOrder('desc'); setShowSortDropdown(false); }} className="w-full px-4 py-2 text-left text-sm hover:bg-slate-50 flex items-center justify-between">
+                    <span>Name (Z-A)</span>
+                    {sortBy === 'name' && sortOrder === 'desc' && <span className="text-teal-600">✓</span>}
+                  </button>
+                  <div className="border-t border-slate-200 my-1"></div>
+                  <button onClick={() => { setSortBy('created_at'); setSortOrder('desc'); setShowSortDropdown(false); }} className="w-full px-4 py-2 text-left text-sm hover:bg-slate-50 flex items-center justify-between">
+                    <span>Date (Newest First)</span>
+                    {sortBy === 'created_at' && sortOrder === 'desc' && <span className="text-teal-600">✓</span>}
+                  </button>
+                  <button onClick={() => { setSortBy('created_at'); setSortOrder('asc'); setShowSortDropdown(false); }} className="w-full px-4 py-2 text-left text-sm hover:bg-slate-50 flex items-center justify-between">
+                    <span>Date (Oldest First)</span>
+                    {sortBy === 'created_at' && sortOrder === 'asc' && <span className="text-teal-600">✓</span>}
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {hasActiveFilters && (
+            <div className="flex flex-wrap gap-2 mt-3 pt-3 border-t border-slate-200">
+              {filterStatus !== 'all' && (
+                <span className="inline-flex items-center gap-1 px-3 py-1 bg-teal-100 text-teal-700 rounded-full text-sm">
+                  Status: {filterStatus}
+                  <button onClick={() => setFilterStatus('all')} className="hover:text-teal-900"><X size={14} /></button>
+                </span>
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* Table */}
+        <div className="bg-white rounded-xl shadow-lg border border-slate-200 overflow-hidden">
+          {filteredVendors.length === 0 ? (
+            <div className="p-12">
+              <EmptyState 
+                icon={<Store size={64} className="text-slate-300" />}
+                title={hasActiveFilters ? "No vendors found" : "No vendors yet"}
+                description={hasActiveFilters ? "Try adjusting your filters" : "Add your first vendor to get started"}
+                action={
+                  hasActiveFilters ? (
+                    <Button onClick={handleClearFilters} variant="secondary">Clear Filters</Button>
+                  ) : (
+                    <Button onClick={handleAddNew} variant="primary" icon={<Plus size={20} />}>Add First Vendor</Button>
+                  )
+                }
               />
-              <span className="text-sm font-medium text-gray-700">
-                Show Inactive ({inactiveCount})
-              </span>
-            </label>
-          </Card>
+            </div>
+          ) : (
+            <>
+              <div className="overflow-x-auto">
+                <table className="w-full">
+                  <thead className="bg-gradient-to-r from-teal-50 to-amber-50 border-b border-slate-200">
+                    <tr>
+                      <th className="px-6 py-4 text-left text-xs font-bold text-slate-700 uppercase tracking-wider">Vendor</th>
+                      <th className="px-6 py-4 text-left text-xs font-bold text-slate-700 uppercase tracking-wider">Contact</th>
+                      <th className="px-6 py-4 text-left text-xs font-bold text-slate-700 uppercase tracking-wider">Location</th>
+                      <th className="px-6 py-4 text-left text-xs font-bold text-slate-700 uppercase tracking-wider">GSTIN</th>
+                      <th className="px-6 py-4 text-left text-xs font-bold text-slate-700 uppercase tracking-wider">Payment Terms</th>
+                      <th className="px-6 py-4 text-left text-xs font-bold text-slate-700 uppercase tracking-wider">Status</th>
+                      <th className="px-6 py-4 text-left text-xs font-bold text-slate-700 uppercase tracking-wider">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {filteredVendors.map((vendor) => (
+                      <tr key={vendor.id} className="hover:bg-teal-50/30 transition-colors">
+                        <td className="px-6 py-4">
+                          <div>
+                            <p className="font-semibold text-slate-900">{vendor.name}</p>
+                            {vendor.contact_person && (
+                              <p className="text-sm text-slate-600 mt-1">{vendor.contact_person}</p>
+                            )}
+                          </div>
+                        </td>
+                        <td className="px-6 py-4">
+                          <div className="space-y-1 text-sm">
+                            {vendor.phone && (
+                              <div className="flex items-center gap-2 text-slate-700">
+                                <Phone size={14} className="text-slate-400" />
+                                {vendor.phone}
+                              </div>
+                            )}
+                            {vendor.email && (
+                              <div className="flex items-center gap-2 text-slate-700">
+                                <Mail size={14} className="text-slate-400" />
+                                {vendor.email}
+                              </div>
+                            )}
+                            {!vendor.phone && !vendor.email && <span className="text-slate-400">-</span>}
+                          </div>
+                        </td>
+                        <td className="px-6 py-4">
+                          {(vendor.city || vendor.state) ? (
+                            <div className="flex items-center gap-2 text-slate-700">
+                              <MapPin size={14} className="text-slate-400" />
+                              {[vendor.city, vendor.state].filter(Boolean).join(', ')}
+                            </div>
+                          ) : (
+                            <span className="text-slate-400">-</span>
+                          )}
+                        </td>
+                        <td className="px-6 py-4">
+                          {vendor.gstin ? (
+                            <span className="font-mono text-sm text-slate-700">{vendor.gstin}</span>
+                          ) : (
+                            <span className="text-slate-400">-</span>
+                          )}
+                        </td>
+                        <td className="px-6 py-4">
+                          {vendor.payment_terms ? (
+                            <div className="flex items-center gap-2 text-slate-700">
+                              <CreditCard size={14} className="text-slate-400" />
+                              <span className="text-sm">{vendor.payment_terms}</span>
+                            </div>
+                          ) : (
+                            <span className="text-slate-400">-</span>
+                          )}
+                        </td>
+                        <td className="px-6 py-4">
+                          <Badge variant={normalizeBoolean(vendor.is_active) ? 'success' : 'neutral'} size="sm">
+                            {normalizeBoolean(vendor.is_active) ? 'Active' : 'Inactive'}
+                          </Badge>
+                        </td>
+                        <td className="px-6 py-4">
+                          <div className="flex items-center gap-2">
+                            <button onClick={() => handleEdit(vendor)} className="p-2 text-teal-600 hover:bg-teal-50 rounded-lg transition-colors" title="Edit">
+                              <Edit2 size={18} />
+                            </button>
+                            <button onClick={() => handleDeleteClick(vendor.id, vendor.name)} className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors" title="Delete">
+                              <Trash2 size={18} />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              <div className="bg-slate-50 px-6 py-4 border-t border-slate-200">
+                <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-2 text-sm">
+                  <span className="text-slate-600">
+                    Showing <span className="font-semibold text-slate-900">{filteredVendors.length}</span> of <span className="font-semibold text-slate-900">{vendors.length}</span> vendors
+                  </span>
+                  <span className="text-slate-600">
+                    Active: <span className="font-semibold text-green-700">{stats.active}</span> • Inactive: <span className="font-semibold text-slate-500">{stats.inactive}</span>
+                  </span>
+                </div>
+              </div>
+            </>
+          )}
         </div>
       </div>
 
-      {/* Vendors List */}
-      <Card padding="none">
-        {loading ? (
-          <div className="p-12">
-            <LoadingSpinner size="lg" text="Loading vendors..." />
+      {/* Filter Modal */}
+      {showFilterModal && (
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg">
+            <div className="bg-gradient-to-r from-teal-600 to-teal-700 px-6 py-4 rounded-t-2xl flex items-center justify-between">
+              <h3 className="text-xl font-bold text-white">Filter Vendors</h3>
+              <button onClick={() => setShowFilterModal(false)} className="text-white hover:bg-white/20 p-1 rounded transition-colors">
+                <X size={24} />
+              </button>
+            </div>
+
+            <div className="p-6 space-y-4">
+              <div>
+                <label className="block text-sm font-semibold text-slate-700 mb-2">Status</label>
+                <select
+                  value={filterStatus}
+                  onChange={(e) => setFilterStatus(e.target.value as any)}
+                  className="w-full px-4 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-teal-500"
+                >
+                  <option value="all">All Vendors</option>
+                  <option value="active">Active Only</option>
+                  <option value="inactive">Inactive Only</option>
+                </select>
+              </div>
+            </div>
+
+            <div className="bg-slate-50 px-6 py-4 rounded-b-2xl flex gap-3">
+              <Button onClick={() => setFilterStatus('all')} variant="secondary" fullWidth>Clear</Button>
+              <Button onClick={() => setShowFilterModal(false)} variant="primary" fullWidth className="bg-gradient-to-r from-teal-600 to-teal-700">Apply Filters</Button>
+            </div>
           </div>
-        ) : filteredVendors.length === 0 ? (
-          <EmptyState
-            icon={<Store size={64} />}
-            title={searchTerm ? "No vendors found" : "No vendors yet"}
-            description={
-              searchTerm
-                ? "Try adjusting your search terms"
-                : "Add your first vendor to get started"
-            }
-            action={
-              !searchTerm && (
-                <Button onClick={handleAddNew} variant="primary" icon={<Plus size={18} />}>
-                  Add First Vendor
-                </Button>
-              )
-            }
-          />
-        ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 p-4">
-            {filteredVendors.map((vendor) => (
-              <Card key={vendor.id} hover padding="md" className={(vendor.is_active === false || vendor.is_active === 'false') ? 'opacity-60' : ''}>
-                <div className="space-y-3">
-                  {/* Header */}
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="flex-1 min-w-0">
-                      <h3 className="font-semibold text-gray-900 truncate">{vendor.name}</h3>
-                      {vendor.contact_person && (
-                        <p className="text-sm text-gray-600 truncate mt-1">{vendor.contact_person}</p>
-                      )}
-                      <div className="flex items-center gap-2 mt-1">
-                        {(vendor.is_active === false || vendor.is_active === 'false') && (
-                          <Badge variant="neutral" size="sm">Inactive</Badge>
-                        )}
-                      </div>
-                    </div>
-                    <div>
-                      <Badge variant={(vendor.is_active === true || vendor.is_active === 'true') ? 'success' : 'neutral'} size="sm">
-                        {(vendor.is_active === true || vendor.is_active === 'true') ? 'Active' : 'Inactive'}
-                      </Badge>
-                    </div>
-                  </div>
-
-                  {/* Contact Details */}
-                  <div className="space-y-2 text-sm text-gray-600">
-                    {vendor.phone && (
-                      <div className="flex items-center gap-2">
-                        <Phone size={14} className="flex-shrink-0" />
-                        <span className="truncate">{vendor.phone}</span>
-                      </div>
-                    )}
-                    {vendor.email && (
-                      <div className="flex items-center gap-2">
-                        <Mail size={14} className="flex-shrink-0" />
-                        <span className="truncate">{vendor.email}</span>
-                      </div>
-                    )}
-                    {(vendor.city || vendor.state) && (
-                      <div className="flex items-center gap-2">
-                        <MapPin size={14} className="flex-shrink-0" />
-                        <span className="truncate">{[vendor.city, vendor.state].filter(Boolean).join(', ')}</span>
-                      </div>
-                    )}
-                    {vendor.gstin && (
-                      <div className="flex items-center gap-2">
-                        <FileText size={14} className="flex-shrink-0" />
-                        <span className="truncate font-mono text-xs">{vendor.gstin}</span>
-                      </div>
-                    )}
-                    {vendor.payment_terms && (
-                      <div className="flex items-center gap-2">
-                        <CreditCard size={14} className="flex-shrink-0" />
-                        <span className="truncate text-xs">{vendor.payment_terms}</span>
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Actions */}
-                  <div className="flex gap-2 pt-2 border-t border-gray-100">
-                    <button
-                      onClick={() => handleEdit(vendor)}
-                      className={`flex-1 flex items-center justify-center gap-2 px-3 py-2 ${theme.classes.textPrimary} ${theme.classes.bgPrimaryLighter} rounded-lg hover:${theme.classes.bgPrimaryLight} transition-colors text-sm font-medium`}
-                    >
-                      <Edit2 size={14} />
-                      Edit
-                    </button>
-                    <button
-                      onClick={() => handleDeleteClick(vendor.id, vendor.name)}
-                      className="flex-1 flex items-center justify-center gap-2 px-3 py-2 text-red-600 bg-red-50 rounded-lg hover:bg-red-100 transition-colors text-sm font-medium"
-                    >
-                      <Trash2 size={14} />
-                      Delete
-                    </button>
-                  </div>
-                </div>
-              </Card>
-            ))}
-          </div>
-        )}
-      </Card>
-
-      {/* Stats */}
-      {!loading && vendors.length > 0 && (
-        <div className="text-sm text-gray-600">
-          Showing {filteredVendors.length} of {vendors.length} vendors • Active: {activeCount} • Inactive: {inactiveCount}
         </div>
       )}
 
       {/* Add/Edit Modal */}
       {showModal && (
-        <div className="fixed inset-0 bg-black/20 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-          <Card className="w-full max-w-2xl max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center justify-between mb-6">
-              <h3 className="text-xl font-bold text-gray-900">
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+            <div className="sticky top-0 bg-gradient-to-r from-teal-600 to-teal-700 px-8 py-6 rounded-t-2xl flex items-center justify-between z-10">
+              <h3 className="text-2xl font-bold text-white flex items-center gap-2">
+                {editingVendor ? <Edit2 size={24} /> : <Plus size={24} />}
                 {editingVendor ? 'Edit Vendor' : 'Add New Vendor'}
               </h3>
-              <button onClick={() => setShowModal(false)} className="text-gray-400 hover:text-gray-600 transition-colors">
+              <button onClick={() => setShowModal(false)} disabled={saving} className="text-white hover:bg-white/20 p-2 rounded-lg transition-colors">
                 <X size={24} />
               </button>
             </div>
 
-            <div className="space-y-4">
-              <Input
-                label="Vendor Name"
-                placeholder="Enter vendor name"
-                value={formData.name}
-                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                required
-                leftIcon={<Store size={18} />}
-              />
-
-              <Input
-                label="Contact Person"
-                placeholder="Enter contact person name"
-                value={formData.contact_person}
-                onChange={(e) => setFormData({ ...formData, contact_person: e.target.value })}
-              />
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <Input
-                  label="Phone"
-                  type="tel"
-                  placeholder="Enter phone number"
-                  value={formData.phone}
-                  onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-                  leftIcon={<Phone size={18} />}
-                />
-
-                <Input
-                  label="Email"
-                  type="email"
-                  placeholder="Enter email address"
-                  value={formData.email}
-                  onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                  leftIcon={<Mail size={18} />}
+            <div className="p-8 space-y-6">
+              <div>
+                <label className="block text-sm font-semibold text-slate-700 mb-2">Vendor Name *</label>
+                <input
+                  type="text"
+                  value={formData.name}
+                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                  className="w-full px-4 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-teal-500"
+                  placeholder="Enter vendor name"
+                  required
                 />
               </div>
 
-              <Input
-                label="GSTIN (Optional)"
-                placeholder="Enter 15-character GSTIN"
-                value={formData.gstin}
-                onChange={(e) => setFormData({ ...formData, gstin: e.target.value.toUpperCase() })}
-                maxLength={15}
-              />
+              <div>
+                <label className="block text-sm font-semibold text-slate-700 mb-2">Contact Person</label>
+                <input
+                  type="text"
+                  value={formData.contact_person}
+                  onChange={(e) => setFormData({ ...formData, contact_person: e.target.value })}
+                  className="w-full px-4 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-teal-500"
+                  placeholder="Contact person name"
+                />
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-semibold text-slate-700 mb-2">Phone</label>
+                  <input
+                    type="tel"
+                    value={formData.phone}
+                    onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+                    className="w-full px-4 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-teal-500"
+                    placeholder="Phone number"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-semibold text-slate-700 mb-2">Email</label>
+                  <input
+                    type="email"
+                    value={formData.email}
+                    onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                    className="w-full px-4 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-teal-500"
+                    placeholder="Email address"
+                  />
+                </div>
+              </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Address</label>
+                <label className="block text-sm font-semibold text-slate-700 mb-2">GSTIN (Optional)</label>
+                <input
+                  type="text"
+                  value={formData.gstin}
+                  onChange={(e) => setFormData({ ...formData, gstin: e.target.value.toUpperCase() })}
+                  className="w-full px-4 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-teal-500"
+                  placeholder="15-character GSTIN"
+                  maxLength={15}
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-semibold text-slate-700 mb-2">Address</label>
                 <textarea
                   value={formData.address}
                   onChange={(e) => setFormData({ ...formData, address: e.target.value })}
+                  className="w-full px-4 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-teal-500"
                   rows={2}
-                  className={`w-full px-3 py-2 border border-gray-300 rounded-lg ${theme.classes.focusRing} focus:ring-2 focus:ring-opacity-20 transition-all`}
-                  placeholder="Enter street address"
+                  placeholder="Street address"
                 />
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <Input
-                  label="City"
-                  placeholder="Enter city"
-                  value={formData.city}
-                  onChange={(e) => setFormData({ ...formData, city: e.target.value })}
-                />
-
-                <Input
-                  label="State"
-                  placeholder="Enter state"
-                  value={formData.state}
-                  onChange={(e) => setFormData({ ...formData, state: e.target.value })}
-                />
-
-                <Input
-                  label="State Code"
-                  placeholder="e.g., 33"
-                  value={formData.state_code}
-                  onChange={(e) => setFormData({ ...formData, state_code: e.target.value })}
-                  helperText="2-digit GST state code"
-                />
-
-                <Input
-                  label="Pincode"
-                  placeholder="Enter pincode"
-                  value={formData.pincode}
-                  onChange={(e) => setFormData({ ...formData, pincode: e.target.value })}
-                />
-              </div>
-
-              <Input
-                label="Payment Terms"
-                placeholder="e.g., Net 30, Cash on Delivery"
-                value={formData.payment_terms}
-                onChange={(e) => setFormData({ ...formData, payment_terms: e.target.value })}
-              />
-
-              <div className="pt-4 border-t border-gray-200">
-                <label className="flex items-center gap-2">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-semibold text-slate-700 mb-2">City</label>
                   <input
-                    type="checkbox"
-                    checked={normalizeBoolean(formData.is_active)}
-                    onChange={(e) => setFormData({ ...formData, is_active: e.target.checked })}
-                    className={`rounded ${theme.classes.textPrimary} ${theme.classes.focusRing}`}
+                    type="text"
+                    value={formData.city}
+                    onChange={(e) => setFormData({ ...formData, city: e.target.value })}
+                    className="w-full px-4 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-teal-500"
+                    placeholder="City"
                   />
-                  <span className="text-sm font-medium text-gray-700">Active Vendor</span>
-                </label>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-semibold text-slate-700 mb-2">State</label>
+                  <input
+                    type="text"
+                    value={formData.state}
+                    onChange={(e) => setFormData({ ...formData, state: e.target.value })}
+                    className="w-full px-4 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-teal-500"
+                    placeholder="State"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-semibold text-slate-700 mb-2">State Code</label>
+                  <input
+                    type="text"
+                    value={formData.state_code}
+                    onChange={(e) => setFormData({ ...formData, state_code: e.target.value })}
+                    className="w-full px-4 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-teal-500"
+                    placeholder="e.g., 33"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-semibold text-slate-700 mb-2">Pincode</label>
+                  <input
+                    type="text"
+                    value={formData.pincode}
+                    onChange={(e) => setFormData({ ...formData, pincode: e.target.value })}
+                    className="w-full px-4 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-teal-500"
+                    placeholder="Pincode"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-semibold text-slate-700 mb-2">Payment Terms</label>
+                <input
+                  type="text"
+                  value={formData.payment_terms}
+                  onChange={(e) => setFormData({ ...formData, payment_terms: e.target.value })}
+                  className="w-full px-4 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-teal-500"
+                  placeholder="e.g., Net 30, Cash on Delivery"
+                />
+              </div>
+
+              <div className="flex items-center gap-3 p-4 bg-slate-50 rounded-lg">
+                <input
+                  type="checkbox"
+                  id="is_active"
+                  checked={!!formData.is_active}
+                  onChange={(e) => setFormData({ ...formData, is_active: e.target.checked })}
+                  className="w-5 h-5 rounded border-slate-300 text-teal-600 focus:ring-teal-500"
+                />
+                <label htmlFor="is_active" className="text-sm font-medium text-slate-700">Active Vendor</label>
               </div>
             </div>
 
-            <div className="flex gap-3 mt-6">
-              <Button onClick={() => setShowModal(false)} variant="secondary" fullWidth disabled={saving}>
-                Cancel
-              </Button>
-              <Button onClick={handleSubmit} variant="primary" fullWidth loading={saving}>
-                {editingVendor ? 'Update' : 'Create'}
+            <div className="sticky bottom-0 bg-slate-50 px-8 py-4 rounded-b-2xl flex gap-3 border-t border-slate-200">
+              <Button onClick={() => setShowModal(false)} variant="secondary" fullWidth disabled={saving}>Cancel</Button>
+              <Button onClick={handleSubmit} variant="primary" fullWidth disabled={saving} className="bg-gradient-to-r from-teal-600 to-teal-700">
+                {saving ? 'Saving...' : editingVendor ? 'Update Vendor' : 'Add Vendor'}
               </Button>
             </div>
-          </Card>
+          </div>
         </div>
       )}
 
-      {/* Edit Confirmation */}
-      {showEditConfirm && (
-        <ConfirmDialog
-          isOpen={showEditConfirm}
-          onClose={() => setShowEditConfirm(false)}
-          onConfirm={handleConfirmSubmit}
-          title={editingVendor ? 'Update Vendor' : 'Create Vendor'}
-          message={editingVendor 
-            ? `Save changes to "${formData.name}"?` 
-            : `Create new vendor "${formData.name}"?`}
-          confirmText={editingVendor ? 'Update' : 'Create'}
-          cancelText="Cancel"
-          variant="primary"
-        />
-      )}
-
-      {/* Delete Confirmation */}
-      {showDeleteConfirm && deletingVendor && (
-        <ConfirmDialog
-          isOpen={showDeleteConfirm}
-          onClose={() => {
-            setShowDeleteConfirm(false);
-            setDeletingVendor(null);
-          }}
-          onConfirm={handleDeleteConfirm}
-          title="Delete Vendor"
-          message={`Are you sure you want to delete "${deletingVendor.name}"? This action cannot be undone.`}
-          confirmText="Delete"
-          cancelText="Cancel"
-          variant="danger"
-        />
-      )}
+      <ConfirmDialog 
+        isOpen={showDeleteConfirm} 
+        onClose={() => { setShowDeleteConfirm(false); setDeletingVendor(null); }} 
+        onConfirm={handleDeleteConfirm} 
+        title="Delete Vendor" 
+        message={deletingVendor ? `Are you sure you want to delete "${deletingVendor.name}"? This cannot be undone.` : ''} 
+        confirmText="Delete" 
+        cancelText="Cancel" 
+        variant="danger" 
+      />
     </div>
   );
 };
