@@ -1,12 +1,15 @@
 // FILE PATH: components/Settings.tsx
-// Store settings management with new UI components
+// Beautiful Modern Settings - Teal & Gold Theme with Enhanced UI
 
 'use client';
 import React, { useState, useEffect } from 'react';
-import { Settings as SettingsIcon, Save, Building2, Palette, Mail, Phone, MapPin } from 'lucide-react';
+import { 
+  Settings as SettingsIcon, Save, Building2, Palette, Mail, 
+  Phone, MapPin, FileText, CheckCircle, ChevronDown, X 
+} from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { useTheme } from '@/contexts/ThemeContext';
-import { Button, Card, Input, LoadingSpinner, useToast, Badge } from '@/components/ui';
+import { Button, Badge, LoadingSpinner, useToast } from '@/components/ui';
 import { getThemeNames, ThemeName } from '@/lib/themes';
 
 type StoreSettings = {
@@ -27,8 +30,8 @@ const Settings = () => {
   const toast = useToast();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   const [selectedTheme, setSelectedTheme] = useState<ThemeName>(themeName);
+  const [showThemeDropdown, setShowThemeDropdown] = useState(false);
 
   const [formData, setFormData] = useState<StoreSettings>({
     store_name: '',
@@ -49,7 +52,6 @@ const Settings = () => {
   async function loadSettings() {
     try {
       setLoading(true);
-      setError(null);
 
       const { data, error: err } = await supabase
         .from('store_settings')
@@ -75,7 +77,6 @@ const Settings = () => {
       }
     } catch (err: any) {
       console.error('Error loading settings:', err);
-      setError(err.message || 'Failed to load settings');
       toast.error('Failed to load', 'Could not load store settings.');
     } finally {
       setLoading(false);
@@ -85,7 +86,6 @@ const Settings = () => {
   const handleSave = async () => {
     try {
       setSaving(true);
-      setError(null);
 
       if (!formData.store_name.trim()) {
         toast.warning('Store name required', 'Please enter a store name.');
@@ -134,211 +134,361 @@ const Settings = () => {
   const handleThemeChange = (newTheme: ThemeName) => {
     setSelectedTheme(newTheme);
     setTheme(newTheme);
-    toast.success('Theme changed', `Switched to ${newTheme} theme.`);
+    setShowThemeDropdown(false);
+    toast.success('Theme changed!', `Switched to ${newTheme} theme.`);
   };
 
   const availableThemes = getThemeNames();
-  const themeColors: Record<ThemeName, string> = {
-    emerald: '#10b981',
-    blue: '#3b82f6',
-    purple: '#a855f7',
-    teal: '#14b8a6',
-    slate: '#64748b'
+  const themeColors: Record<ThemeName, { primary: string; secondary: string; name: string }> = {
+    emerald: { primary: '#10b981', secondary: '#34d399', name: 'Emerald' },
+    blue: { primary: '#3b82f6', secondary: '#60a5fa', name: 'Blue' },
+    purple: { primary: '#a855f7', secondary: '#c084fc', name: 'Purple' },
+    teal: { primary: '#14b8a6', secondary: '#2dd4bf', name: 'Teal' },
+    slate: { primary: '#64748b', secondary: '#94a3b8', name: 'Slate' }
   };
 
-  if (error && !loading) {
+  if (loading) {
     return (
-      <div className="space-y-6">
-        <div>
-          <h2 className="text-2xl font-bold text-gray-900">Store Settings</h2>
-          <p className="text-gray-600 text-sm mt-1">Configure your store information</p>
-        </div>
-        <Card>
-          <div className="text-center py-8">
-            <div className="text-red-600 mb-4">
-              <SettingsIcon size={48} className="mx-auto opacity-50" />
-            </div>
-            <h3 className="font-bold text-red-800 mb-2">Failed to Load Settings</h3>
-            <p className="text-red-600 text-sm mb-4">{error}</p>
-            <Button onClick={loadSettings} variant="primary">Try Again</Button>
+      <div className="min-h-screen bg-gradient-to-br from-teal-50 via-white to-amber-50 flex items-center justify-center p-8">
+        <div className="text-center">
+          <div className="inline-flex p-6 bg-white/90 backdrop-blur-sm rounded-2xl shadow-xl mb-4">
+            <LoadingSpinner size="lg" />
           </div>
-        </Card>
+          <p className="text-slate-700 font-medium">Loading settings...</p>
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <div>
-          <h2 className="text-2xl font-bold text-gray-900">Store Settings</h2>
-          <p className="text-gray-600 text-sm mt-1">Configure your store information and preferences</p>
-        </div>
-        <Button onClick={handleSave} variant="primary" size="md" icon={<Save size={18} />} loading={saving}>
-          Save Settings
-        </Button>
-      </div>
-
-      {loading ? (
-        <Card>
-          <div className="py-12">
-            <LoadingSpinner size="lg" text="Loading settings..." />
+    <div className="min-h-screen bg-gradient-to-br from-teal-50 via-white to-amber-50 p-4 md:p-6 lg:p-8">
+      <div className="max-w-5xl mx-auto space-y-6">
+        
+        {/* Header */}
+        <div className="bg-white rounded-2xl shadow-lg border border-teal-100 p-6">
+          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+            <div className="flex items-center gap-4">
+              <div className="p-3 bg-gradient-to-br from-teal-500 to-teal-600 rounded-xl shadow-md">
+                <SettingsIcon className="text-white" size={32} />
+              </div>
+              <div>
+                <h1 className="text-3xl font-bold text-slate-900">Settings</h1>
+                <p className="text-slate-600 mt-1">Configure your store information & preferences</p>
+              </div>
+            </div>
+            <Button 
+              onClick={handleSave} 
+              variant="primary" 
+              size="md" 
+              icon={<Save size={18} />}
+              disabled={saving}
+              className="bg-gradient-to-r from-teal-600 to-teal-700 hover:from-teal-700 hover:to-teal-800 shadow-md"
+            >
+              {saving ? 'Saving...' : 'Save Settings'}
+            </Button>
           </div>
-        </Card>
-      ) : (
-        <>
-          {/* Theme Settings */}
-          <Card>
-            <div className="flex items-center gap-3 mb-4">
-              <div className={`p-2 ${theme.classes.bgPrimaryLight} rounded-lg`}>
-                <Palette size={24} className={theme.classes.textPrimary} />
-              </div>
+        </div>
+
+        {/* Theme Settings with Dropdown */}
+        <div className="bg-white rounded-xl shadow-lg border border-slate-200 overflow-hidden">
+          <div className="bg-gradient-to-r from-purple-600 to-pink-600 px-6 py-4">
+            <div className="flex items-center gap-3">
+              <Palette className="text-white" size={24} />
               <div>
-                <h3 className="text-lg font-semibold text-gray-900">Theme</h3>
-                <p className="text-sm text-gray-600">Choose your preferred color theme</p>
+                <h3 className="text-xl font-bold text-white">Appearance</h3>
+                <p className="text-sm text-purple-100">Customize your interface theme</p>
               </div>
             </div>
+          </div>
 
-            <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
-              {availableThemes.map((themeObj) => (
-                <button
-                  key={themeObj.name}
-                  onClick={() => handleThemeChange(themeObj.name)}
-                  className={`relative p-4 rounded-lg border-2 transition-all hover:scale-105 ${
-                    selectedTheme === themeObj.name
-                      ? 'border-current shadow-lg'
-                      : 'border-gray-200 hover:border-gray-300'
-                  }`}
-                  style={{
-                    borderColor: selectedTheme === themeObj.name ? themeColors[themeObj.name] : undefined
-                  }}
-                >
-                  <div
-                    className="w-full h-12 rounded-md mb-2"
-                    style={{ backgroundColor: themeColors[themeObj.name] }}
+          <div className="p-6">
+            {/* Theme Dropdown Trigger */}
+            <div className="relative">
+              <button
+                onClick={() => setShowThemeDropdown(!showThemeDropdown)}
+                className="w-full flex items-center justify-between p-4 bg-gradient-to-r from-slate-50 to-slate-100 border-2 border-slate-300 rounded-xl hover:border-teal-500 transition-all"
+              >
+                <div className="flex items-center gap-3">
+                  <div 
+                    className="w-12 h-12 rounded-lg shadow-md"
+                    style={{ 
+                      background: `linear-gradient(135deg, ${themeColors[selectedTheme].primary}, ${themeColors[selectedTheme].secondary})`
+                    }}
                   />
-                  <p className="text-sm font-medium text-gray-900 capitalize">{themeObj.displayName}</p>
-                  {selectedTheme === themeObj.name && (
-                    <div className="absolute -top-2 -right-2">
-                      <Badge variant="success" size="sm">Active</Badge>
-                    </div>
-                  )}
-                </button>
-              ))}
-            </div>
-          </Card>
+                  <div className="text-left">
+                    <p className="text-sm text-slate-600 font-medium">Current Theme</p>
+                    <p className="text-lg font-bold text-slate-900">{themeColors[selectedTheme].name}</p>
+                  </div>
+                </div>
+                <ChevronDown 
+                  size={24} 
+                  className={`text-slate-600 transition-transform ${showThemeDropdown ? 'rotate-180' : ''}`}
+                />
+              </button>
 
-          {/* Store Information */}
-          <Card>
-            <div className="flex items-center gap-3 mb-4">
-              <div className={`p-2 ${theme.classes.bgPrimaryLight} rounded-lg`}>
-                <Building2 size={24} className={theme.classes.textPrimary} />
+              {/* Expanded Theme Options */}
+              {showThemeDropdown && (
+                <div className="absolute top-full left-0 right-0 mt-2 bg-white rounded-xl shadow-2xl border-2 border-slate-200 z-50 overflow-hidden">
+                  <div className="p-4 space-y-2">
+                    {availableThemes.map((themeObj) => (
+                      <button
+                        key={themeObj.name}
+                        onClick={() => handleThemeChange(themeObj.name)}
+                        className={`w-full flex items-center justify-between p-4 rounded-lg border-2 transition-all hover:scale-[1.02] ${
+                          selectedTheme === themeObj.name
+                            ? 'border-current shadow-lg bg-gradient-to-r from-slate-50 to-slate-100'
+                            : 'border-slate-200 hover:border-slate-300'
+                        }`}
+                        style={{
+                          borderColor: selectedTheme === themeObj.name ? themeColors[themeObj.name].primary : undefined
+                        }}
+                      >
+                        <div className="flex items-center gap-4">
+                          <div 
+                            className="w-16 h-16 rounded-lg shadow-md"
+                            style={{ 
+                              background: `linear-gradient(135deg, ${themeColors[themeObj.name].primary}, ${themeColors[themeObj.name].secondary})`
+                            }}
+                          />
+                          <div className="text-left">
+                            <p className="text-lg font-bold text-slate-900">{themeColors[themeObj.name].name}</p>
+                            <p className="text-sm text-slate-600">
+                              {themeObj.name === 'emerald' && 'Fresh & vibrant green theme'}
+                              {themeObj.name === 'blue' && 'Classic & professional blue theme'}
+                              {themeObj.name === 'purple' && 'Creative & modern purple theme'}
+                              {themeObj.name === 'teal' && 'Balanced & sophisticated theme'}
+                              {themeObj.name === 'slate' && 'Minimal & elegant grey theme'}
+                            </p>
+                          </div>
+                        </div>
+                        {selectedTheme === themeObj.name && (
+                          <div className="flex items-center gap-2 px-3 py-1 bg-green-100 rounded-full">
+                            <CheckCircle size={16} className="text-green-600" />
+                            <span className="text-sm font-semibold text-green-700">Active</span>
+                          </div>
+                        )}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Preview Section */}
+            <div className="mt-6 p-6 bg-gradient-to-br from-slate-50 to-slate-100 rounded-xl border border-slate-200">
+              <p className="text-sm font-semibold text-slate-700 mb-3">Theme Preview:</p>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                <div className="p-3 bg-white rounded-lg shadow-sm border border-slate-200 text-center">
+                  <div 
+                    className="w-full h-8 rounded mb-2"
+                    style={{ backgroundColor: themeColors[selectedTheme].primary }}
+                  />
+                  <p className="text-xs text-slate-600">Primary</p>
+                </div>
+                <div className="p-3 bg-white rounded-lg shadow-sm border border-slate-200 text-center">
+                  <div 
+                    className="w-full h-8 rounded mb-2"
+                    style={{ backgroundColor: themeColors[selectedTheme].secondary }}
+                  />
+                  <p className="text-xs text-slate-600">Secondary</p>
+                </div>
+                <div className="p-3 bg-white rounded-lg shadow-sm border border-slate-200 text-center">
+                  <div 
+                    className="w-full h-8 rounded mb-2"
+                    style={{ 
+                      background: `linear-gradient(135deg, ${themeColors[selectedTheme].primary}, ${themeColors[selectedTheme].secondary})`
+                    }}
+                  />
+                  <p className="text-xs text-slate-600">Gradient</p>
+                </div>
+                <div className="p-3 bg-white rounded-lg shadow-sm border border-slate-200 text-center">
+                  <div className="flex items-center justify-center h-8">
+                    <Badge variant="primary">Sample</Badge>
+                  </div>
+                  <p className="text-xs text-slate-600">Components</p>
+                </div>
               </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Store Information */}
+        <div className="bg-white rounded-xl shadow-lg border border-slate-200 overflow-hidden">
+          <div className="bg-gradient-to-r from-teal-600 to-teal-700 px-6 py-4">
+            <div className="flex items-center gap-3">
+              <Building2 className="text-white" size={24} />
               <div>
-                <h3 className="text-lg font-semibold text-gray-900">Store Information</h3>
-                <p className="text-sm text-gray-600">Basic details about your store</p>
+                <h3 className="text-xl font-bold text-white">Store Information</h3>
+                <p className="text-sm text-teal-100">Basic details about your business</p>
+              </div>
+            </div>
+          </div>
+
+          <div className="p-6 space-y-6">
+            <div>
+              <label className="block text-sm font-semibold text-slate-700 mb-2">
+                Store Name <span className="text-red-500">*</span>
+              </label>
+              <div className="relative">
+                <Building2 className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+                <input
+                  type="text"
+                  value={formData.store_name}
+                  onChange={(e) => setFormData({ ...formData, store_name: e.target.value })}
+                  className="w-full pl-10 pr-4 py-3 border-2 border-slate-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-teal-500 transition-all"
+                  placeholder="Enter your store name"
+                  required
+                />
               </div>
             </div>
 
-            <div className="space-y-4">
-              <Input
-                label="Store Name"
-                placeholder="Enter store name"
-                value={formData.store_name}
-                onChange={(e) => setFormData({ ...formData, store_name: e.target.value })}
-                required
-                leftIcon={<Building2 size={18} />}
+            <div>
+              <label className="block text-sm font-semibold text-slate-700 mb-2">
+                GSTIN <span className="text-slate-400">(Optional)</span>
+              </label>
+              <div className="relative">
+                <FileText className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+                <input
+                  type="text"
+                  value={formData.gstin}
+                  onChange={(e) => setFormData({ ...formData, gstin: e.target.value.toUpperCase() })}
+                  className="w-full pl-10 pr-4 py-3 border-2 border-slate-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-teal-500 transition-all"
+                  placeholder="15-character GSTIN"
+                  maxLength={15}
+                />
+              </div>
+              <p className="text-xs text-slate-500 mt-1">GST Identification Number (15 characters)</p>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-semibold text-slate-700 mb-2">Phone</label>
+                <div className="relative">
+                  <Phone className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+                  <input
+                    type="tel"
+                    value={formData.phone}
+                    onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+                    className="w-full pl-10 pr-4 py-3 border-2 border-slate-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-teal-500 transition-all"
+                    placeholder="Store phone number"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-semibold text-slate-700 mb-2">Email</label>
+                <div className="relative">
+                  <Mail className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+                  <input
+                    type="email"
+                    value={formData.email}
+                    onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                    className="w-full pl-10 pr-4 py-3 border-2 border-slate-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-teal-500 transition-all"
+                    placeholder="Store email address"
+                  />
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Address Information */}
+        <div className="bg-white rounded-xl shadow-lg border border-slate-200 overflow-hidden">
+          <div className="bg-gradient-to-r from-blue-600 to-cyan-600 px-6 py-4">
+            <div className="flex items-center gap-3">
+              <MapPin className="text-white" size={24} />
+              <div>
+                <h3 className="text-xl font-bold text-white">Location Details</h3>
+                <p className="text-sm text-blue-100">Store address information</p>
+              </div>
+            </div>
+          </div>
+
+          <div className="p-6 space-y-6">
+            <div>
+              <label className="block text-sm font-semibold text-slate-700 mb-2">Street Address</label>
+              <textarea
+                value={formData.address}
+                onChange={(e) => setFormData({ ...formData, address: e.target.value })}
+                rows={3}
+                className="w-full px-4 py-3 border-2 border-slate-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-teal-500 transition-all"
+                placeholder="Enter complete street address"
               />
-
-              <Input
-                label="GSTIN"
-                placeholder="Enter GSTIN (15 characters)"
-                value={formData.gstin}
-                onChange={(e) => setFormData({ ...formData, gstin: e.target.value.toUpperCase() })}
-                helperText="15-character GST Identification Number"
-              />
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <Input
-                  label="Phone"
-                  type="tel"
-                  placeholder="Enter phone number"
-                  value={formData.phone}
-                  onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-                  leftIcon={<Phone size={18} />}
-                />
-
-                <Input
-                  label="Email"
-                  type="email"
-                  placeholder="Enter email address"
-                  value={formData.email}
-                  onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                  leftIcon={<Mail size={18} />}
-                />
-              </div>
-            </div>
-          </Card>
-
-          {/* Address Information */}
-          <Card>
-            <div className="flex items-center gap-3 mb-4">
-              <div className={`p-2 ${theme.classes.bgPrimaryLight} rounded-lg`}>
-                <MapPin size={24} className={theme.classes.textPrimary} />
-              </div>
-              <div>
-                <h3 className="text-lg font-semibold text-gray-900">Address</h3>
-                <p className="text-sm text-gray-600">Store location details</p>
-              </div>
             </div>
 
-            <div className="space-y-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Street Address</label>
-                <textarea
-                  value={formData.address}
-                  onChange={(e) => setFormData({ ...formData, address: e.target.value })}
-                  rows={2}
-                  className={`w-full px-3 py-2 border border-gray-300 rounded-lg ${theme.classes.focusRing} focus:ring-2 focus:ring-opacity-20 transition-all`}
-                  placeholder="Enter street address"
-                />
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <Input
-                  label="City"
-                  placeholder="Enter city"
+                <label className="block text-sm font-semibold text-slate-700 mb-2">City</label>
+                <input
+                  type="text"
                   value={formData.city}
                   onChange={(e) => setFormData({ ...formData, city: e.target.value })}
+                  className="w-full px-4 py-3 border-2 border-slate-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-teal-500 transition-all"
+                  placeholder="City name"
                 />
+              </div>
 
-                <Input
-                  label="State"
-                  placeholder="Enter state"
+              <div>
+                <label className="block text-sm font-semibold text-slate-700 mb-2">State</label>
+                <input
+                  type="text"
                   value={formData.state}
                   onChange={(e) => setFormData({ ...formData, state: e.target.value })}
+                  className="w-full px-4 py-3 border-2 border-slate-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-teal-500 transition-all"
+                  placeholder="State name"
                 />
+              </div>
 
-                <Input
-                  label="State Code"
-                  placeholder="e.g., 33"
+              <div>
+                <label className="block text-sm font-semibold text-slate-700 mb-2">State Code</label>
+                <input
+                  type="text"
                   value={formData.state_code}
                   onChange={(e) => setFormData({ ...formData, state_code: e.target.value })}
-                  helperText="2-digit GST state code"
+                  className="w-full px-4 py-3 border-2 border-slate-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-teal-500 transition-all"
+                  placeholder="e.g., 33"
+                  maxLength={2}
                 />
+                <p className="text-xs text-slate-500 mt-1">2-digit GST state code</p>
+              </div>
 
-                <Input
-                  label="Pincode"
-                  placeholder="Enter pincode"
+              <div>
+                <label className="block text-sm font-semibold text-slate-700 mb-2">Pincode</label>
+                <input
+                  type="text"
                   value={formData.pincode}
                   onChange={(e) => setFormData({ ...formData, pincode: e.target.value })}
+                  className="w-full px-4 py-3 border-2 border-slate-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-teal-500 transition-all"
+                  placeholder="6-digit pincode"
+                  maxLength={6}
                 />
               </div>
             </div>
-          </Card>
-        </>
-      )}
+          </div>
+        </div>
+
+        {/* Save Button (Mobile Sticky) */}
+        <div className="sticky bottom-4 flex justify-center md:hidden">
+          <Button 
+            onClick={handleSave} 
+            variant="primary" 
+            size="md" 
+            icon={<Save size={18} />}
+            disabled={saving}
+            className="bg-gradient-to-r from-teal-600 to-teal-700 shadow-2xl"
+          >
+            {saving ? 'Saving...' : 'Save Settings'}
+          </Button>
+        </div>
+
+        {/* Footer Note */}
+        <div className="bg-white rounded-xl shadow-md border border-slate-200 p-4">
+          <div className="flex items-center justify-center gap-2 text-sm text-slate-600">
+            <CheckCircle size={16} className="text-green-600" />
+            <span>Settings are saved automatically to your database</span>
+          </div>
+        </div>
+      </div>
     </div>
   );
 };
