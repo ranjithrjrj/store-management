@@ -170,7 +170,7 @@ const AppContent = () => {
       case 'inventory': return <InventoryManagement />;
       case 'categories': return <CategoriesManagement />;
       case 'units': return <UnitsManagement />;
-      case 'purchase-order': return <PurchaseOrders onNavigate={setCurrentPage} />;
+      case 'purchase-order': return <PurchaseOrders onNavigate={handleNavigate} />;
       case 'purchase-payments': return <PurchasePayments />;
       case 'purchase-invoices': return <PurchaseInvoices />;
       case 'purchase-records': return <PurchaseRecordsManagement />;
@@ -191,6 +191,10 @@ const AppContent = () => {
   const handlePageChange = (pageId: Page) => {
     setCurrentPage(pageId);
     setMobileMenuOpen(false);
+  };
+
+  const handleNavigate = (pageId: string) => {
+    setCurrentPage(pageId as Page);
   };
 
   const toggleSection = (sectionId: string) => {
