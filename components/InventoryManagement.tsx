@@ -110,26 +110,25 @@ const InventoryManagement = () => {
 
       if (itemsError) throw itemsError;
 
-      // Get stock for each item - fixed to handle missing records
+      // Get stock for each item - SUM all inventory records
       const itemsWithStock = await Promise.all((itemsData || []).map(async (item) => {
-        // Query for normal stock
+        // Query for normal stock - SUM all quantities
         const { data: normalStockData } = await supabase
           .from('inventory')
           .select('quantity')
           .eq('item_id', item.id)
-          .eq('is_returned', false)
-          .maybeSingle(); // Use maybeSingle instead of single to handle null
+          .eq('is_returned', false);
 
-        // Query for returned stock
+        // Query for returned stock - SUM all quantities
         const { data: returnedStockData } = await supabase
           .from('inventory')
           .select('quantity')
           .eq('item_id', item.id)
-          .eq('is_returned', true)
-          .maybeSingle(); // Use maybeSingle instead of single
+          .eq('is_returned', true);
 
-        const normal = normalStockData?.quantity || 0;
-        const returned = returnedStockData?.quantity || 0;
+        // Sum all quantities from all records
+        const normal = (normalStockData || []).reduce((sum, record) => sum + (record.quantity || 0), 0);
+        const returned = (returnedStockData || []).reduce((sum, record) => sum + (record.quantity || 0), 0);
 
         return {
           ...item,
