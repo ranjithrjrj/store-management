@@ -463,7 +463,7 @@ const TaxReports = () => {
                 <p className="text-sm text-slate-700 mb-2">
                   Output GST (₹{totalSalesGST.toLocaleString('en-IN')}) - Input ITC (₹{totalPurchaseGST.toLocaleString('en-IN')}) - Credit Notes (₹{totalReturnsGST.toLocaleString('en-IN')})
                 </p>
-                <Badge variant={netGSTLiability >= 0 ? 'warning' : 'success'} size="lg">
+                <Badge variant={netGSTLiability >= 0 ? 'warning' : 'success'} size="md">
                   {netGSTLiability >= 0 ? '💰 PAYABLE TO GOVERNMENT' : '✅ CREDIT/REFUNDABLE'}
                 </Badge>
               </div>
