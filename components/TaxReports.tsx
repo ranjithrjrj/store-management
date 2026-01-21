@@ -624,7 +624,7 @@ const TaxReports = () => {
                     <div key={index} className="p-4 bg-gradient-to-r from-purple-50 to-pink-50 rounded-lg border border-purple-200">
                       <div className="flex justify-between items-center mb-2">
                         <span className="font-bold text-purple-900">{rate.rate}% GST</span>
-                        <Badge variant="info" size="sm">{rate.count} invoices</Badge>
+                        <Badge variant="primary" size="sm">{rate.count} invoices</Badge>
                       </div>
                       <div className="space-y-1 text-sm">
                         <div className="flex justify-between">
@@ -653,7 +653,7 @@ const TaxReports = () => {
                     <div key={index} className="p-4 bg-gradient-to-r from-indigo-50 to-blue-50 rounded-lg border border-indigo-200">
                       <div className="flex justify-between items-center mb-2">
                         <span className="font-bold text-indigo-900">{rate.rate}% GST</span>
-                        <Badge variant="info" size="sm">{rate.count} invoices</Badge>
+                        <Badge variant="primary" size="sm">{rate.count} invoices</Badge>
                       </div>
                       <div className="space-y-1 text-sm">
                         <div className="flex justify-between">
