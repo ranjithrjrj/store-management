@@ -36,13 +36,8 @@ type PurchaseOrder = {
   created_at: string;
 };
 
-type Page = 'dashboard' | 'inventory' | 'items' | 'categories' | 'units' | 
-  'purchase-order' | 'purchase-payments' | 'purchase-invoices' | 'purchase-records' | 
-  'sales' | 'sales-orders' | 'sales-payments' | 'returns' | 
-  'expenses' | 'vendors' | 'customers' | 'reports' | 'tax-reports' | 'settings';
-
 type Props = {
-  onNavigate: (page: Page) => void;
+  onNavigate: (page: string) => void;
 };
 
 const PurchaseOrders = ({ onNavigate }: Props) => {
@@ -182,7 +177,7 @@ const PurchaseOrders = ({ onNavigate }: Props) => {
     }));
     
     toast.success('Opening receiving form...', `Loading PO ${po.po_number}`);
-    onNavigate('purchase-invoices' as Page);
+    onNavigate('purchase-invoices');
   };
 
   const addItem = () => {
