@@ -33,6 +33,8 @@ const BarcodeScanner: React.FC<BarcodeScannerProps> = ({ isOpen, onClose, onScan
       const scanner = new Html5Qrcode("barcode-reader");
       scannerRef.current = scanner;
 
+      let hasScanned = false; // Prevent multiple scans
+
       await scanner.start(
         { facingMode: "environment" }, // Use back camera
         {
@@ -41,10 +43,14 @@ const BarcodeScanner: React.FC<BarcodeScannerProps> = ({ isOpen, onClose, onScan
           aspectRatio: 1.0
         },
         (decodedText) => {
-          // Successfully scanned
-          onScan(decodedText);
-          stopScanner();
-          onClose();
+          // Successfully scanned - only process once
+          if (!hasScanned) {
+            hasScanned = true;
+            stopScanner().then(() => {
+              onScan(decodedText);
+              onClose();
+            });
+          }
         },
         (errorMessage) => {
           // Scanning in progress (this fires continuously, ignore it)
