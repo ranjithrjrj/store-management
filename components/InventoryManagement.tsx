@@ -245,7 +245,6 @@ const InventoryManagement = () => {
 
   const handleBarcodeScan = (barcode: string) => {
     setFormData({ ...formData, barcode });
-    toast.success('Scanned!', `Barcode: ${barcode}`);
     setShowBarcodeScanner(false);
   };
 
