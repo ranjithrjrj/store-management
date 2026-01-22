@@ -191,17 +191,6 @@ const PurchaseInvoices = () => {
     }
   };
 
-  const handleVendorTypeChange = (type: 'registered' | 'unregistered') => {
-    setFormData({ 
-      ...formData, 
-      vendor_type: type,
-      vendor_id: '',
-      unregistered_vendor_name: '',
-      unregistered_vendor_phone: ''
-    });
-    setIsIntrastate(true); // Default to intrastate for unregistered
-  };
-
   const openBarcodeScanner = (itemId: string) => {
     setScanningForItemId(itemId);
     setShowBarcodeScanner(true);
