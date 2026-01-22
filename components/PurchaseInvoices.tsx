@@ -1,17 +1,22 @@
 // FILE PATH: components/PurchaseInvoices.tsx
-// Purchase Invoices with modern aesthetic UI
+// Beautiful Modern Purchase Invoices - Teal & Gold Theme with Barcode Scanning
 
 'use client';
 import React, { useState, useEffect } from 'react';
-import { Plus, Trash2, Save, X, Search, Package, Calendar, FileText, ShoppingBag, Sparkles } from 'lucide-react';
+import { 
+  Plus, Trash2, Save, X, Search, Package, Calendar, FileText, 
+  ShoppingBag, Camera, TrendingUp, DollarSign, AlertTriangle, User
+} from 'lucide-react';
 import { supabase } from '@/lib/supabase';
-import { Button, Card, Input, Select, Textarea, Badge, LoadingSpinner, useToast } from '@/components/ui';
+import { Button, Badge, LoadingSpinner, useToast } from '@/components/ui';
 import { useTheme } from '@/contexts/ThemeContext';
+import BarcodeScanner from './BarcodeScanner';
 
 type PurchaseItem = {
   id: string;
   item_id: string;
   item_name: string;
+  barcode?: string;
   batch_number?: string;
   expiry_date?: string;
   quantity: number;
@@ -26,6 +31,9 @@ const PurchaseInvoices = () => {
   
   const [formData, setFormData] = useState({
     vendor_id: '',
+    vendor_type: 'registered', // 'registered' or 'unregistered'
+    unregistered_vendor_name: '',
+    unregistered_vendor_phone: '',
     invoice_number: '',
     invoice_date: new Date().toISOString().split('T')[0],
     received_date: new Date().toISOString().split('T')[0],
@@ -35,8 +43,9 @@ const PurchaseInvoices = () => {
 
   const [items, setItems] = useState<PurchaseItem[]>([]);
   const [isIntrastate, setIsIntrastate] = useState(true);
+  const [showBarcodeScanner, setShowBarcodeScanner] = useState(false);
+  const [scanningForItemId, setScanningForItemId] = useState<string | null>(null);
   const [showAddItemModal, setShowAddItemModal] = useState(false);
-  const [searchTerm, setSearchTerm] = useState('');
   const [linkedPO, setLinkedPO] = useState<any>(null);
   
   const [vendors, setVendors] = useState<any[]>([]);
@@ -48,6 +57,7 @@ const PurchaseInvoices = () => {
     id: '',
     item_id: '',
     item_name: '',
+    barcode: '',
     batch_number: '',
     expiry_date: '',
     quantity: 0,
@@ -82,6 +92,7 @@ const PurchaseInvoices = () => {
         .select(`
           id,
           name,
+          barcode,
           gst_rate,
           wholesale_price,
           unit:units(abbreviation)
@@ -100,221 +111,337 @@ const PurchaseInvoices = () => {
 
   async function loadPOForReceiving(poData: any) {
     try {
-      setLinkedPO(poData);
-      
-      // Pre-fill vendor
-      setFormData(prev => ({
-        ...prev,
-        vendor_id: poData.vendor_id
-      }));
-      
-      // Load PO items
-      const { data: poItems } = await supabase
-        .from('purchase_order_items')
+      const { data: po } = await supabase
+        .from('purchase_orders')
         .select(`
           *,
-          item:items(name, gst_rate, unit:units(abbreviation))
+          vendor:vendors(name, state_code)
         `)
+        .eq('id', poData.po_id)
+        .single();
+
+      if (!po) return;
+
+      const { data: poItems } = await supabase
+        .from('purchase_order_items')
+        .select('*')
         .eq('po_id', poData.po_id);
-      
+
+      setLinkedPO(po);
+      setFormData({
+        ...formData,
+        vendor_id: po.vendor_id,
+        invoice_number: `INV-${Date.now()}`,
+        vendor_type: 'registered'
+      });
+
+      const vendor = vendors.find(v => v.id === po.vendor_id);
+      if (vendor) {
+        setIsIntrastate(vendor.state_code === '33');
+      }
+
       if (poItems) {
-        const prefilledItems: PurchaseItem[] = poItems.map((item: any) => ({
-          id: crypto.randomUUID(),
+        const loadedItems: PurchaseItem[] = poItems.map(item => ({
+          id: Date.now().toString() + Math.random(),
           item_id: item.item_id,
-          item_name: item.item.name,
+          item_name: availableItems.find(i => i.id === item.item_id)?.name || '',
+          barcode: availableItems.find(i => i.id === item.item_id)?.barcode || '',
           batch_number: '',
           expiry_date: '',
-          quantity: item.quantity - (item.received_quantity || 0), // Remaining qty
+          quantity: item.quantity - (item.received_quantity || 0),
           rate: item.rate,
           gst_rate: item.gst_rate,
-          amount: (item.quantity - (item.received_quantity || 0)) * item.rate
+          amount: 0
         }));
-        
-        setItems(prefilledItems);
+
+        loadedItems.forEach(item => {
+          const taxableAmount = item.quantity * item.rate;
+          const gstAmount = (taxableAmount * item.gst_rate) / 100;
+          item.amount = taxableAmount + gstAmount;
+        });
+
+        setItems(loadedItems);
       }
-      
-      // Check vendor state code for tax type
-      const vendor = poData.vendor_state_code;
-      setIsIntrastate(vendor === '33');
-      
-      toast.success('PO Loaded!', `Receiving goods for PO ${poData.po_number}`);
+
+      toast.success('PO Loaded', `Receiving goods from ${po.po_number}`);
     } catch (err: any) {
       console.error('Error loading PO:', err);
-      toast.error('Failed to load PO', 'Could not load purchase order data.');
+      toast.error('Failed to load PO', err.message);
     }
   }
 
   const handleVendorChange = (vendorId: string) => {
-    setFormData({ ...formData, vendor_id: vendorId });
-    
     const vendor = vendors.find(v => v.id === vendorId);
     if (vendor) {
-      setIsIntrastate(vendor.state === 'Tamil Nadu');
+      setFormData({ ...formData, vendor_id: vendorId });
+      setIsIntrastate(vendor.state_code === '33');
     }
   };
 
-  const handleAddItem = () => {
-    if (!newItem.item_id || newItem.quantity <= 0 || newItem.rate <= 0) {
-      toast.warning('Invalid item', 'Please fill all item details.');
-      return;
+  const handleVendorTypeChange = (type: 'registered' | 'unregistered') => {
+    setFormData({ 
+      ...formData, 
+      vendor_type: type,
+      vendor_id: '',
+      unregistered_vendor_name: '',
+      unregistered_vendor_phone: ''
+    });
+    setIsIntrastate(true); // Default to intrastate for unregistered
+  };
+
+  const openBarcodeScanner = (itemId: string) => {
+    setScanningForItemId(itemId);
+    setShowBarcodeScanner(true);
+  };
+
+  const handleBarcodeScan = (barcode: string) => {
+    if (scanningForItemId) {
+      // Find item by barcode
+      const foundItem = availableItems.find(i => i.barcode === barcode);
+      
+      if (foundItem) {
+        // Update the item being scanned
+        setItems(items.map(item => {
+          if (item.id === scanningForItemId) {
+            const taxableAmount = item.quantity * foundItem.wholesale_price;
+            const gstAmount = (taxableAmount * foundItem.gst_rate) / 100;
+            return {
+              ...item,
+              item_id: foundItem.id,
+              item_name: foundItem.name,
+              barcode: barcode,
+              rate: foundItem.wholesale_price,
+              gst_rate: foundItem.gst_rate,
+              amount: taxableAmount + gstAmount
+            };
+          }
+          return item;
+        }));
+        toast.success('Item found!', foundItem.name);
+      } else {
+        toast.warning('Not found', `No item with barcode: ${barcode}`);
+      }
     }
-
-    const selectedItem = availableItems.find(i => i.id === newItem.item_id);
-    const itemAmount = newItem.quantity * newItem.rate;
     
-    setItems([...items, {
-      ...newItem,
-      id: Date.now().toString(),
-      item_name: selectedItem?.name || '',
-      amount: itemAmount
-    }]);
+    setShowBarcodeScanner(false);
+    setScanningForItemId(null);
+  };
 
-    setNewItem({
-      id: '',
+  const addNewItem = () => {
+    const newId = Date.now().toString() + Math.random();
+    setItems([...items, {
+      id: newId,
       item_id: '',
       item_name: '',
+      barcode: '',
       batch_number: '',
       expiry_date: '',
-      quantity: 0,
+      quantity: 1,
       rate: 0,
       gst_rate: 18,
       amount: 0
-    });
-    setShowAddItemModal(false);
+    }]);
   };
 
-  const handleRemoveItem = (id: string) => {
+  const updateItem = (id: string, field: string, value: any) => {
+    setItems(items.map(item => {
+      if (item.id === id) {
+        const updated = { ...item, [field]: value };
+        
+        if (field === 'item_id') {
+          const selectedItem = availableItems.find(i => i.id === value);
+          if (selectedItem) {
+            updated.item_name = selectedItem.name;
+            updated.barcode = selectedItem.barcode || '';
+            updated.rate = selectedItem.wholesale_price;
+            updated.gst_rate = selectedItem.gst_rate;
+          }
+        }
+        
+        const taxableAmount = updated.quantity * updated.rate;
+        const gstAmount = (taxableAmount * updated.gst_rate) / 100;
+        updated.amount = taxableAmount + gstAmount;
+        
+        return updated;
+      }
+      return item;
+    }));
+  };
+
+  const removeItem = (id: string) => {
     setItems(items.filter(item => item.id !== id));
   };
 
   const calculateTotals = () => {
-    const subtotal = items.reduce((sum, item) => sum + item.amount, 0);
-    
-    let cgst = 0;
-    let sgst = 0;
-    let igst = 0;
+    const subtotal = items.reduce((sum, item) => sum + (item.quantity * item.rate), 0);
+    const totalGst = items.reduce((sum, item) => {
+      const taxableAmount = item.quantity * item.rate;
+      return sum + (taxableAmount * item.gst_rate / 100);
+    }, 0);
+
+    const total = subtotal + totalGst;
 
     if (isIntrastate) {
-      items.forEach(item => {
-        const taxAmount = (item.amount * item.gst_rate) / 100;
-        cgst += taxAmount / 2;
-        sgst += taxAmount / 2;
-      });
+      return {
+        subtotal,
+        cgst: totalGst / 2,
+        sgst: totalGst / 2,
+        igst: 0,
+        total
+      };
     } else {
-      items.forEach(item => {
-        igst += (item.amount * item.gst_rate) / 100;
-      });
+      return {
+        subtotal,
+        cgst: 0,
+        sgst: 0,
+        igst: totalGst,
+        total
+      };
     }
-
-    const total = subtotal + cgst + sgst + igst;
-
-    return { subtotal, cgst, sgst, igst, total };
   };
 
-  const handleSave = async () => {
+  const handleSubmit = async () => {
     try {
       setSaving(true);
 
-      if (!formData.vendor_id) {
-        toast.warning('Vendor required', 'Please select a vendor.');
+      // Validation
+      if (formData.vendor_type === 'registered' && !formData.vendor_id) {
+        toast.warning('Select vendor', 'Please select a vendor');
         return;
       }
 
-      if (!formData.invoice_number) {
-        toast.warning('Invoice number required', 'Please enter invoice number.');
+      if (formData.vendor_type === 'unregistered' && !formData.unregistered_vendor_name.trim()) {
+        toast.warning('Enter vendor name', 'Please enter vendor name for unregistered purchase');
+        return;
+      }
+
+      if (!formData.invoice_number.trim()) {
+        toast.warning('Invoice number required', 'Please enter invoice number');
         return;
       }
 
       if (items.length === 0) {
-        toast.warning('Add items', 'Please add at least one item.');
+        toast.warning('Add items', 'Please add at least one item');
         return;
       }
 
       const totals = calculateTotals();
 
-      const { data: purchase, error: purchaseError } = await supabase
+      // Create purchase invoice
+      const invoiceData: any = {
+        invoice_number: formData.invoice_number,
+        invoice_date: formData.invoice_date,
+        received_date: formData.received_date,
+        subtotal: totals.subtotal,
+        cgst_amount: totals.cgst,
+        sgst_amount: totals.sgst,
+        igst_amount: totals.igst,
+        total_amount: totals.total,
+        paid_amount: 0,
+        pending_amount: totals.total,
+        payment_status: formData.payment_status,
+        notes: formData.notes || null
+      };
+
+      // Add vendor info based on type
+      if (formData.vendor_type === 'registered') {
+        invoiceData.vendor_id = formData.vendor_id;
+        invoiceData.is_unregistered_vendor = false;
+      } else {
+        invoiceData.vendor_id = null;
+        invoiceData.is_unregistered_vendor = true;
+        invoiceData.unregistered_vendor_name = formData.unregistered_vendor_name;
+        invoiceData.unregistered_vendor_phone = formData.unregistered_vendor_phone || null;
+      }
+
+      const { data: invoice, error: invoiceError } = await supabase
         .from('purchase_invoices')
-        .insert({
-          invoice_number: formData.invoice_number,
-          vendor_id: formData.vendor_id,
-          invoice_date: formData.invoice_date,
-          received_date: formData.received_date,
-          subtotal: totals.subtotal,
-          cgst_amount: totals.cgst,
-          sgst_amount: totals.sgst,
-          igst_amount: totals.igst,
-          total_amount: totals.total,
-          payment_status: formData.payment_status,
-          notes: formData.notes,
-          po_id: linkedPO?.po_id || null,
-          po_number: linkedPO?.po_number || null
-        })
+        .insert(invoiceData)
         .select()
         .single();
 
-      if (purchaseError) throw purchaseError;
+      if (invoiceError) throw invoiceError;
 
+      // Insert items
+      const invoiceItems = items.map(item => ({
+        purchase_invoice_id: invoice.id,
+        item_id: item.item_id,
+        batch_number: item.batch_number || null,
+        expiry_date: item.expiry_date || null,
+        quantity: item.quantity,
+        rate: item.rate,
+        gst_rate: item.gst_rate,
+        amount: item.amount
+      }));
+
+      const { error: itemsError } = await supabase
+        .from('purchase_invoice_items')
+        .insert(invoiceItems);
+
+      if (itemsError) throw itemsError;
+
+      // Update inventory batches
       for (const item of items) {
-        const { error: itemError } = await supabase
-          .from('purchase_invoice_items')
+        await supabase
+          .from('inventory_batches')
           .insert({
-            purchase_invoice_id: purchase.id,
             item_id: item.item_id,
+            batch_number: item.batch_number || `BATCH-${Date.now()}`,
             quantity: item.quantity,
-            rate: item.rate,
-            gst_rate: item.gst_rate,
-            amount: item.amount,
-            batch_number: item.batch_number || null,
-            expiry_date: item.expiry_date || null
+            purchase_rate: item.rate,
+            selling_rate: item.rate * 1.2, // Default markup
+            expiry_date: item.expiry_date || null,
+            status: 'normal',
+            source_type: 'purchase',
+            source_id: invoice.id
           });
-
-        if (itemError) throw itemError;
       }
 
-      // If linked to PO, update PO status and received quantities
+      // Update PO status if linked
       if (linkedPO) {
+        // Update received quantities in PO items
         for (const item of items) {
-          // Get current received quantity
           const { data: poItem } = await supabase
             .from('purchase_order_items')
-            .select('received_quantity')
-            .eq('po_id', linkedPO.po_id)
+            .select('*')
+            .eq('po_id', linkedPO.id)
             .eq('item_id', item.item_id)
             .single();
 
-          const newReceivedQty = (poItem?.received_quantity || 0) + item.quantity;
-
-          await supabase
-            .from('purchase_order_items')
-            .update({ received_quantity: newReceivedQty })
-            .eq('po_id', linkedPO.po_id)
-            .eq('item_id', item.item_id);
+          if (poItem) {
+            const newReceived = (poItem.received_quantity || 0) + item.quantity;
+            await supabase
+              .from('purchase_order_items')
+              .update({ received_quantity: newReceived })
+              .eq('id', poItem.id);
+          }
         }
-        
-        // Check if PO is fully/partially received
-        const { data: poItems } = await supabase
+
+        // Check if PO is fully received
+        const { data: allPOItems } = await supabase
           .from('purchase_order_items')
-          .select('quantity, received_quantity')
-          .eq('po_id', linkedPO.po_id);
-        
-        const fullyReceived = poItems?.every(i => (i.received_quantity || 0) >= i.quantity);
-        const partiallyReceived = poItems?.some(i => (i.received_quantity || 0) > 0);
-        
-        const newStatus = fullyReceived ? 'received' : 
-                          partiallyReceived ? 'partial' : 'pending';
-        
+          .select('*')
+          .eq('po_id', linkedPO.id);
+
+        const isFullyReceived = allPOItems?.every(i => i.received_quantity >= i.quantity);
+        const isPartiallyReceived = allPOItems?.some(i => i.received_quantity > 0);
+
         await supabase
           .from('purchase_orders')
-          .update({ status: newStatus })
-          .eq('id', linkedPO.po_id);
-          
-        toast.success('PO Updated!', `Purchase Order ${linkedPO.po_number} marked as ${newStatus}`);
+          .update({ 
+            status: isFullyReceived ? 'received' : (isPartiallyReceived ? 'partial' : 'pending')
+          })
+          .eq('id', linkedPO.id);
       }
 
-      toast.success('Purchase recorded!', `Invoice ${formData.invoice_number} has been saved.`);
+      toast.success('Saved!', `Purchase invoice ${formData.invoice_number} has been recorded.`);
       
+      // Reset form
       setFormData({
         vendor_id: '',
+        vendor_type: 'registered',
+        unregistered_vendor_name: '',
+        unregistered_vendor_phone: '',
         invoice_number: '',
         invoice_date: new Date().toISOString().split('T')[0],
         received_date: new Date().toISOString().split('T')[0],
@@ -325,53 +452,61 @@ const PurchaseInvoices = () => {
       setLinkedPO(null);
 
     } catch (err: any) {
-      console.error('Error recording purchase:', err);
-      toast.error('Failed to save', err.message || 'Could not record purchase.');
+      console.error('Error saving invoice:', err);
+      toast.error('Failed to save', err.message || 'Could not save purchase invoice.');
     } finally {
       setSaving(false);
     }
   };
 
-  const totals = calculateTotals();
+  const totals = items.length > 0 ? calculateTotals() : null;
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 via-white to-purple-50">
+      <div className="min-h-screen bg-gradient-to-br from-teal-50 via-white to-amber-50 flex items-center justify-center p-8">
         <div className="text-center">
-          <LoadingSpinner size="lg" />
-          <p className="mt-4 text-gray-600 font-medium">Loading purchase data...</p>
+          <div className="inline-flex p-6 bg-white/90 backdrop-blur-sm rounded-2xl shadow-xl mb-4">
+            <LoadingSpinner size="lg" />
+          </div>
+          <p className="text-slate-700 font-medium">Loading purchase form...</p>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50 p-4 md:p-6 lg:p-8">
-      <div className="max-w-7xl mx-auto space-y-6">
-        {/* Modern Header with Gradient */}
-        <div className="relative overflow-hidden rounded-3xl bg-gradient-to-r from-blue-600 via-purple-600 to-pink-600 p-8 shadow-2xl">
-          <div className="absolute inset-0 bg-black/10"></div>
-          <div className="relative z-10">
-            <div className="flex items-center gap-3 mb-2">
-              <div className="p-3 bg-white/20 backdrop-blur-sm rounded-2xl">
-                <ShoppingBag className="text-white" size={32} />
-              </div>
-              <div>
-                <h1 className="text-3xl md:text-4xl font-bold text-white tracking-tight">Purchase Invoices</h1>
-                <p className="text-white/90 mt-1">Record new purchase with invoice details</p>
-              </div>
+    <div className="min-h-screen bg-gradient-to-br from-teal-50 via-white to-amber-50 p-4 md:p-6 lg:p-8">
+      <div className="max-w-6xl mx-auto space-y-6">
+        
+        {/* Header */}
+        <div className="bg-white rounded-2xl shadow-lg border border-teal-100 p-6">
+          <div className="flex items-center gap-4">
+            <div className="p-3 bg-gradient-to-br from-teal-500 to-teal-600 rounded-xl shadow-md">
+              <ShoppingBag className="text-white" size={32} />
             </div>
+            <div className="flex-1">
+              <h1 className="text-3xl font-bold text-slate-900">Purchase Invoice</h1>
+              <p className="text-slate-600 mt-1">Record goods received from vendors</p>
+            </div>
+            <Button
+              onClick={handleSubmit}
+              disabled={saving || items.length === 0}
+              variant="primary"
+              size="md"
+              icon={<Save size={20} />}
+              className="bg-gradient-to-r from-teal-600 to-teal-700 hover:from-teal-700 hover:to-teal-800 shadow-md"
+            >
+              {saving ? 'Saving...' : 'Save Invoice'}
+            </Button>
           </div>
-          <div className="absolute top-0 right-0 w-64 h-64 bg-white/10 rounded-full blur-3xl"></div>
-          <div className="absolute bottom-0 left-0 w-64 h-64 bg-white/10 rounded-full blur-3xl"></div>
         </div>
 
-        {/* PO Indicator Banner */}
+        {/* Linked PO Banner */}
         {linkedPO && (
-          <div className="backdrop-blur-xl bg-gradient-to-r from-green-50 to-emerald-50 rounded-2xl shadow-lg border-2 border-green-200 p-5 transition-all hover:shadow-xl">
-            <div className="flex items-center gap-4">
-              <div className="p-3 bg-green-100 rounded-xl">
-                <Package className="text-green-600" size={28} />
+          <div className="bg-green-50 border-2 border-green-200 rounded-xl p-4">
+            <div className="flex items-center gap-3">
+              <div className="p-2 bg-green-100 rounded-lg">
+                <Package className="text-green-600" size={24} />
               </div>
               <div className="flex-1">
                 <div className="flex items-center gap-2 mb-1">
@@ -384,420 +519,380 @@ const PurchaseInvoices = () => {
           </div>
         )}
 
-        {/* Purchase Details Card - Glassmorphism */}
-        <div className="backdrop-blur-xl bg-white/70 rounded-3xl shadow-2xl border border-white/20 p-6 md:p-8 transition-all hover:shadow-3xl">
-          <div className="flex items-center gap-3 mb-6">
-            <div className={`p-2.5 ${theme.classes.bgPrimary} rounded-xl`}>
-              <FileText className="text-white" size={24} />
-            </div>
-            <h2 className="text-2xl font-bold text-gray-900">Purchase Details</h2>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div className="group">
-              <label className="block text-sm font-semibold text-gray-700 mb-2">
-                Vendor <span className="text-red-500">*</span>
-              </label>
-              <Select
-                value={formData.vendor_id}
-                onChange={(e) => handleVendorChange(e.target.value)}
-                className="transition-all duration-200 focus:scale-[1.02]"
-              >
-                <option value="">Select vendor</option>
-                {vendors.map(vendor => (
-                  <option key={vendor.id} value={vendor.id}>{vendor.name}</option>
-                ))}
-              </Select>
-            </div>
-
-            <div className="group">
-              <Input
-                label="Invoice Number"
-                placeholder="INV-001"
-                value={formData.invoice_number}
-                onChange={(e) => setFormData({ ...formData, invoice_number: e.target.value })}
-                required
-                leftIcon={<FileText size={18} />}
-                className="transition-all duration-200 focus:scale-[1.02]"
-              />
-            </div>
-
-            <div className="group">
-              <Input
-                label="Invoice Date"
-                type="date"
-                value={formData.invoice_date}
-                onChange={(e) => setFormData({ ...formData, invoice_date: e.target.value })}
-                required
-                leftIcon={<Calendar size={18} />}
-                className="transition-all duration-200 focus:scale-[1.02]"
-              />
-            </div>
-
-            <div className="group">
-              <Input
-                label="Received Date"
-                type="date"
-                value={formData.received_date}
-                onChange={(e) => setFormData({ ...formData, received_date: e.target.value })}
-                required
-                leftIcon={<Calendar size={18} />}
-                className="transition-all duration-200 focus:scale-[1.02]"
-              />
-            </div>
-
-            <div className="group">
-              <label className="block text-sm font-semibold text-gray-700 mb-2">Payment Status</label>
-              <Select
-                value={formData.payment_status}
-                onChange={(e) => setFormData({ ...formData, payment_status: e.target.value })}
-                className="transition-all duration-200 focus:scale-[1.02]"
-              >
-                <option value="pending">Pending</option>
-                <option value="partial">Partial</option>
-                <option value="paid">Paid</option>
-              </Select>
-            </div>
-
-            <div className="group">
-              <label className="block text-sm font-semibold text-gray-700 mb-2">Transaction Type</label>
-              <Select
-                value={isIntrastate ? 'intrastate' : 'interstate'}
-                onChange={(e) => setIsIntrastate(e.target.value === 'intrastate')}
-                className="transition-all duration-200 focus:scale-[1.02]"
-              >
-                <option value="intrastate">Intrastate (CGST + SGST)</option>
-                <option value="interstate">Interstate (IGST)</option>
-              </Select>
+        {/* Vendor Selection */}
+        <div className="bg-white rounded-xl shadow-lg border border-slate-200 overflow-hidden">
+          <div className="bg-gradient-to-r from-purple-600 to-pink-600 px-6 py-4">
+            <div className="flex items-center gap-3">
+              <User className="text-white" size={24} />
+              <div>
+                <h3 className="text-xl font-bold text-white">Vendor Details</h3>
+                <p className="text-sm text-purple-100">Select vendor or enter one-off purchase</p>
+              </div>
             </div>
           </div>
 
-          <div className="mt-6">
-            <label className="block text-sm font-semibold text-gray-700 mb-2">Notes</label>
-            <Textarea
-              value={formData.notes}
-              onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
-              rows={3}
-              placeholder="Additional notes (optional)"
-              className="transition-all duration-200 focus:scale-[1.01]"
-            />
+          <div className="p-6 space-y-6">
+            {/* Vendor Type Selector */}
+            <div>
+              <label className="block text-sm font-semibold text-slate-700 mb-3">Vendor Type</label>
+              <div className="grid grid-cols-2 gap-4">
+                <button
+                  onClick={() => handleVendorTypeChange('registered')}
+                  className={`p-4 rounded-xl border-2 transition-all ${
+                    formData.vendor_type === 'registered'
+                      ? 'border-teal-500 bg-teal-50'
+                      : 'border-slate-300 hover:border-slate-400'
+                  }`}
+                >
+                  <div className="flex items-center gap-3">
+                    <div className={`p-2 rounded-lg ${formData.vendor_type === 'registered' ? 'bg-teal-100' : 'bg-slate-100'}`}>
+                      <ShoppingBag className={formData.vendor_type === 'registered' ? 'text-teal-600' : 'text-slate-600'} size={20} />
+                    </div>
+                    <div className="text-left">
+                      <p className="font-semibold text-slate-900">Registered Vendor</p>
+                      <p className="text-xs text-slate-600">Select from vendor list</p>
+                    </div>
+                  </div>
+                </button>
+
+                <button
+                  onClick={() => handleVendorTypeChange('unregistered')}
+                  className={`p-4 rounded-xl border-2 transition-all ${
+                    formData.vendor_type === 'unregistered'
+                      ? 'border-amber-500 bg-amber-50'
+                      : 'border-slate-300 hover:border-slate-400'
+                  }`}
+                >
+                  <div className="flex items-center gap-3">
+                    <div className={`p-2 rounded-lg ${formData.vendor_type === 'unregistered' ? 'bg-amber-100' : 'bg-slate-100'}`}>
+                      <User className={formData.vendor_type === 'unregistered' ? 'text-amber-600' : 'text-slate-600'} size={20} />
+                    </div>
+                    <div className="text-left">
+                      <p className="font-semibold text-slate-900">One-Off Purchase</p>
+                      <p className="text-xs text-slate-600">Unregistered vendor</p>
+                    </div>
+                  </div>
+                </button>
+              </div>
+            </div>
+
+            {/* Registered Vendor Fields */}
+            {formData.vendor_type === 'registered' && (
+              <div>
+                <label className="block text-sm font-semibold text-slate-700 mb-2">
+                  Select Vendor <span className="text-red-500">*</span>
+                </label>
+                <select
+                  value={formData.vendor_id}
+                  onChange={(e) => handleVendorChange(e.target.value)}
+                  className="w-full px-4 py-2.5 border-2 border-slate-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-teal-500 transition-all text-slate-900"
+                >
+                  <option value="">Select vendor</option>
+                  {vendors.map(vendor => (
+                    <option key={vendor.id} value={vendor.id}>{vendor.name}</option>
+                  ))}
+                </select>
+              </div>
+            )}
+
+            {/* Unregistered Vendor Fields */}
+            {formData.vendor_type === 'unregistered' && (
+              <div className="space-y-4 p-4 bg-amber-50 rounded-lg border border-amber-200">
+                <div className="flex items-start gap-2 mb-3">
+                  <AlertTriangle className="text-amber-600 flex-shrink-0" size={20} />
+                  <p className="text-sm text-amber-800">
+                    <strong>One-off purchase:</strong> Use this for purchases from roadside vendors, temporary suppliers, or any unregistered source.
+                  </p>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-semibold text-slate-700 mb-2">
+                    Vendor/Seller Name <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={formData.unregistered_vendor_name}
+                    onChange={(e) => setFormData({ ...formData, unregistered_vendor_name: e.target.value })}
+                    className="w-full px-4 py-2.5 border-2 border-slate-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-amber-500 transition-all text-slate-900"
+                    placeholder="e.g., Roadside Vendor, Local Shop"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-semibold text-slate-700 mb-2">
+                    Phone Number <span className="text-slate-400">(Optional)</span>
+                  </label>
+                  <input
+                    type="tel"
+                    value={formData.unregistered_vendor_phone}
+                    onChange={(e) => setFormData({ ...formData, unregistered_vendor_phone: e.target.value })}
+                    className="w-full px-4 py-2.5 border-2 border-slate-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-amber-500 transition-all text-slate-900"
+                    placeholder="Contact number if available"
+                  />
+                </div>
+              </div>
+            )}
           </div>
         </div>
 
-        {/* Items Card */}
-        <div className="backdrop-blur-xl bg-white/70 rounded-3xl shadow-2xl border border-white/20 p-6 md:p-8">
-          <div className="flex items-center justify-between mb-6">
+        {/* Invoice Details */}
+        <div className="bg-white rounded-xl shadow-lg border border-slate-200 overflow-hidden">
+          <div className="bg-gradient-to-r from-teal-600 to-teal-700 px-6 py-4">
             <div className="flex items-center gap-3">
-              <div className={`p-2.5 ${theme.classes.bgPrimary} rounded-xl`}>
-                <Package className="text-white" size={24} />
-              </div>
+              <FileText className="text-white" size={24} />
               <div>
-                <h2 className="text-2xl font-bold text-gray-900">Items</h2>
-                <p className="text-sm text-gray-600">{items.length} item{items.length !== 1 ? 's' : ''} added</p>
+                <h3 className="text-xl font-bold text-white">Invoice Details</h3>
+                <p className="text-sm text-teal-100">Invoice information and dates</p>
               </div>
             </div>
-            <Button
-              onClick={() => setShowAddItemModal(true)}
-              variant="primary"
-              icon={<Plus size={20} />}
-              className="shadow-lg hover:shadow-xl transition-all duration-200 hover:scale-105"
-            >
-              Add Item
-            </Button>
           </div>
 
-          {items.length === 0 ? (
-            <div className="text-center py-16 px-4">
-              <div className="inline-flex p-6 bg-gradient-to-br from-blue-100 to-purple-100 rounded-full mb-4">
-                <Package size={48} className="text-blue-600" />
+          <div className="p-6">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div>
+                <label className="block text-sm font-semibold text-slate-700 mb-2">
+                  Invoice Number <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  value={formData.invoice_number}
+                  onChange={(e) => setFormData({ ...formData, invoice_number: e.target.value })}
+                  className="w-full px-4 py-2.5 border-2 border-slate-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-teal-500 transition-all text-slate-900"
+                  placeholder="INV-001"
+                />
               </div>
-              <p className="text-gray-600 font-medium mb-2">No items added yet</p>
-              <p className="text-sm text-gray-500">Click "Add Item" to start building your purchase order</p>
+
+              <div>
+                <label className="block text-sm font-semibold text-slate-700 mb-2">Invoice Date</label>
+                <input
+                  type="date"
+                  value={formData.invoice_date}
+                  onChange={(e) => setFormData({ ...formData, invoice_date: e.target.value })}
+                  className="w-full px-4 py-2.5 border-2 border-slate-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-teal-500 transition-all text-slate-900"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-semibold text-slate-700 mb-2">Received Date</label>
+                <input
+                  type="date"
+                  value={formData.received_date}
+                  onChange={(e) => setFormData({ ...formData, received_date: e.target.value })}
+                  className="w-full px-4 py-2.5 border-2 border-slate-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-teal-500 transition-all text-slate-900"
+                />
+              </div>
             </div>
-          ) : (
-            <div className="space-y-3">
-              {items.map((item, index) => (
-                <div
-                  key={item.id}
-                  className="group relative backdrop-blur-sm bg-gradient-to-r from-white/80 to-white/60 rounded-2xl p-5 border border-gray-200/50 hover:border-blue-300 transition-all duration-300 hover:shadow-lg"
-                  style={{
-                    animation: `slideIn 0.3s ease-out ${index * 0.1}s backwards`
-                  }}
+          </div>
+        </div>
+
+        {/* Items Section */}
+        <div className="bg-white rounded-xl shadow-lg border border-slate-200 overflow-hidden">
+          <div className="bg-gradient-to-r from-blue-600 to-cyan-600 px-6 py-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <Package className="text-white" size={24} />
+                <div>
+                  <h3 className="text-xl font-bold text-white">Items</h3>
+                  <p className="text-sm text-blue-100">Add products to this purchase</p>
+                </div>
+              </div>
+              <button
+                onClick={addNewItem}
+                className="px-4 py-2 bg-white/20 hover:bg-white/30 text-white rounded-lg flex items-center gap-2 transition-all"
+              >
+                <Plus size={20} />
+                Add Item
+              </button>
+            </div>
+          </div>
+
+          <div className="p-6">
+            {items.length === 0 ? (
+              <div className="border-2 border-dashed border-slate-300 rounded-xl p-12 text-center bg-slate-50">
+                <Package size={48} className="mx-auto text-slate-300 mb-3" />
+                <p className="text-slate-600 font-medium mb-2">No items added yet</p>
+                <p className="text-sm text-slate-500 mb-4">Click "Add Item" to start adding products</p>
+                <button
+                  onClick={addNewItem}
+                  className="px-6 py-2.5 bg-gradient-to-r from-blue-600 to-cyan-600 text-white rounded-lg hover:from-blue-700 hover:to-cyan-700 transition-all shadow-md"
                 >
-                  <div className="flex items-start gap-4">
-                    <div className="flex-1 space-y-3">
-                      <div className="flex items-center gap-3">
-                        <span className="flex items-center justify-center w-8 h-8 rounded-full bg-gradient-to-br from-blue-500 to-purple-500 text-white font-bold text-sm">
-                          {index + 1}
-                        </span>
-                        <h4 className="font-bold text-gray-900 text-lg">{item.item_name}</h4>
-                        {item.batch_number && (
-                          <Badge variant="neutral" size="sm" className="font-mono">
-                            {item.batch_number}
-                          </Badge>
-                        )}
+                  Add First Item
+                </button>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {items.map((item, index) => (
+                  <div key={item.id} className="border-2 border-slate-200 rounded-xl p-4 bg-slate-50 hover:border-teal-300 transition-all">
+                    <div className="flex items-center justify-between mb-3">
+                      <span className="text-sm font-bold text-slate-900">Item #{index + 1}</span>
+                      <button 
+                        onClick={() => removeItem(item.id)}
+                        className="text-red-600 hover:bg-red-50 p-2 rounded-lg transition-colors"
+                      >
+                        <Trash2 size={16} />
+                      </button>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-6 gap-3">
+                      {/* Item Selection with Barcode */}
+                      <div className="md:col-span-2">
+                        <label className="block text-xs font-semibold text-slate-600 mb-1">Item</label>
+                        <div className="flex gap-2">
+                          <select
+                            value={item.item_id}
+                            onChange={(e) => updateItem(item.id, 'item_id', e.target.value)}
+                            className="flex-1 px-3 py-2 border-2 border-slate-300 rounded-lg focus:ring-2 focus:ring-teal-500 text-slate-900 text-sm"
+                          >
+                            <option value="">Select item</option>
+                            {availableItems.map(availItem => (
+                              <option key={availItem.id} value={availItem.id}>{availItem.name}</option>
+                            ))}
+                          </select>
+                          <button
+                            type="button"
+                            onClick={() => openBarcodeScanner(item.id)}
+                            className="px-3 py-2 bg-gradient-to-r from-blue-600 to-blue-700 text-white rounded-lg hover:from-blue-700 hover:to-blue-800 transition-all flex items-center gap-1 shadow-md"
+                            title="Scan Barcode"
+                          >
+                            <Camera size={16} />
+                          </button>
+                        </div>
                       </div>
-                      
-                      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
-                        <div className="space-y-1">
-                          <p className="text-gray-500 font-medium">Quantity</p>
-                          <p className="text-gray-900 font-bold text-lg">{item.quantity}</p>
-                        </div>
-                        <div className="space-y-1">
-                          <p className="text-gray-500 font-medium">Rate</p>
-                          <p className="text-gray-900 font-bold text-lg">₹{item.rate.toFixed(2)}</p>
-                        </div>
-                        <div className="space-y-1">
-                          <p className="text-gray-500 font-medium">GST</p>
-                          <p className="text-gray-900 font-bold text-lg">{item.gst_rate}%</p>
-                        </div>
-                        <div className="space-y-1">
-                          <p className="text-gray-500 font-medium">Amount</p>
-                          <p className="text-blue-600 font-bold text-xl">₹{item.amount.toFixed(2)}</p>
-                        </div>
+
+                      <div>
+                        <label className="block text-xs font-semibold text-slate-600 mb-1">Batch #</label>
+                        <input
+                          type="text"
+                          value={item.batch_number}
+                          onChange={(e) => updateItem(item.id, 'batch_number', e.target.value)}
+                          className="w-full px-3 py-2 border-2 border-slate-300 rounded-lg focus:ring-2 focus:ring-teal-500 text-slate-900 text-sm"
+                          placeholder="Optional"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-semibold text-slate-600 mb-1">Expiry</label>
+                        <input
+                          type="date"
+                          value={item.expiry_date}
+                          onChange={(e) => updateItem(item.id, 'expiry_date', e.target.value)}
+                          className="w-full px-3 py-2 border-2 border-slate-300 rounded-lg focus:ring-2 focus:ring-teal-500 text-slate-900 text-sm"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-semibold text-slate-600 mb-1">Quantity</label>
+                        <input
+                          type="number"
+                          value={item.quantity}
+                          onChange={(e) => updateItem(item.id, 'quantity', parseFloat(e.target.value) || 0)}
+                          className="w-full px-3 py-2 border-2 border-slate-300 rounded-lg focus:ring-2 focus:ring-teal-500 text-slate-900 text-sm"
+                          min="0"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-semibold text-slate-600 mb-1">Rate (₹)</label>
+                        <input
+                          type="number"
+                          step="0.01"
+                          value={item.rate}
+                          onChange={(e) => updateItem(item.id, 'rate', parseFloat(e.target.value) || 0)}
+                          className="w-full px-3 py-2 border-2 border-slate-300 rounded-lg focus:ring-2 focus:ring-teal-500 text-slate-900 text-sm"
+                          min="0"
+                        />
                       </div>
                     </div>
 
-                    <button
-                      onClick={() => handleRemoveItem(item.id)}
-                      className="p-3 rounded-xl bg-red-50 text-red-600 hover:bg-red-100 transition-all duration-200 hover:scale-110"
-                    >
-                      <Trash2 size={20} />
-                    </button>
+                    <div className="mt-3 pt-3 border-t border-slate-300 flex justify-between items-center">
+                      <span className="text-xs text-slate-600">GST: {item.gst_rate}%</span>
+                      <div>
+                        <span className="text-xs text-slate-600">Amount: </span>
+                        <span className="text-base font-bold text-teal-700">₹{item.amount.toFixed(2)}</span>
+                      </div>
+                    </div>
                   </div>
-                </div>
-              ))}
-            </div>
-          )}
+                ))}
+              </div>
+            )}
+          </div>
         </div>
 
-        {/* Summary Card with Gradient */}
-        {items.length > 0 && (
-          <div className="backdrop-blur-xl bg-gradient-to-br from-blue-50/80 to-purple-50/80 rounded-3xl shadow-2xl border border-white/20 p-6 md:p-8">
-            <h2 className="text-2xl font-bold text-gray-900 mb-6 flex items-center gap-2">
-              <Sparkles className="text-yellow-500" size={24} />
-              Summary
-            </h2>
-            <div className="space-y-4">
-              <div className="flex justify-between items-center py-3 border-b border-gray-200/50">
-                <span className="text-gray-700 font-medium">Subtotal</span>
-                <span className="text-gray-900 font-bold text-xl">₹{totals.subtotal.toFixed(2)}</span>
+        {/* Totals */}
+        {totals && (
+          <div className="bg-white rounded-xl shadow-lg border border-slate-200 overflow-hidden">
+            <div className="bg-gradient-to-r from-green-600 to-emerald-600 px-6 py-4">
+              <div className="flex items-center gap-3">
+                <DollarSign className="text-white" size={24} />
+                <h3 className="text-xl font-bold text-white">Invoice Summary</h3>
               </div>
-              {isIntrastate ? (
-                <>
-                  <div className="flex justify-between items-center py-3 border-b border-gray-200/50">
-                    <span className="text-gray-700 font-medium">CGST</span>
-                    <span className="text-gray-900 font-bold text-xl">₹{totals.cgst.toFixed(2)}</span>
-                  </div>
-                  <div className="flex justify-between items-center py-3 border-b border-gray-200/50">
-                    <span className="text-gray-700 font-medium">SGST</span>
-                    <span className="text-gray-900 font-bold text-xl">₹{totals.sgst.toFixed(2)}</span>
-                  </div>
-                </>
-              ) : (
-                <div className="flex justify-between items-center py-3 border-b border-gray-200/50">
-                  <span className="text-gray-700 font-medium">IGST</span>
-                  <span className="text-gray-900 font-bold text-xl">₹{totals.igst.toFixed(2)}</span>
+            </div>
+
+            <div className="p-6">
+              <div className="max-w-md ml-auto space-y-3 bg-slate-50 p-6 rounded-xl border-2 border-slate-200">
+                <div className="flex justify-between">
+                  <span className="font-medium text-slate-700">Subtotal:</span>
+                  <span className="font-semibold text-slate-900">₹{totals.subtotal.toFixed(2)}</span>
                 </div>
-              )}
-              <div className="flex justify-between items-center py-4 bg-gradient-to-r from-blue-100 to-purple-100 rounded-2xl px-6 mt-2">
-                <span className="text-gray-900 font-bold text-lg">Total Amount</span>
-                <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-600 to-purple-600 font-bold text-3xl">
-                  ₹{totals.total.toFixed(2)}
-                </span>
+                {isIntrastate ? (
+                  <>
+                    <div className="flex justify-between">
+                      <span className="text-slate-600">CGST:</span>
+                      <span className="text-slate-900">₹{totals.cgst.toFixed(2)}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-slate-600">SGST:</span>
+                      <span className="text-slate-900">₹{totals.sgst.toFixed(2)}</span>
+                    </div>
+                  </>
+                ) : (
+                  <div className="flex justify-between">
+                    <span className="text-slate-600">IGST:</span>
+                    <span className="text-slate-900">₹{totals.igst.toFixed(2)}</span>
+                  </div>
+                )}
+                <div className="flex justify-between text-xl font-bold pt-3 border-t-2 border-slate-300">
+                  <span className="text-slate-900">Total:</span>
+                  <span className="text-teal-700">₹{totals.total.toFixed(2)}</span>
+                </div>
               </div>
             </div>
           </div>
         )}
 
-        {/* Action Button */}
-        <div className="flex justify-end">
+        {/* Notes */}
+        <div className="bg-white rounded-xl shadow-lg border border-slate-200 p-6">
+          <label className="block text-sm font-semibold text-slate-700 mb-2">Notes</label>
+          <textarea
+            value={formData.notes}
+            onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
+            rows={3}
+            className="w-full px-4 py-3 border-2 border-slate-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-teal-500 transition-all text-slate-900"
+            placeholder="Additional notes about this purchase..."
+          />
+        </div>
+
+        {/* Save Button (Mobile Sticky) */}
+        <div className="sticky bottom-4 flex justify-center md:hidden">
           <Button
-            onClick={handleSave}
+            onClick={handleSubmit}
             disabled={saving || items.length === 0}
             variant="primary"
+            size="md"
             icon={<Save size={20} />}
-            className="text-lg px-8 py-4 shadow-2xl hover:shadow-3xl transition-all duration-300 hover:scale-105 bg-gradient-to-r from-blue-600 to-purple-600"
+            className="bg-gradient-to-r from-teal-600 to-teal-700 shadow-2xl"
           >
-            {saving ? 'Saving...' : 'Save Purchase'}
+            {saving ? 'Saving...' : 'Save Invoice'}
           </Button>
         </div>
       </div>
 
-      {/* Modern Add Item Modal */}
-      {showAddItemModal && (
-        <div className="fixed inset-0 bg-black/40 backdrop-blur-md flex items-start justify-center p-4 z-50 overflow-y-auto animate-fadeIn">
-          <div className="min-h-screen w-full flex items-center justify-center py-8">
-            <div className="backdrop-blur-xl bg-white/90 rounded-3xl shadow-2xl border border-white/20 w-full max-w-2xl p-8 animate-slideUp">
-              <div className="flex items-center justify-between mb-6">
-                <div className="flex items-center gap-3">
-                  <div className="p-3 bg-gradient-to-br from-blue-500 to-purple-500 rounded-2xl">
-                    <Plus className="text-white" size={24} />
-                  </div>
-                  <h3 className="text-2xl font-bold text-gray-900">Add Item</h3>
-                </div>
-                <button
-                  onClick={() => setShowAddItemModal(false)}
-                  className="p-2 rounded-xl hover:bg-gray-100 transition-colors"
-                >
-                  <X size={24} className="text-gray-600" />
-                </button>
-              </div>
-
-              <div className="space-y-5">
-                <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-2">
-                    Search Item <span className="text-red-500">*</span>
-                  </label>
-                  <Input
-                    placeholder="Search items..."
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
-                    leftIcon={<Search size={18} />}
-                    rightIcon={searchTerm ? (
-                      <button onClick={() => setSearchTerm('')} className="text-gray-400 hover:text-gray-600">
-                        <X size={18} />
-                      </button>
-                    ) : undefined}
-                    className="transition-all duration-200"
-                  />
-                  <Select
-                    value={newItem.item_id}
-                    onChange={(e) => {
-                      const selected = availableItems.find(i => i.id === e.target.value);
-                      setNewItem({
-                        ...newItem,
-                        item_id: e.target.value,
-                        gst_rate: selected?.gst_rate || 18,
-                        rate: selected?.wholesale_price || 0
-                      });
-                    }}
-                    className="mt-3"
-                  >
-                    <option value="">Select item</option>
-                    {availableItems
-                      .filter(item => item.name.toLowerCase().includes(searchTerm.toLowerCase()))
-                      .map(item => (
-                        <option key={item.id} value={item.id}>
-                          {item.name} - ₹{item.wholesale_price} ({item.unit?.abbreviation})
-                        </option>
-                      ))}
-                  </Select>
-                </div>
-
-                <div className="grid grid-cols-2 gap-4">
-                  <Input
-                    label="Batch Number"
-                    placeholder="BATCH-001"
-                    value={newItem.batch_number}
-                    onChange={(e) => setNewItem({ ...newItem, batch_number: e.target.value })}
-                  />
-
-                  <Input
-                    label="Expiry Date"
-                    type="date"
-                    value={newItem.expiry_date}
-                    onChange={(e) => setNewItem({ ...newItem, expiry_date: e.target.value })}
-                  />
-                </div>
-
-                <div className="grid grid-cols-2 gap-4">
-                  <Input
-                    label="Quantity"
-                    type="number"
-                    placeholder="0"
-                    value={newItem.quantity || ''}
-                    onChange={(e) => setNewItem({ ...newItem, quantity: parseFloat(e.target.value) || 0 })}
-                    required
-                  />
-
-                  <Input
-                    label="Rate (₹)"
-                    type="number"
-                    step="0.01"
-                    placeholder="0.00"
-                    value={newItem.rate || ''}
-                    onChange={(e) => setNewItem({ ...newItem, rate: parseFloat(e.target.value) || 0 })}
-                    required
-                  />
-                </div>
-
-                <Input
-                  label="GST Rate (%)"
-                  type="number"
-                  placeholder="18"
-                  value={newItem.gst_rate || ''}
-                  onChange={(e) => setNewItem({ ...newItem, gst_rate: parseFloat(e.target.value) || 0 })}
-                  required
-                />
-
-                <div className="bg-gradient-to-r from-blue-50 to-purple-50 p-5 rounded-2xl">
-                  <div className="flex justify-between items-center">
-                    <span className="text-gray-700 font-semibold">Item Amount</span>
-                    <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-600 to-purple-600 font-bold text-2xl">
-                      ₹{(newItem.quantity * newItem.rate).toFixed(2)}
-                    </span>
-                  </div>
-                </div>
-              </div>
-
-              <div className="flex gap-4 mt-8">
-                <Button 
-                  onClick={() => setShowAddItemModal(false)} 
-                  variant="secondary" 
-                  className="flex-1"
-                >
-                  Cancel
-                </Button>
-                <Button 
-                  onClick={handleAddItem} 
-                  variant="primary" 
-                  className="flex-1 bg-gradient-to-r from-blue-600 to-purple-600"
-                >
-                  Add Item
-                </Button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      <style jsx>{`
-        @keyframes slideIn {
-          from {
-            opacity: 0;
-            transform: translateX(-20px);
-          }
-          to {
-            opacity: 1;
-            transform: translateX(0);
-          }
-        }
-
-        @keyframes fadeIn {
-          from { opacity: 0; }
-          to { opacity: 1; }
-        }
-
-        @keyframes slideUp {
-          from {
-            opacity: 0;
-            transform: translateY(20px);
-          }
-          to {
-            opacity: 1;
-            transform: translateY(0);
-          }
-        }
-
-        .animate-fadeIn {
-          animation: fadeIn 0.2s ease-out;
-        }
-
-        .animate-slideUp {
-          animation: slideUp 0.3s ease-out;
-        }
-      `}</style>
+      {/* Barcode Scanner Modal */}
+      <BarcodeScanner
+        isOpen={showBarcodeScanner}
+        onClose={() => { setShowBarcodeScanner(false); setScanningForItemId(null); }}
+        onScan={handleBarcodeScan}
+      />
     </div>
   );
 };
