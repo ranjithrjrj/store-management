@@ -511,20 +511,20 @@ const PurchaseInvoices = () => {
           </div>
         )}
 
-        {/* Vendor Selection */}
+        {/* Invoice Details with Vendor Selection */}
         <div className="bg-white rounded-xl shadow-lg border border-slate-200 overflow-hidden">
-          <div className="bg-gradient-to-r from-purple-600 to-pink-600 px-6 py-4">
+          <div className="bg-gradient-to-r from-teal-600 to-teal-700 px-6 py-4">
             <div className="flex items-center gap-3">
-              <User className="text-white" size={24} />
+              <FileText className="text-white" size={24} />
               <div>
-                <h3 className="text-xl font-bold text-white">Vendor Details</h3>
-                <p className="text-sm text-purple-100">Select vendor or enter new one-off vendor</p>
+                <h3 className="text-xl font-bold text-white">Invoice Details</h3>
+                <p className="text-sm text-teal-100">Vendor selection and invoice information</p>
               </div>
             </div>
           </div>
 
-          <div className="p-6 space-y-4">
-            {/* Vendor Dropdown */}
+          <div className="p-6 space-y-6">
+            {/* Vendor Selection */}
             <div>
               <label className="block text-sm font-semibold text-slate-700 mb-2">
                 Vendor <span className="text-red-500">*</span>
@@ -571,23 +571,9 @@ const PurchaseInvoices = () => {
                 </div>
               </div>
             )}
-          </div>
-        </div>
 
-        {/* Invoice Details */}
-        <div className="bg-white rounded-xl shadow-lg border border-slate-200 overflow-hidden">
-          <div className="bg-gradient-to-r from-teal-600 to-teal-700 px-6 py-4">
-            <div className="flex items-center gap-3">
-              <FileText className="text-white" size={24} />
-              <div>
-                <h3 className="text-xl font-bold text-white">Invoice Details</h3>
-                <p className="text-sm text-teal-100">Invoice information and dates</p>
-              </div>
-            </div>
-          </div>
-
-          <div className="p-6">
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            {/* Invoice Number, Dates */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-4 border-t border-slate-200">
               <div>
                 <label className="block text-sm font-semibold text-slate-700 mb-2">
                   Invoice Number <span className="text-red-500">*</span>
