@@ -11,6 +11,7 @@ import { supabase } from '@/lib/supabase';
 import { Button, Badge, LoadingSpinner, useToast } from '@/components/ui';
 import { useTheme } from '@/contexts/ThemeContext';
 import BarcodeScanner from './BarcodeScanner';
+import SearchableSelect from './SearchableSelect';
 
 type PurchaseItem = {
   id: string;
@@ -528,17 +529,23 @@ const PurchaseInvoices = () => {
               <label className="block text-sm font-semibold text-slate-700 mb-2">
                 Vendor <span className="text-red-500">*</span>
               </label>
-              <select
+              <SearchableSelect
+                options={[
+                  ...vendors.map(v => ({
+                    value: v.id,
+                    label: v.name,
+                    sublabel: v.phone || v.email || undefined
+                  })),
+                  {
+                    value: 'unregistered',
+                    label: '➕ Unregistered Vendor (One-off Purchase)',
+                    sublabel: 'For roadside vendors, temporary suppliers'
+                  }
+                ]}
                 value={formData.vendor_id}
-                onChange={(e) => handleVendorChange(e.target.value)}
-                className="w-full px-4 py-2.5 border-2 border-slate-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-teal-500 transition-all text-slate-900"
-              >
-                <option value="">Select vendor</option>
-                {vendors.map(vendor => (
-                  <option key={vendor.id} value={vendor.id}>{vendor.name}</option>
-                ))}
-                <option value="unregistered">➕ Unregistered Vendor (One-off Purchase)</option>
-              </select>
+                onChange={(value) => handleVendorChange(value)}
+                placeholder="Search and select vendor..."
+              />
             </div>
 
             {/* Show name field if unregistered vendor selected */}
@@ -670,16 +677,17 @@ const PurchaseInvoices = () => {
                       <div className="sm:col-span-2 lg:col-span-2">
                         <label className="block text-xs font-semibold text-slate-600 mb-1">Item</label>
                         <div className="flex gap-2">
-                          <select
+                          <SearchableSelect
+                            options={availableItems.map(i => ({
+                              value: i.id,
+                              label: i.name,
+                              sublabel: `₹${i.wholesale_price} | GST: ${i.gst_rate}%`
+                            }))}
                             value={item.item_id}
-                            onChange={(e) => updateItem(item.id, 'item_id', e.target.value)}
-                            className="flex-1 px-3 py-2 border-2 border-slate-300 rounded-lg focus:ring-2 focus:ring-teal-500 text-slate-900 text-sm"
-                          >
-                            <option value="">Select item</option>
-                            {availableItems.map(availItem => (
-                              <option key={availItem.id} value={availItem.id}>{availItem.name}</option>
-                            ))}
-                          </select>
+                            onChange={(value) => updateItem(item.id, 'item_id', value)}
+                            placeholder="Search items..."
+                            className="flex-1"
+                          />
                           <button
                             type="button"
                             onClick={() => openBarcodeScanner(item.id)}
