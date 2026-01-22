@@ -1,7 +1,7 @@
 {
   "name": "angadi",
   "version": "1.0.0",
-  "description": "GST-compliant inventory and billing system for Thirukumaran Angadi",
+  "description": "GST-compliant inventory and billing system",
   "private": true,
   "scripts": {
     "dev": "next dev --webpack",
