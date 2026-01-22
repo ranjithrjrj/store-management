@@ -31,7 +31,6 @@ const PurchaseInvoices = () => {
   
   const [formData, setFormData] = useState({
     vendor_id: '',
-    vendor_type: 'registered', // 'registered' or 'unregistered'
     unregistered_vendor_name: '',
     unregistered_vendor_phone: '',
     invoice_number: '',
@@ -131,8 +130,7 @@ const PurchaseInvoices = () => {
       setFormData({
         ...formData,
         vendor_id: po.vendor_id,
-        invoice_number: `INV-${Date.now()}`,
-        vendor_type: 'registered'
+        invoice_number: `INV-${Date.now()}`
       });
 
       const vendor = vendors.find(v => v.id === po.vendor_id);
@@ -171,10 +169,25 @@ const PurchaseInvoices = () => {
   }
 
   const handleVendorChange = (vendorId: string) => {
-    const vendor = vendors.find(v => v.id === vendorId);
-    if (vendor) {
-      setFormData({ ...formData, vendor_id: vendorId });
-      setIsIntrastate(vendor.state_code === '33');
+    if (vendorId === 'unregistered') {
+      setFormData({ 
+        ...formData, 
+        vendor_id: 'unregistered',
+        unregistered_vendor_name: '',
+        unregistered_vendor_phone: ''
+      });
+      setIsIntrastate(true); // Default to intrastate for unregistered
+    } else {
+      const vendor = vendors.find(v => v.id === vendorId);
+      if (vendor) {
+        setFormData({ 
+          ...formData, 
+          vendor_id: vendorId,
+          unregistered_vendor_name: '',
+          unregistered_vendor_phone: ''
+        });
+        setIsIntrastate(vendor.state_code === '33');
+      }
     }
   };
 
@@ -305,12 +318,12 @@ const PurchaseInvoices = () => {
       setSaving(true);
 
       // Validation
-      if (formData.vendor_type === 'registered' && !formData.vendor_id) {
+      if (!formData.vendor_id) {
         toast.warning('Select vendor', 'Please select a vendor');
         return;
       }
 
-      if (formData.vendor_type === 'unregistered' && !formData.unregistered_vendor_name.trim()) {
+      if (formData.vendor_id === 'unregistered' && !formData.unregistered_vendor_name.trim()) {
         toast.warning('Enter vendor name', 'Please enter vendor name for unregistered purchase');
         return;
       }
@@ -343,15 +356,15 @@ const PurchaseInvoices = () => {
         notes: formData.notes || null
       };
 
-      // Add vendor info based on type
-      if (formData.vendor_type === 'registered') {
-        invoiceData.vendor_id = formData.vendor_id;
-        invoiceData.is_unregistered_vendor = false;
-      } else {
+      // Add vendor info based on selection
+      if (formData.vendor_id === 'unregistered') {
         invoiceData.vendor_id = null;
         invoiceData.is_unregistered_vendor = true;
         invoiceData.unregistered_vendor_name = formData.unregistered_vendor_name;
         invoiceData.unregistered_vendor_phone = formData.unregistered_vendor_phone || null;
+      } else {
+        invoiceData.vendor_id = formData.vendor_id;
+        invoiceData.is_unregistered_vendor = false;
       }
 
       const { data: invoice, error: invoiceError } = await supabase
@@ -439,7 +452,6 @@ const PurchaseInvoices = () => {
       // Reset form
       setFormData({
         vendor_id: '',
-        vendor_type: 'registered',
         unregistered_vendor_name: '',
         unregistered_vendor_phone: '',
         invoice_number: '',
@@ -488,16 +500,6 @@ const PurchaseInvoices = () => {
               <h1 className="text-3xl font-bold text-slate-900">Purchase Invoice</h1>
               <p className="text-slate-600 mt-1">Record goods received from vendors</p>
             </div>
-            <Button
-              onClick={handleSubmit}
-              disabled={saving || items.length === 0}
-              variant="primary"
-              size="md"
-              icon={<Save size={20} />}
-              className="bg-gradient-to-r from-teal-600 to-teal-700 hover:from-teal-700 hover:to-teal-800 shadow-md"
-            >
-              {saving ? 'Saving...' : 'Save Invoice'}
-            </Button>
           </div>
         </div>
 
@@ -526,88 +528,42 @@ const PurchaseInvoices = () => {
               <User className="text-white" size={24} />
               <div>
                 <h3 className="text-xl font-bold text-white">Vendor Details</h3>
-                <p className="text-sm text-purple-100">Select vendor or enter one-off purchase</p>
+                <p className="text-sm text-purple-100">Select vendor or enter new one-off vendor</p>
               </div>
             </div>
           </div>
 
-          <div className="p-6 space-y-6">
-            {/* Vendor Type Selector */}
+          <div className="p-6 space-y-4">
+            {/* Vendor Dropdown */}
             <div>
-              <label className="block text-sm font-semibold text-slate-700 mb-3">Vendor Type</label>
-              <div className="grid grid-cols-2 gap-4">
-                <button
-                  onClick={() => handleVendorTypeChange('registered')}
-                  className={`p-4 rounded-xl border-2 transition-all ${
-                    formData.vendor_type === 'registered'
-                      ? 'border-teal-500 bg-teal-50'
-                      : 'border-slate-300 hover:border-slate-400'
-                  }`}
-                >
-                  <div className="flex items-center gap-3">
-                    <div className={`p-2 rounded-lg ${formData.vendor_type === 'registered' ? 'bg-teal-100' : 'bg-slate-100'}`}>
-                      <ShoppingBag className={formData.vendor_type === 'registered' ? 'text-teal-600' : 'text-slate-600'} size={20} />
-                    </div>
-                    <div className="text-left">
-                      <p className="font-semibold text-slate-900">Registered Vendor</p>
-                      <p className="text-xs text-slate-600">Select from vendor list</p>
-                    </div>
-                  </div>
-                </button>
-
-                <button
-                  onClick={() => handleVendorTypeChange('unregistered')}
-                  className={`p-4 rounded-xl border-2 transition-all ${
-                    formData.vendor_type === 'unregistered'
-                      ? 'border-amber-500 bg-amber-50'
-                      : 'border-slate-300 hover:border-slate-400'
-                  }`}
-                >
-                  <div className="flex items-center gap-3">
-                    <div className={`p-2 rounded-lg ${formData.vendor_type === 'unregistered' ? 'bg-amber-100' : 'bg-slate-100'}`}>
-                      <User className={formData.vendor_type === 'unregistered' ? 'text-amber-600' : 'text-slate-600'} size={20} />
-                    </div>
-                    <div className="text-left">
-                      <p className="font-semibold text-slate-900">One-Off Purchase</p>
-                      <p className="text-xs text-slate-600">Unregistered vendor</p>
-                    </div>
-                  </div>
-                </button>
-              </div>
+              <label className="block text-sm font-semibold text-slate-700 mb-2">
+                Vendor <span className="text-red-500">*</span>
+              </label>
+              <select
+                value={formData.vendor_id}
+                onChange={(e) => handleVendorChange(e.target.value)}
+                className="w-full px-4 py-2.5 border-2 border-slate-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-teal-500 transition-all text-slate-900"
+              >
+                <option value="">Select vendor</option>
+                {vendors.map(vendor => (
+                  <option key={vendor.id} value={vendor.id}>{vendor.name}</option>
+                ))}
+                <option value="unregistered">➕ Unregistered Vendor (One-off Purchase)</option>
+              </select>
             </div>
 
-            {/* Registered Vendor Fields */}
-            {formData.vendor_type === 'registered' && (
-              <div>
-                <label className="block text-sm font-semibold text-slate-700 mb-2">
-                  Select Vendor <span className="text-red-500">*</span>
-                </label>
-                <select
-                  value={formData.vendor_id}
-                  onChange={(e) => handleVendorChange(e.target.value)}
-                  className="w-full px-4 py-2.5 border-2 border-slate-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-teal-500 transition-all text-slate-900"
-                >
-                  <option value="">Select vendor</option>
-                  {vendors.map(vendor => (
-                    <option key={vendor.id} value={vendor.id}>{vendor.name}</option>
-                  ))}
-                </select>
-              </div>
-            )}
-
-            {/* Unregistered Vendor Fields */}
-            {formData.vendor_type === 'unregistered' && (
-              <div className="space-y-4 p-4 bg-amber-50 rounded-lg border border-amber-200">
-                <div className="flex items-start gap-2 mb-3">
-                  <AlertTriangle className="text-amber-600 flex-shrink-0" size={20} />
+            {/* Show name field if unregistered vendor selected */}
+            {formData.vendor_id === 'unregistered' && (
+              <div className="p-4 bg-amber-50 rounded-lg border border-amber-200 space-y-3">
+                <div className="flex items-start gap-2">
+                  <AlertTriangle className="text-amber-600 flex-shrink-0 mt-0.5" size={18} />
                   <p className="text-sm text-amber-800">
-                    <strong>One-off purchase:</strong> Use this for purchases from roadside vendors, temporary suppliers, or any unregistered source.
+                    Enter vendor name for one-off purchases (roadside vendors, temporary suppliers, etc.)
                   </p>
                 </div>
-
                 <div>
                   <label className="block text-sm font-semibold text-slate-700 mb-2">
-                    Vendor/Seller Name <span className="text-red-500">*</span>
+                    Vendor Name <span className="text-red-500">*</span>
                   </label>
                   <input
                     type="text"
@@ -615,19 +571,6 @@ const PurchaseInvoices = () => {
                     onChange={(e) => setFormData({ ...formData, unregistered_vendor_name: e.target.value })}
                     className="w-full px-4 py-2.5 border-2 border-slate-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-amber-500 transition-all text-slate-900"
                     placeholder="e.g., Roadside Vendor, Local Shop"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-semibold text-slate-700 mb-2">
-                    Phone Number <span className="text-slate-400">(Optional)</span>
-                  </label>
-                  <input
-                    type="tel"
-                    value={formData.unregistered_vendor_phone}
-                    onChange={(e) => setFormData({ ...formData, unregistered_vendor_phone: e.target.value })}
-                    className="w-full px-4 py-2.5 border-2 border-slate-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-amber-500 transition-all text-slate-900"
-                    placeholder="Contact number if available"
                   />
                 </div>
               </div>
@@ -733,9 +676,9 @@ const PurchaseInvoices = () => {
                       </button>
                     </div>
 
-                    <div className="grid grid-cols-1 md:grid-cols-6 gap-3">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-3">
                       {/* Item Selection with Barcode */}
-                      <div className="md:col-span-2">
+                      <div className="sm:col-span-2 lg:col-span-2">
                         <label className="block text-xs font-semibold text-slate-600 mb-1">Item</label>
                         <div className="flex gap-2">
                           <select
@@ -751,7 +694,7 @@ const PurchaseInvoices = () => {
                           <button
                             type="button"
                             onClick={() => openBarcodeScanner(item.id)}
-                            className="px-3 py-2 bg-gradient-to-r from-blue-600 to-blue-700 text-white rounded-lg hover:from-blue-700 hover:to-blue-800 transition-all flex items-center gap-1 shadow-md"
+                            className="px-3 py-2 bg-gradient-to-r from-blue-600 to-blue-700 text-white rounded-lg hover:from-blue-700 hover:to-blue-800 transition-all flex items-center gap-1 shadow-md flex-shrink-0"
                             title="Scan Barcode"
                           >
                             <Camera size={16} />
@@ -759,7 +702,7 @@ const PurchaseInvoices = () => {
                         </div>
                       </div>
 
-                      <div>
+                      <div className="sm:col-span-1">
                         <label className="block text-xs font-semibold text-slate-600 mb-1">Batch #</label>
                         <input
                           type="text"
@@ -770,7 +713,7 @@ const PurchaseInvoices = () => {
                         />
                       </div>
 
-                      <div>
+                      <div className="sm:col-span-1">
                         <label className="block text-xs font-semibold text-slate-600 mb-1">Expiry</label>
                         <input
                           type="date"
@@ -780,7 +723,7 @@ const PurchaseInvoices = () => {
                         />
                       </div>
 
-                      <div>
+                      <div className="sm:col-span-1">
                         <label className="block text-xs font-semibold text-slate-600 mb-1">Quantity</label>
                         <input
                           type="number"
@@ -791,7 +734,7 @@ const PurchaseInvoices = () => {
                         />
                       </div>
 
-                      <div>
+                      <div className="sm:col-span-1">
                         <label className="block text-xs font-semibold text-slate-600 mb-1">Rate (₹)</label>
                         <input
                           type="number"
@@ -872,18 +815,24 @@ const PurchaseInvoices = () => {
           />
         </div>
 
-        {/* Save Button (Mobile Sticky) */}
-        <div className="sticky bottom-4 flex justify-center md:hidden">
-          <Button
-            onClick={handleSubmit}
-            disabled={saving || items.length === 0}
-            variant="primary"
-            size="md"
-            icon={<Save size={20} />}
-            className="bg-gradient-to-r from-teal-600 to-teal-700 shadow-2xl"
-          >
-            {saving ? 'Saving...' : 'Save Invoice'}
-          </Button>
+        {/* Save Button Section */}
+        <div className="bg-gradient-to-r from-teal-600 to-teal-700 rounded-xl shadow-xl p-6">
+          <div className="flex flex-col md:flex-row items-center justify-between gap-4">
+            <div className="text-white">
+              <p className="text-lg font-bold">Ready to save?</p>
+              <p className="text-sm text-teal-100">Review all details before saving the invoice</p>
+            </div>
+            <Button
+              onClick={handleSubmit}
+              disabled={saving || items.length === 0}
+              variant="secondary"
+              size="md"
+              icon={<Save size={20} />}
+              className="w-full md:w-auto bg-white hover:bg-teal-50 text-teal-700 font-bold shadow-lg"
+            >
+              {saving ? 'Saving Invoice...' : 'Save Invoice'}
+            </Button>
+          </div>
         </div>
       </div>
 
