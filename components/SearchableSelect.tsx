@@ -102,7 +102,7 @@ const SearchableSelect: React.FC<SearchableSelectProps> = ({
 
       {/* Dropdown */}
       {isOpen && (
-        <div className="absolute z-50 w-full mt-2 bg-white border-2 border-slate-300 rounded-lg shadow-2xl max-h-80 overflow-hidden">
+        <div className="absolute z-[100] w-full mt-2 bg-white border-2 border-slate-300 rounded-lg shadow-2xl overflow-hidden">
           {/* Search Input */}
           <div className="p-3 border-b border-slate-200 bg-slate-50">
             <div className="relative">
@@ -119,7 +119,7 @@ const SearchableSelect: React.FC<SearchableSelectProps> = ({
           </div>
 
           {/* Options List */}
-          <div className="overflow-y-auto max-h-60">
+          <div className="overflow-y-auto" style={{ maxHeight: '300px' }}>
             {filteredOptions.length === 0 ? (
               <div className="p-4 text-center text-slate-500 text-sm">
                 No results found
