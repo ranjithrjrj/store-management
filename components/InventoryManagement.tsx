@@ -16,6 +16,7 @@ type Item = {
   id: string;
   name: string;
   sku?: string;
+  barcode?: string;
   category_id?: string;
   category?: { id: string; name: string };
   unit_id?: string;
