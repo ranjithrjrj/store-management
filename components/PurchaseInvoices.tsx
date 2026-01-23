@@ -42,6 +42,9 @@ const PurchaseInvoices = () => {
   });
 
   const [items, setItems] = useState<PurchaseItem[]>([]);
+  const [additionalCharges, setAdditionalCharges] = useState<Array<{ id: string; name: string; amount: number }>>([]);
+  const [discount, setDiscount] = useState({ type: 'amount' as 'amount' | 'percent', value: 0 });
+  const [showCharges, setShowCharges] = useState(false);
   const [isIntrastate, setIsIntrastate] = useState(true);
   const [showBarcodeScanner, setShowBarcodeScanner] = useState(false);
   const [scanningForItemId, setScanningForItemId] = useState<string | null>(null);
@@ -258,6 +261,23 @@ const PurchaseInvoices = () => {
     setItems(items.filter(item => item.id !== id));
   };
 
+  const addCharge = () => {
+    setAdditionalCharges([
+      ...additionalCharges,
+      { id: Date.now().toString(), name: '', amount: 0 }
+    ]);
+  };
+
+  const updateCharge = (id: string, field: 'name' | 'amount', value: string | number) => {
+    setAdditionalCharges(additionalCharges.map(charge => 
+      charge.id === id ? { ...charge, [field]: value } : charge
+    ));
+  };
+
+  const removeCharge = (id: string) => {
+    setAdditionalCharges(additionalCharges.filter(charge => charge.id !== id));
+  };
+
   const calculateTotals = () => {
     const subtotal = items.reduce((sum, item) => sum + (item.quantity * item.rate), 0);
     const totalGst = items.reduce((sum, item) => {
@@ -265,7 +285,18 @@ const PurchaseInvoices = () => {
       return sum + (taxableAmount * item.gst_rate / 100);
     }, 0);
 
-    const total = subtotal + totalGst;
+    // Additional charges
+    const chargesTotal = additionalCharges.reduce((sum, charge) => sum + (charge.amount || 0), 0);
+
+    // Calculate discount
+    let discountAmount = 0;
+    if (discount.type === 'percent') {
+      discountAmount = (subtotal * discount.value) / 100;
+    } else {
+      discountAmount = discount.value;
+    }
+
+    const total = subtotal + totalGst + chargesTotal - discountAmount;
 
     if (isIntrastate) {
       return {
@@ -273,6 +304,8 @@ const PurchaseInvoices = () => {
         cgst: totalGst / 2,
         sgst: totalGst / 2,
         igst: 0,
+        chargesTotal,
+        discountAmount,
         total
       };
     } else {
@@ -281,6 +314,8 @@ const PurchaseInvoices = () => {
         cgst: 0,
         sgst: 0,
         igst: totalGst,
+        chargesTotal,
+        discountAmount,
         total
       };
     }
@@ -320,11 +355,16 @@ const PurchaseInvoices = () => {
         cgst_amount: totals.cgst,
         sgst_amount: totals.sgst,
         igst_amount: totals.igst,
+        additional_charges: totals.chargesTotal,
+        discount_type: discount.type,
+        discount_value: discount.value,
+        discount_amount: totals.discountAmount,
         total_amount: totals.total,
         paid_amount: 0,
         pending_amount: totals.total,
         payment_status: formData.payment_status,
-        notes: formData.notes || null
+        notes: formData.notes || null,
+        charges_details: additionalCharges.length > 0 ? JSON.stringify(additionalCharges) : null
       };
 
       if (formData.vendor_id === 'unregistered') {
@@ -425,6 +465,9 @@ const PurchaseInvoices = () => {
         notes: ''
       });
       setItems([]);
+      setAdditionalCharges([]);
+      setDiscount({ type: 'amount', value: 0 });
+      setShowCharges(false);
       setLinkedPO(null);
 
     } catch (err: any) {
@@ -681,7 +724,7 @@ const PurchaseInvoices = () => {
           </div>
         </div>
 
-        {/* Totals Summary */}
+        {/* Totals Summary with Expandable Charges */}
         {totals && (
           <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
             <div className="p-4 bg-gradient-to-r from-green-600 to-emerald-600">
@@ -690,7 +733,9 @@ const PurchaseInvoices = () => {
                 <h3 className="font-bold text-white">Summary</h3>
               </div>
             </div>
+            
             <div className="p-4 space-y-2.5">
+              {/* Base Totals */}
               <div className="flex justify-between text-sm">
                 <span className="text-slate-600">Subtotal</span>
                 <span className="font-semibold text-slate-900">₹{totals.subtotal.toFixed(2)}</span>
@@ -712,7 +757,130 @@ const PurchaseInvoices = () => {
                   <span className="text-slate-900">₹{totals.igst.toFixed(2)}</span>
                 </div>
               )}
-              <div className="flex justify-between text-lg font-bold pt-2 border-t-2 border-slate-300">
+
+              {/* Expandable Additional Charges Section */}
+              <div className="pt-2 border-t border-slate-200">
+                <button
+                  onClick={() => setShowCharges(!showCharges)}
+                  className="w-full flex items-center justify-between py-2 text-sm font-medium text-teal-700 hover:text-teal-800 transition-colors"
+                >
+                  <span className="flex items-center gap-2">
+                    <Plus size={16} />
+                    Additional Charges & Discount
+                  </span>
+                  <span className="text-xs bg-teal-100 px-2 py-1 rounded-full">
+                    {showCharges ? 'Hide' : 'Show'}
+                  </span>
+                </button>
+
+                {showCharges && (
+                  <div className="mt-3 space-y-3 p-3 bg-slate-50 rounded-xl border border-slate-200">
+                    {/* Additional Charges */}
+                    <div>
+                      <div className="flex items-center justify-between mb-2">
+                        <label className="text-xs font-bold text-slate-700">Charges</label>
+                        <button
+                          onClick={addCharge}
+                          className="text-xs text-teal-600 hover:text-teal-700 font-medium flex items-center gap-1"
+                        >
+                          <Plus size={14} />
+                          Add
+                        </button>
+                      </div>
+
+                      {additionalCharges.length === 0 ? (
+                        <p className="text-xs text-slate-500 text-center py-2">No additional charges</p>
+                      ) : (
+                        <div className="space-y-2">
+                          {additionalCharges.map((charge) => (
+                            <div key={charge.id} className="flex gap-2">
+                              <input
+                                type="text"
+                                value={charge.name}
+                                onChange={(e) => updateCharge(charge.id, 'name', e.target.value)}
+                                placeholder="Charge name"
+                                className="flex-1 px-2 py-1.5 border border-slate-300 rounded-lg text-xs text-slate-900 focus:ring-1 focus:ring-teal-500"
+                              />
+                              <input
+                                type="number"
+                                value={charge.amount || ''}
+                                onChange={(e) => updateCharge(charge.id, 'amount', parseFloat(e.target.value) || 0)}
+                                placeholder="₹0"
+                                className="w-20 px-2 py-1.5 border border-slate-300 rounded-lg text-xs text-slate-900 focus:ring-1 focus:ring-teal-500"
+                              />
+                              <button
+                                onClick={() => removeCharge(charge.id)}
+                                className="p-1.5 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                              >
+                                <Trash2 size={14} />
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Discount */}
+                    <div className="pt-3 border-t border-slate-300">
+                      <label className="text-xs font-bold text-slate-700 mb-2 block">Discount</label>
+                      <div className="flex gap-2">
+                        <div className="flex gap-1 bg-white border border-slate-300 rounded-lg p-1">
+                          <button
+                            onClick={() => setDiscount({ ...discount, type: 'amount' })}
+                            className={`px-2 py-1 text-xs rounded transition-colors ${
+                              discount.type === 'amount'
+                                ? 'bg-teal-600 text-white'
+                                : 'text-slate-600 hover:bg-slate-100'
+                            }`}
+                          >
+                            ₹
+                          </button>
+                          <button
+                            onClick={() => setDiscount({ ...discount, type: 'percent' })}
+                            className={`px-2 py-1 text-xs rounded transition-colors ${
+                              discount.type === 'percent'
+                                ? 'bg-teal-600 text-white'
+                                : 'text-slate-600 hover:bg-slate-100'
+                            }`}
+                          >
+                            %
+                          </button>
+                        </div>
+                        <input
+                          type="number"
+                          value={discount.value || ''}
+                          onChange={(e) => setDiscount({ ...discount, value: parseFloat(e.target.value) || 0 })}
+                          placeholder={discount.type === 'percent' ? '0%' : '₹0'}
+                          className="flex-1 px-2 py-1.5 border border-slate-300 rounded-lg text-xs text-slate-900 focus:ring-1 focus:ring-teal-500"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Show charges/discount amounts if any exist */}
+                {(additionalCharges.length > 0 || discount.value > 0) && (
+                  <div className="mt-3 pt-2 space-y-1.5 text-xs">
+                    {additionalCharges.map((charge) => (
+                      charge.amount > 0 && (
+                        <div key={charge.id} className="flex justify-between text-slate-600">
+                          <span>+ {charge.name || 'Charge'}</span>
+                          <span>₹{charge.amount.toFixed(2)}</span>
+                        </div>
+                      )
+                    ))}
+                    {discount.value > 0 && (
+                      <div className="flex justify-between text-green-600 font-medium">
+                        <span>- Discount {discount.type === 'percent' ? `(${discount.value}%)` : ''}</span>
+                        <span>₹{totals.discountAmount.toFixed(2)}</span>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              {/* Grand Total */}
+              <div className="flex justify-between text-lg font-bold pt-3 border-t-2 border-slate-300">
                 <span className="text-slate-900">Total</span>
                 <span className="text-teal-700">₹{totals.total.toFixed(2)}</span>
               </div>
