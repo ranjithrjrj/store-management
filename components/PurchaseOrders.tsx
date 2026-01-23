@@ -1,17 +1,19 @@
 // FILE PATH: components/PurchaseOrders.tsx
-// Mobile-Native Purchase Orders - Beautiful, Consistent, App-Like
+// COMPLETE Purchase Orders - Exact Copy of Purchase Invoices Pattern
 
 'use client';
 import React, { useState, useEffect } from 'react';
 import { 
-  ShoppingCart, Plus, Edit2, Trash2, X, Search, Package, 
-  Eye, Filter, Calendar, FileText, TrendingUp, Check,
-  ChevronRight, AlertCircle, Clock, CheckCircle, XCircle
+  ShoppingCart, Plus, Trash2, X, Search, Package, 
+  Calendar, FileText, TrendingUp, Check, ChevronRight, 
+  AlertCircle, Clock, CheckCircle, XCircle, Filter, 
+  Camera, DollarSign, AlertTriangle
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { Button, Badge, LoadingSpinner, ConfirmDialog, useToast } from '@/components/ui';
 import { useTheme } from '@/contexts/ThemeContext';
 import SearchableSelect from './SearchableSelect';
+import BarcodeScanner from './BarcodeScanner';
 
 type POItem = {
   id: string;
@@ -36,6 +38,8 @@ type PurchaseOrder = {
   cgst_amount: number;
   sgst_amount: number;
   igst_amount: number;
+  additional_charges: number;
+  discount_amount: number;
   total_amount: number;
   notes?: string;
   created_at: string;
@@ -55,6 +59,11 @@ const PurchaseOrders = ({ onNavigate }: Props) => {
   const [availableItems, setAvailableItems] = useState<any[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterStatus, setFilterStatus] = useState<string>('all');
+  const [filterVendor, setFilterVendor] = useState<string>('all');
+  const [filterDateFrom, setFilterDateFrom] = useState<string>('');
+  const [filterDateTo, setFilterDateTo] = useState<string>('');
+  const [filterAmountMin, setFilterAmountMin] = useState<string>('');
+  const [filterAmountMax, setFilterAmountMax] = useState<string>('');
   const [showFilterSheet, setShowFilterSheet] = useState(false);
   const [selectedPO, setSelectedPO] = useState<PurchaseOrder | null>(null);
   const [poItems, setPOItems] = useState<POItem[]>([]);
@@ -70,7 +79,12 @@ const PurchaseOrders = ({ onNavigate }: Props) => {
   });
 
   const [items, setItems] = useState<POItem[]>([]);
+  const [additionalCharges, setAdditionalCharges] = useState<Array<{ id: string; name: string; amount: number }>>([]);
+  const [discount, setDiscount] = useState({ type: 'amount' as 'amount' | 'percent', value: 0 });
+  const [showCharges, setShowCharges] = useState(false);
   const [isIntrastate, setIsIntrastate] = useState(true);
+  const [showBarcodeScanner, setShowBarcodeScanner] = useState(false);
+  const [scanningForItemId, setScanningForItemId] = useState<string | null>(null);
 
   useEffect(() => {
     loadData();
@@ -88,7 +102,7 @@ const PurchaseOrders = ({ onNavigate }: Props) => {
       
       const { data: itemsData } = await supabase
         .from('items')
-        .select('id, name, wholesale_price, gst_rate')
+        .select('id, name, barcode, wholesale_price, gst_rate')
         .eq('is_active', true)
         .order('name');
       
@@ -119,6 +133,9 @@ const PurchaseOrders = ({ onNavigate }: Props) => {
       notes: ''
     });
     setItems([]);
+    setAdditionalCharges([]);
+    setDiscount({ type: 'amount', value: 0 });
+    setShowCharges(false);
     setView('create');
   };
 
@@ -187,6 +204,41 @@ const PurchaseOrders = ({ onNavigate }: Props) => {
     }
   };
 
+  const openBarcodeScanner = (itemId: string) => {
+    setScanningForItemId(itemId);
+    setShowBarcodeScanner(true);
+  };
+
+  const handleBarcodeScan = (barcode: string) => {
+    if (scanningForItemId) {
+      const foundItem = availableItems.find(i => i.barcode === barcode);
+      
+      if (foundItem) {
+        setItems(items.map(item => {
+          if (item.id === scanningForItemId) {
+            const taxableAmount = item.quantity * foundItem.wholesale_price;
+            const gstAmount = (taxableAmount * foundItem.gst_rate) / 100;
+            return {
+              ...item,
+              item_id: foundItem.id,
+              item_name: foundItem.name,
+              rate: foundItem.wholesale_price,
+              gst_rate: foundItem.gst_rate,
+              amount: taxableAmount + gstAmount
+            };
+          }
+          return item;
+        }));
+        toast.success('Item found!', foundItem.name);
+      } else {
+        toast.warning('Not found', `No item with barcode: ${barcode}`);
+      }
+    }
+    
+    setShowBarcodeScanner(false);
+    setScanningForItemId(null);
+  };
+
   const addNewItem = () => {
     const newId = Date.now().toString() + Math.random();
     setItems([...items, {
@@ -229,6 +281,23 @@ const PurchaseOrders = ({ onNavigate }: Props) => {
     setItems(items.filter(item => item.id !== id));
   };
 
+  const addCharge = () => {
+    setAdditionalCharges([
+      ...additionalCharges,
+      { id: Date.now().toString(), name: '', amount: 0 }
+    ]);
+  };
+
+  const updateCharge = (id: string, field: 'name' | 'amount', value: string | number) => {
+    setAdditionalCharges(additionalCharges.map(charge => 
+      charge.id === id ? { ...charge, [field]: value } : charge
+    ));
+  };
+
+  const removeCharge = (id: string) => {
+    setAdditionalCharges(additionalCharges.filter(charge => charge.id !== id));
+  };
+
   const calculateTotals = () => {
     const subtotal = items.reduce((sum, item) => sum + (item.quantity * item.rate), 0);
     const totalGst = items.reduce((sum, item) => {
@@ -236,7 +305,16 @@ const PurchaseOrders = ({ onNavigate }: Props) => {
       return sum + (taxableAmount * item.gst_rate / 100);
     }, 0);
 
-    const total = subtotal + totalGst;
+    const chargesTotal = additionalCharges.reduce((sum, charge) => sum + (charge.amount || 0), 0);
+
+    let discountAmount = 0;
+    if (discount.type === 'percent') {
+      discountAmount = (subtotal * discount.value) / 100;
+    } else {
+      discountAmount = discount.value;
+    }
+
+    const total = subtotal + totalGst + chargesTotal - discountAmount;
 
     if (isIntrastate) {
       return {
@@ -244,6 +322,8 @@ const PurchaseOrders = ({ onNavigate }: Props) => {
         cgst: totalGst / 2,
         sgst: totalGst / 2,
         igst: 0,
+        chargesTotal,
+        discountAmount,
         total
       };
     } else {
@@ -252,6 +332,8 @@ const PurchaseOrders = ({ onNavigate }: Props) => {
         cgst: 0,
         sgst: 0,
         igst: totalGst,
+        chargesTotal,
+        discountAmount,
         total
       };
     }
@@ -284,8 +366,13 @@ const PurchaseOrders = ({ onNavigate }: Props) => {
         cgst_amount: totals.cgst,
         sgst_amount: totals.sgst,
         igst_amount: totals.igst,
+        additional_charges: totals.chargesTotal,
+        discount_type: discount.type,
+        discount_value: discount.value,
+        discount_amount: totals.discountAmount,
         total_amount: totals.total,
-        notes: formData.notes || null
+        notes: formData.notes || null,
+        charges_details: additionalCharges.length > 0 ? JSON.stringify(additionalCharges) : null
       };
 
       const { data: po, error: poError } = await supabase
@@ -323,6 +410,9 @@ const PurchaseOrders = ({ onNavigate }: Props) => {
         notes: ''
       });
       setItems([]);
+      setAdditionalCharges([]);
+      setDiscount({ type: 'amount', value: 0 });
+      setShowCharges(false);
 
     } catch (err: any) {
       console.error('Error saving PO:', err);
@@ -356,9 +446,15 @@ const PurchaseOrders = ({ onNavigate }: Props) => {
       order.po_number.toLowerCase().includes(searchTerm.toLowerCase()) ||
       order.vendor?.name.toLowerCase().includes(searchTerm.toLowerCase());
     
-    const matchesFilter = filterStatus === 'all' || order.status === filterStatus;
+    const matchesStatus = filterStatus === 'all' || order.status === filterStatus;
+    const matchesVendor = filterVendor === 'all' || order.vendor_id === filterVendor;
+    const matchesDateFrom = !filterDateFrom || order.po_date >= filterDateFrom;
+    const matchesDateTo = !filterDateTo || order.po_date <= filterDateTo;
+    const matchesAmountMin = !filterAmountMin || order.total_amount >= parseFloat(filterAmountMin);
+    const matchesAmountMax = !filterAmountMax || order.total_amount <= parseFloat(filterAmountMax);
     
-    return matchesSearch && matchesFilter;
+    return matchesSearch && matchesStatus && matchesVendor && 
+           matchesDateFrom && matchesDateTo && matchesAmountMin && matchesAmountMax;
   });
 
   const stats = {
@@ -385,7 +481,7 @@ const PurchaseOrders = ({ onNavigate }: Props) => {
   if (view === 'list') {
     return (
       <div className="min-h-screen bg-slate-50">
-        {/* HERO SECTION - MATCHES PURCHASE INVOICES */}
+        {/* HERO SECTION */}
         <div className="bg-gradient-to-br from-teal-600 to-teal-700 px-4 py-6 md:px-6 md:py-8">
           <div className="max-w-6xl mx-auto">
             <div className="flex items-center gap-3 mb-2">
@@ -433,8 +529,16 @@ const PurchaseOrders = ({ onNavigate }: Props) => {
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
                   placeholder="Search PO number or vendor..."
-                  className="w-full pl-10 pr-3 py-2.5 border-2 border-slate-300 rounded-xl focus:ring-2 focus:ring-purple-500 text-slate-900 text-sm"
+                  className="w-full pl-10 pr-10 py-2.5 border-2 border-slate-300 rounded-xl focus:ring-2 focus:ring-teal-500 text-slate-900 text-sm"
                 />
+                {searchTerm && (
+                  <button
+                    onClick={() => setSearchTerm('')}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors"
+                  >
+                    <X size={18} />
+                  </button>
+                )}
               </div>
               <button
                 onClick={() => setShowFilterSheet(true)}
@@ -501,16 +605,19 @@ const PurchaseOrders = ({ onNavigate }: Props) => {
           )}
 
           {/* Bottom Padding for Mobile Nav */}
-          <div className="h-4 md:hidden" />
+          <div className="h-20 md:h-4" />
         </div>
 
-        {/* Floating Add Button */}
-        <button
-          onClick={handleAddNew}
-          className="fixed bottom-24 right-4 md:bottom-8 md:right-8 w-14 h-14 bg-gradient-to-br from-teal-600 to-teal-700 hover:from-teal-700 hover:to-teal-800 text-white rounded-full shadow-2xl flex items-center justify-center active:scale-95 transition-all z-30"
-        >
-          <Plus size={28} />
-        </button>
+        {/* Create PO Button at Bottom */}
+        <div className="fixed bottom-20 left-0 right-0 md:relative md:bottom-0 px-4 pb-4 md:max-w-6xl md:mx-auto z-30 bg-slate-50 md:bg-transparent">
+          <button
+            onClick={handleAddNew}
+            className="w-full bg-gradient-to-r from-teal-600 to-teal-700 hover:from-teal-700 hover:to-teal-800 text-white font-bold py-4 rounded-2xl shadow-lg active:scale-[0.98] transition-all flex items-center justify-center gap-3"
+          >
+            <Plus size={24} />
+            Create Purchase Order
+          </button>
+        </div>
 
         {/* Filter Bottom Sheet */}
         {showFilterSheet && (
@@ -519,7 +626,7 @@ const PurchaseOrders = ({ onNavigate }: Props) => {
               className="fixed inset-0 bg-black/50 backdrop-blur-sm z-[60]"
               onClick={() => setShowFilterSheet(false)}
             />
-            <div className="fixed bottom-0 left-0 right-0 bg-white rounded-t-3xl z-[70] max-h-[60vh] flex flex-col shadow-2xl">
+            <div className="fixed bottom-0 left-0 right-0 bg-white rounded-t-3xl z-[70] max-h-[80vh] flex flex-col shadow-2xl">
               <div className="flex items-center justify-between p-4 border-b border-slate-200 bg-gradient-to-r from-teal-600 to-teal-700 rounded-t-3xl">
                 <h2 className="text-xl font-bold text-white">Filter Orders</h2>
                 <button
@@ -530,53 +637,142 @@ const PurchaseOrders = ({ onNavigate }: Props) => {
                 </button>
               </div>
 
-              <div className="p-4 space-y-3">
-                <button
-                  onClick={() => { setFilterStatus('all'); setShowFilterSheet(false); }}
-                  className={`w-full p-4 rounded-xl border-2 transition-all text-left ${
-                    filterStatus === 'all'
-                      ? 'border-teal-500 bg-teal-50'
-                      : 'border-slate-200 hover:border-slate-300'
-                  }`}
-                >
-                  <p className="font-semibold text-slate-900">All Orders</p>
-                  <p className="text-xs text-slate-600 mt-0.5">{stats.total} total</p>
-                </button>
+              <div className="flex-1 overflow-y-auto p-4 space-y-4">
+                {/* Status Filter */}
+                <div>
+                  <h3 className="text-sm font-bold text-slate-900 mb-2">Status</h3>
+                  <div className="space-y-2">
+                    <button
+                      onClick={() => setFilterStatus('all')}
+                      className={`w-full p-3 rounded-xl border-2 transition-all text-left ${
+                        filterStatus === 'all'
+                          ? 'border-teal-500 bg-teal-50'
+                          : 'border-slate-200 hover:border-slate-300'
+                      }`}
+                    >
+                      <p className="font-semibold text-slate-900">All Orders</p>
+                      <p className="text-xs text-slate-600 mt-0.5">{stats.total} total</p>
+                    </button>
 
-                <button
-                  onClick={() => { setFilterStatus('pending'); setShowFilterSheet(false); }}
-                  className={`w-full p-4 rounded-xl border-2 transition-all text-left ${
-                    filterStatus === 'pending'
-                      ? 'border-amber-500 bg-amber-50'
-                      : 'border-slate-200 hover:border-slate-300'
-                  }`}
-                >
-                  <p className="font-semibold text-slate-900">Pending</p>
-                  <p className="text-xs text-slate-600 mt-0.5">{stats.pending} orders</p>
-                </button>
+                    <button
+                      onClick={() => setFilterStatus('pending')}
+                      className={`w-full p-3 rounded-xl border-2 transition-all text-left ${
+                        filterStatus === 'pending'
+                          ? 'border-amber-500 bg-amber-50'
+                          : 'border-slate-200 hover:border-slate-300'
+                      }`}
+                    >
+                      <p className="font-semibold text-slate-900">Pending</p>
+                      <p className="text-xs text-slate-600 mt-0.5">{stats.pending} orders</p>
+                    </button>
 
-                <button
-                  onClick={() => { setFilterStatus('partial'); setShowFilterSheet(false); }}
-                  className={`w-full p-4 rounded-xl border-2 transition-all text-left ${
-                    filterStatus === 'partial'
-                      ? 'border-blue-500 bg-blue-50'
-                      : 'border-slate-200 hover:border-slate-300'
-                  }`}
-                >
-                  <p className="font-semibold text-slate-900">Partially Received</p>
-                  <p className="text-xs text-slate-600 mt-0.5">{stats.partial} orders</p>
-                </button>
+                    <button
+                      onClick={() => setFilterStatus('partial')}
+                      className={`w-full p-3 rounded-xl border-2 transition-all text-left ${
+                        filterStatus === 'partial'
+                          ? 'border-blue-500 bg-blue-50'
+                          : 'border-slate-200 hover:border-slate-300'
+                      }`}
+                    >
+                      <p className="font-semibold text-slate-900">Partially Received</p>
+                      <p className="text-xs text-slate-600 mt-0.5">{stats.partial} orders</p>
+                    </button>
 
+                    <button
+                      onClick={() => setFilterStatus('received')}
+                      className={`w-full p-3 rounded-xl border-2 transition-all text-left ${
+                        filterStatus === 'received'
+                          ? 'border-green-500 bg-green-50'
+                          : 'border-slate-200 hover:border-slate-300'
+                      }`}
+                    >
+                      <p className="font-semibold text-slate-900">Fully Received</p>
+                      <p className="text-xs text-slate-600 mt-0.5">{stats.received} orders</p>
+                    </button>
+                  </div>
+                </div>
+
+                {/* Vendor Filter */}
+                <div className="pt-3 border-t border-slate-200">
+                  <label className="text-sm font-bold text-slate-900 mb-2 block">Vendor</label>
+                  <select
+                    value={filterVendor}
+                    onChange={(e) => setFilterVendor(e.target.value)}
+                    className="w-full px-3 py-2.5 border-2 border-slate-300 rounded-lg text-slate-900 focus:ring-2 focus:ring-teal-500"
+                  >
+                    <option value="all">All Vendors</option>
+                    {vendors.map(v => (
+                      <option key={v.id} value={v.id}>{v.name}</option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Date Range */}
+                <div className="pt-3 border-t border-slate-200">
+                  <label className="text-sm font-bold text-slate-900 mb-2 block">Date Range</label>
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <label className="text-xs text-slate-600 mb-1 block">From</label>
+                      <input
+                        type="date"
+                        value={filterDateFrom}
+                        onChange={(e) => setFilterDateFrom(e.target.value)}
+                        className="w-full px-2 py-2 border-2 border-slate-300 rounded-lg text-slate-900 text-sm focus:ring-2 focus:ring-teal-500"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-xs text-slate-600 mb-1 block">To</label>
+                      <input
+                        type="date"
+                        value={filterDateTo}
+                        onChange={(e) => setFilterDateTo(e.target.value)}
+                        className="w-full px-2 py-2 border-2 border-slate-300 rounded-lg text-slate-900 text-sm focus:ring-2 focus:ring-teal-500"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Amount Range */}
+                <div className="pt-3 border-t border-slate-200">
+                  <label className="text-sm font-bold text-slate-900 mb-2 block">Amount Range (₹)</label>
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <label className="text-xs text-slate-600 mb-1 block">Min</label>
+                      <input
+                        type="number"
+                        value={filterAmountMin}
+                        onChange={(e) => setFilterAmountMin(e.target.value)}
+                        placeholder="0"
+                        className="w-full px-2 py-2 border-2 border-slate-300 rounded-lg text-slate-900 text-sm focus:ring-2 focus:ring-teal-500"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-xs text-slate-600 mb-1 block">Max</label>
+                      <input
+                        type="number"
+                        value={filterAmountMax}
+                        onChange={(e) => setFilterAmountMax(e.target.value)}
+                        placeholder="Any"
+                        className="w-full px-2 py-2 border-2 border-slate-300 rounded-lg text-slate-900 text-sm focus:ring-2 focus:ring-teal-500"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Clear Filters Button */}
                 <button
-                  onClick={() => { setFilterStatus('received'); setShowFilterSheet(false); }}
-                  className={`w-full p-4 rounded-xl border-2 transition-all text-left ${
-                    filterStatus === 'received'
-                      ? 'border-green-500 bg-green-50'
-                      : 'border-slate-200 hover:border-slate-300'
-                  }`}
+                  onClick={() => {
+                    setFilterStatus('all');
+                    setFilterVendor('all');
+                    setFilterDateFrom('');
+                    setFilterDateTo('');
+                    setFilterAmountMin('');
+                    setFilterAmountMax('');
+                    setShowFilterSheet(false);
+                  }}
+                  className="w-full px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-medium transition-colors mt-2"
                 >
-                  <p className="font-semibold text-slate-900">Fully Received</p>
-                  <p className="text-xs text-slate-600 mt-0.5">{stats.received} orders</p>
+                  Clear All Filters
                 </button>
               </div>
             </div>
@@ -590,7 +786,7 @@ const PurchaseOrders = ({ onNavigate }: Props) => {
   if (view === 'create') {
     return (
       <div className="min-h-screen bg-slate-50">
-        {/* HERO SECTION - MATCHES PURCHASE INVOICES */}
+        {/* HERO SECTION */}
         <div className="bg-gradient-to-br from-teal-600 to-teal-700 px-4 py-6 md:px-6 md:py-8">
           <div className="max-w-6xl mx-auto">
             <div className="flex items-center gap-3 mb-2">
@@ -650,7 +846,7 @@ const PurchaseOrders = ({ onNavigate }: Props) => {
                     type="date"
                     value={formData.po_date}
                     onChange={(e) => setFormData({ ...formData, po_date: e.target.value })}
-                    className="w-full px-3 py-2.5 border-2 border-slate-300 rounded-lg focus:ring-2 focus:ring-purple-500 text-slate-900 text-sm"
+                    className="w-full px-3 py-2.5 border-2 border-slate-300 rounded-lg focus:ring-2 focus:ring-teal-500 text-slate-900 text-sm"
                   />
                 </div>
 
@@ -660,7 +856,7 @@ const PurchaseOrders = ({ onNavigate }: Props) => {
                     type="date"
                     value={formData.expected_delivery_date}
                     onChange={(e) => setFormData({ ...formData, expected_delivery_date: e.target.value })}
-                    className="w-full px-3 py-2.5 border-2 border-slate-300 rounded-lg focus:ring-2 focus:ring-purple-500 text-slate-900 text-sm"
+                    className="w-full px-3 py-2.5 border-2 border-slate-300 rounded-lg focus:ring-2 focus:ring-teal-500 text-slate-900 text-sm"
                   />
                 </div>
               </div>
@@ -714,16 +910,28 @@ const PurchaseOrders = ({ onNavigate }: Props) => {
                     <div className="space-y-3">
                       <div>
                         <label className="block text-xs font-bold text-slate-700 mb-1.5">Product</label>
-                        <SearchableSelect
-                          options={availableItems.map(i => ({
-                            value: i.id,
-                            label: i.name,
-                            sublabel: `₹${i.wholesale_price} • GST ${i.gst_rate}%`
-                          }))}
-                          value={item.item_id}
-                          onChange={(value) => updateItem(item.id, 'item_id', value)}
-                          placeholder="Select product"
-                        />
+                        <div className="flex gap-2">
+                          <div className="flex-1">
+                            <SearchableSelect
+                              options={availableItems.map(i => ({
+                                value: i.id,
+                                label: i.name,
+                                sublabel: `₹${i.wholesale_price} • GST ${i.gst_rate}%`
+                              }))}
+                              value={item.item_id}
+                              onChange={(value) => updateItem(item.id, 'item_id', value)}
+                              placeholder="Select product"
+                            />
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => openBarcodeScanner(item.id)}
+                            className="w-12 h-12 flex items-center justify-center bg-blue-600 hover:bg-blue-700 text-white rounded-xl active:scale-95 transition-all shadow-sm flex-shrink-0"
+                            title="Scan barcode"
+                          >
+                            <Camera size={20} />
+                          </button>
+                        </div>
                       </div>
 
                       <div className="grid grid-cols-2 gap-3">
@@ -733,7 +941,7 @@ const PurchaseOrders = ({ onNavigate }: Props) => {
                             type="number"
                             value={item.quantity}
                             onChange={(e) => updateItem(item.id, 'quantity', parseFloat(e.target.value) || 0)}
-                            className="w-full px-3 py-2.5 border-2 border-slate-300 rounded-lg focus:ring-2 focus:ring-purple-500 text-slate-900 text-sm"
+                            className="w-full px-3 py-2.5 border-2 border-slate-300 rounded-lg focus:ring-2 focus:ring-teal-500 text-slate-900 text-sm"
                             min="0"
                           />
                         </div>
@@ -745,7 +953,7 @@ const PurchaseOrders = ({ onNavigate }: Props) => {
                             step="0.01"
                             value={item.rate}
                             onChange={(e) => updateItem(item.id, 'rate', parseFloat(e.target.value) || 0)}
-                            className="w-full px-3 py-2.5 border-2 border-slate-300 rounded-lg focus:ring-2 focus:ring-purple-500 text-slate-900 text-sm"
+                            className="w-full px-3 py-2.5 border-2 border-slate-300 rounded-lg focus:ring-2 focus:ring-teal-500 text-slate-900 text-sm"
                             min="0"
                           />
                         </div>
@@ -765,16 +973,18 @@ const PurchaseOrders = ({ onNavigate }: Props) => {
             </div>
           </div>
 
-          {/* Totals Summary */}
+          {/* Totals Summary with Expandable Charges */}
           {totals && (
             <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
               <div className="p-4 bg-gradient-to-r from-green-600 to-emerald-600">
                 <div className="flex items-center gap-2">
-                  <TrendingUp className="text-white" size={20} />
+                  <DollarSign className="text-white" size={20} />
                   <h3 className="font-bold text-white">Summary</h3>
                 </div>
               </div>
+              
               <div className="p-4 space-y-2.5">
+                {/* Base Totals */}
                 <div className="flex justify-between text-sm">
                   <span className="text-slate-600">Subtotal</span>
                   <span className="font-semibold text-slate-900">₹{totals.subtotal.toFixed(2)}</span>
@@ -796,6 +1006,129 @@ const PurchaseOrders = ({ onNavigate }: Props) => {
                     <span className="text-slate-900">₹{totals.igst.toFixed(2)}</span>
                   </div>
                 )}
+
+                {/* Expandable Additional Charges Section */}
+                <div className="pt-2 border-t border-slate-200">
+                  <button
+                    onClick={() => setShowCharges(!showCharges)}
+                    className="w-full flex items-center justify-between py-2 text-sm font-medium text-teal-700 hover:text-teal-800 transition-colors"
+                  >
+                    <span className="flex items-center gap-2">
+                      <Plus size={16} />
+                      Additional Charges & Discount
+                    </span>
+                    <span className="text-xs bg-teal-100 px-2 py-1 rounded-full">
+                      {showCharges ? 'Hide' : 'Show'}
+                    </span>
+                  </button>
+
+                  {showCharges && (
+                    <div className="mt-3 space-y-3 p-3 bg-slate-50 rounded-xl border border-slate-200">
+                      {/* Additional Charges */}
+                      <div>
+                        <div className="flex items-center justify-between mb-2">
+                          <label className="text-xs font-bold text-slate-700">Charges</label>
+                          <button
+                            onClick={addCharge}
+                            className="text-xs text-teal-600 hover:text-teal-700 font-medium flex items-center gap-1"
+                          >
+                            <Plus size={14} />
+                            Add
+                          </button>
+                        </div>
+
+                        {additionalCharges.length === 0 ? (
+                          <p className="text-xs text-slate-500 text-center py-2">No additional charges</p>
+                        ) : (
+                          <div className="space-y-2">
+                            {additionalCharges.map((charge) => (
+                              <div key={charge.id} className="flex gap-2">
+                                <input
+                                  type="text"
+                                  value={charge.name}
+                                  onChange={(e) => updateCharge(charge.id, 'name', e.target.value)}
+                                  placeholder="Charge name"
+                                  className="flex-1 px-2 py-1.5 border border-slate-300 rounded-lg text-xs text-slate-900 focus:ring-1 focus:ring-teal-500"
+                                />
+                                <input
+                                  type="number"
+                                  value={charge.amount || ''}
+                                  onChange={(e) => updateCharge(charge.id, 'amount', parseFloat(e.target.value) || 0)}
+                                  placeholder="₹0"
+                                  className="w-20 px-2 py-1.5 border border-slate-300 rounded-lg text-xs text-slate-900 focus:ring-1 focus:ring-teal-500"
+                                />
+                                <button
+                                  onClick={() => removeCharge(charge.id)}
+                                  className="p-1.5 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                                >
+                                  <Trash2 size={14} />
+                                </button>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Discount */}
+                      <div className="pt-3 border-t border-slate-300">
+                        <label className="text-xs font-bold text-slate-700 mb-2 block">Discount</label>
+                        <div className="flex gap-2">
+                          <div className="flex gap-1 bg-white border border-slate-300 rounded-lg p-1">
+                            <button
+                              onClick={() => setDiscount({ ...discount, type: 'amount' })}
+                              className={`px-2 py-1 text-xs rounded transition-colors ${
+                                discount.type === 'amount'
+                                  ? 'bg-teal-600 text-white'
+                                  : 'text-slate-600 hover:bg-slate-100'
+                              }`}
+                            >
+                              ₹
+                            </button>
+                            <button
+                              onClick={() => setDiscount({ ...discount, type: 'percent' })}
+                              className={`px-2 py-1 text-xs rounded transition-colors ${
+                                discount.type === 'percent'
+                                  ? 'bg-teal-600 text-white'
+                                  : 'text-slate-600 hover:bg-slate-100'
+                              }`}
+                            >
+                              %
+                            </button>
+                          </div>
+                          <input
+                            type="number"
+                            value={discount.value || ''}
+                            onChange={(e) => setDiscount({ ...discount, value: parseFloat(e.target.value) || 0 })}
+                            placeholder={discount.type === 'percent' ? '0%' : '₹0'}
+                            className="flex-1 px-2 py-1.5 border border-slate-300 rounded-lg text-xs text-slate-900 focus:ring-1 focus:ring-teal-500"
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Show charges/discount amounts if any exist */}
+                  {(additionalCharges.length > 0 || discount.value > 0) && (
+                    <div className="mt-3 pt-2 space-y-1.5 text-xs">
+                      {additionalCharges.map((charge) => (
+                        charge.amount > 0 && (
+                          <div key={charge.id} className="flex justify-between text-slate-600">
+                            <span>+ {charge.name || 'Charge'}</span>
+                            <span>₹{charge.amount.toFixed(2)}</span>
+                          </div>
+                        )
+                      ))}
+                      {discount.value > 0 && (
+                        <div className="flex justify-between text-green-600 font-medium">
+                          <span>- Discount {discount.type === 'percent' ? `(${discount.value}%)` : ''}</span>
+                          <span>₹{totals.discountAmount.toFixed(2)}</span>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+
+                {/* Grand Total */}
                 <div className="flex justify-between text-lg font-bold pt-3 border-t-2 border-slate-300">
                   <span className="text-slate-900">Total</span>
                   <span className="text-teal-700">₹{totals.total.toFixed(2)}</span>
@@ -811,7 +1144,7 @@ const PurchaseOrders = ({ onNavigate }: Props) => {
               value={formData.notes}
               onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
               rows={3}
-              className="w-full px-3 py-3 border-2 border-slate-300 rounded-xl focus:ring-2 focus:ring-purple-500 text-slate-900 text-sm resize-none"
+              className="w-full px-3 py-3 border-2 border-slate-300 rounded-xl focus:ring-2 focus:ring-teal-500 text-slate-900 text-sm resize-none"
               placeholder="Additional notes..."
             />
           </div>
@@ -839,6 +1172,13 @@ const PurchaseOrders = ({ onNavigate }: Props) => {
 
           <div className="h-4 md:hidden" />
         </div>
+
+        {/* Barcode Scanner Modal */}
+        <BarcodeScanner
+          isOpen={showBarcodeScanner}
+          onClose={() => { setShowBarcodeScanner(false); setScanningForItemId(null); }}
+          onScan={handleBarcodeScan}
+        />
       </div>
     );
   }
@@ -847,7 +1187,7 @@ const PurchaseOrders = ({ onNavigate }: Props) => {
   if (view === 'view' && selectedPO) {
     return (
       <div className="min-h-screen bg-slate-50">
-        {/* HERO SECTION - MATCHES PURCHASE INVOICES */}
+        {/* HERO SECTION */}
         <div className="bg-gradient-to-br from-teal-600 to-teal-700 px-4 py-6 md:px-6 md:py-8">
           <div className="max-w-6xl mx-auto">
             <div className="flex items-center gap-3 mb-3">
@@ -973,6 +1313,18 @@ const PurchaseOrders = ({ onNavigate }: Props) => {
                 <div className="flex justify-between">
                   <span className="text-slate-600">IGST</span>
                   <span className="text-slate-900">₹{selectedPO.igst_amount.toFixed(2)}</span>
+                </div>
+              )}
+              {selectedPO.additional_charges > 0 && (
+                <div className="flex justify-between">
+                  <span className="text-slate-600">Additional Charges</span>
+                  <span className="text-slate-900">₹{selectedPO.additional_charges.toFixed(2)}</span>
+                </div>
+              )}
+              {selectedPO.discount_amount > 0 && (
+                <div className="flex justify-between text-green-600">
+                  <span>Discount</span>
+                  <span>-₹{selectedPO.discount_amount.toFixed(2)}</span>
                 </div>
               )}
               <div className="flex justify-between text-base font-bold pt-2 border-t-2 border-slate-300">
