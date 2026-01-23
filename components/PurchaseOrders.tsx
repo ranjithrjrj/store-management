@@ -9,7 +9,7 @@ import {
   ChevronRight, AlertCircle, Clock, CheckCircle, XCircle
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
-import { Button, Badge, EmptyState, LoadingSpinner, ConfirmDialog, useToast } from '@/components/ui';
+import { Button, Badge, LoadingSpinner, ConfirmDialog, useToast } from '@/components/ui';
 import { useTheme } from '@/contexts/ThemeContext';
 import SearchableSelect from './SearchableSelect';
 
@@ -449,13 +449,17 @@ const PurchaseOrders = ({ onNavigate }: Props) => {
           {/* Orders List */}
           {filteredOrders.length === 0 ? (
             <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-12">
-              <EmptyState
-                icon={ShoppingCart}
-                title="No purchase orders"
-                description={searchTerm || filterStatus !== 'all' 
-                  ? "No orders match your search" 
-                  : "Create your first purchase order"}
-              />
+              <div className="text-center">
+                <div className="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                  <ShoppingCart size={32} className="text-slate-400" />
+                </div>
+                <h3 className="text-lg font-bold text-slate-900 mb-2">No purchase orders</h3>
+                <p className="text-sm text-slate-600">
+                  {searchTerm || filterStatus !== 'all' 
+                    ? "No orders match your search" 
+                    : "Create your first purchase order"}
+                </p>
+              </div>
             </div>
           ) : (
             <div className="space-y-3">
