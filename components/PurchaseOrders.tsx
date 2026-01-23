@@ -385,8 +385,8 @@ const PurchaseOrders = ({ onNavigate }: Props) => {
   if (view === 'list') {
     return (
       <div className="min-h-screen bg-slate-50">
-        {/* HERO SECTION */}
-        <div className="bg-gradient-to-br from-purple-600 to-pink-600 px-4 py-6 md:px-6 md:py-8">
+        {/* HERO SECTION - MATCHES PURCHASE INVOICES */}
+        <div className="bg-gradient-to-br from-teal-600 to-teal-700 px-4 py-6 md:px-6 md:py-8">
           <div className="max-w-6xl mx-auto">
             <div className="flex items-center gap-3 mb-2">
               <div className="p-3 bg-white/20 rounded-2xl backdrop-blur-sm">
@@ -394,26 +394,26 @@ const PurchaseOrders = ({ onNavigate }: Props) => {
               </div>
               <div>
                 <h1 className="text-2xl md:text-3xl font-bold text-white">Purchase Orders</h1>
-                <p className="text-purple-100 text-sm md:text-base">Manage vendor orders</p>
+                <p className="text-teal-100 text-sm md:text-base">Manage vendor orders</p>
               </div>
             </div>
             
             {/* Quick Stats */}
             <div className="mt-4 grid grid-cols-4 gap-2">
               <div className="bg-white/10 backdrop-blur-sm rounded-xl p-3 border border-white/20">
-                <p className="text-purple-100 text-xs font-medium">Total</p>
+                <p className="text-teal-100 text-xs font-medium">Total</p>
                 <p className="text-white text-xl font-bold mt-0.5">{stats.total}</p>
               </div>
               <div className="bg-white/10 backdrop-blur-sm rounded-xl p-3 border border-white/20">
-                <p className="text-purple-100 text-xs font-medium">Pending</p>
+                <p className="text-teal-100 text-xs font-medium">Pending</p>
                 <p className="text-white text-xl font-bold mt-0.5">{stats.pending}</p>
               </div>
               <div className="bg-white/10 backdrop-blur-sm rounded-xl p-3 border border-white/20">
-                <p className="text-purple-100 text-xs font-medium">Partial</p>
+                <p className="text-teal-100 text-xs font-medium">Partial</p>
                 <p className="text-white text-xl font-bold mt-0.5">{stats.partial}</p>
               </div>
               <div className="bg-white/10 backdrop-blur-sm rounded-xl p-3 border border-white/20">
-                <p className="text-purple-100 text-xs font-medium">Done</p>
+                <p className="text-teal-100 text-xs font-medium">Done</p>
                 <p className="text-white text-xl font-bold mt-0.5">{stats.received}</p>
               </div>
             </div>
@@ -438,7 +438,7 @@ const PurchaseOrders = ({ onNavigate }: Props) => {
               </div>
               <button
                 onClick={() => setShowFilterSheet(true)}
-                className="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 border-2 border-slate-300 rounded-xl flex items-center gap-2 text-slate-700 font-medium transition-colors"
+                className="px-4 py-2.5 bg-teal-600 hover:bg-teal-700 text-white rounded-xl flex items-center gap-2 font-medium transition-colors shadow-sm"
               >
                 <Filter size={18} />
                 <span className="hidden sm:inline text-sm">Filter</span>
@@ -491,7 +491,7 @@ const PurchaseOrders = ({ onNavigate }: Props) => {
                       </div>
                     </div>
                     <div className="flex items-center gap-2">
-                      <span className="text-lg font-bold text-purple-700">₹{order.total_amount.toFixed(0)}</span>
+                      <span className="text-lg font-bold text-teal-700">₹{order.total_amount.toFixed(0)}</span>
                       <ChevronRight size={18} className="text-slate-400" />
                     </div>
                   </div>
@@ -507,7 +507,7 @@ const PurchaseOrders = ({ onNavigate }: Props) => {
         {/* Floating Add Button */}
         <button
           onClick={handleAddNew}
-          className="fixed bottom-24 right-4 md:bottom-8 md:right-8 w-14 h-14 bg-gradient-to-br from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white rounded-full shadow-2xl flex items-center justify-center active:scale-95 transition-all z-30"
+          className="fixed bottom-24 right-4 md:bottom-8 md:right-8 w-14 h-14 bg-gradient-to-br from-teal-600 to-teal-700 hover:from-teal-700 hover:to-teal-800 text-white rounded-full shadow-2xl flex items-center justify-center active:scale-95 transition-all z-30"
         >
           <Plus size={28} />
         </button>
@@ -520,7 +520,7 @@ const PurchaseOrders = ({ onNavigate }: Props) => {
               onClick={() => setShowFilterSheet(false)}
             />
             <div className="fixed bottom-0 left-0 right-0 bg-white rounded-t-3xl z-[70] max-h-[60vh] flex flex-col shadow-2xl">
-              <div className="flex items-center justify-between p-4 border-b border-slate-200 bg-gradient-to-r from-purple-600 to-pink-600 rounded-t-3xl">
+              <div className="flex items-center justify-between p-4 border-b border-slate-200 bg-gradient-to-r from-teal-600 to-teal-700 rounded-t-3xl">
                 <h2 className="text-xl font-bold text-white">Filter Orders</h2>
                 <button
                   onClick={() => setShowFilterSheet(false)}
@@ -535,7 +535,7 @@ const PurchaseOrders = ({ onNavigate }: Props) => {
                   onClick={() => { setFilterStatus('all'); setShowFilterSheet(false); }}
                   className={`w-full p-4 rounded-xl border-2 transition-all text-left ${
                     filterStatus === 'all'
-                      ? 'border-purple-500 bg-purple-50'
+                      ? 'border-teal-500 bg-teal-50'
                       : 'border-slate-200 hover:border-slate-300'
                   }`}
                 >
@@ -590,24 +590,16 @@ const PurchaseOrders = ({ onNavigate }: Props) => {
   if (view === 'create') {
     return (
       <div className="min-h-screen bg-slate-50">
-        {/* HERO SECTION */}
-        <div className="bg-gradient-to-br from-purple-600 to-pink-600 px-4 py-6 md:px-6 md:py-8">
+        {/* HERO SECTION - MATCHES PURCHASE INVOICES */}
+        <div className="bg-gradient-to-br from-teal-600 to-teal-700 px-4 py-6 md:px-6 md:py-8">
           <div className="max-w-6xl mx-auto">
             <div className="flex items-center gap-3 mb-2">
-              <button
-                onClick={() => setView('list')}
-                className="p-2 bg-white/20 rounded-xl backdrop-blur-sm hover:bg-white/30 transition-colors"
-              >
-                <X className="text-white" size={24} />
-              </button>
-              <div className="flex items-center gap-3">
-                <div className="p-3 bg-white/20 rounded-2xl backdrop-blur-sm">
-                  <Plus className="text-white" size={28} />
-                </div>
-                <div>
-                  <h1 className="text-2xl md:text-3xl font-bold text-white">New Purchase Order</h1>
-                  <p className="text-purple-100 text-sm md:text-base">Create vendor order</p>
-                </div>
+              <div className="p-3 bg-white/20 rounded-2xl backdrop-blur-sm">
+                <ShoppingCart className="text-white" size={28} />
+              </div>
+              <div>
+                <h1 className="text-2xl md:text-3xl font-bold text-white">New Purchase Order</h1>
+                <p className="text-teal-100 text-sm md:text-base">Create vendor order</p>
               </div>
             </div>
             
@@ -615,11 +607,11 @@ const PurchaseOrders = ({ onNavigate }: Props) => {
             {totals && (
               <div className="mt-4 grid grid-cols-2 gap-3">
                 <div className="bg-white/10 backdrop-blur-sm rounded-xl p-3 border border-white/20">
-                  <p className="text-purple-100 text-xs font-medium">Items</p>
+                  <p className="text-teal-100 text-xs font-medium">Items</p>
                   <p className="text-white text-xl font-bold mt-0.5">{items.length}</p>
                 </div>
                 <div className="bg-white/10 backdrop-blur-sm rounded-xl p-3 border border-white/20">
-                  <p className="text-purple-100 text-xs font-medium">Total Amount</p>
+                  <p className="text-teal-100 text-xs font-medium">Total Amount</p>
                   <p className="text-white text-xl font-bold mt-0.5">₹{totals.total.toFixed(0)}</p>
                 </div>
               </div>
@@ -679,12 +671,12 @@ const PurchaseOrders = ({ onNavigate }: Props) => {
           <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
             <div className="p-4 border-b border-slate-200 flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <Package className="text-purple-600" size={20} />
+                <Package className="text-teal-600" size={20} />
                 <h3 className="font-bold text-slate-900">Items ({items.length})</h3>
               </div>
               <button
                 onClick={addNewItem}
-                className="flex items-center gap-2 px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-xl font-medium text-sm active:scale-95 transition-all shadow-sm"
+                className="flex items-center gap-2 px-4 py-2 bg-teal-600 hover:bg-teal-700 text-white rounded-xl font-medium text-sm active:scale-95 transition-all shadow-sm"
               >
                 <Plus size={18} />
                 Add
@@ -701,7 +693,7 @@ const PurchaseOrders = ({ onNavigate }: Props) => {
                   <p className="text-sm text-slate-500 mb-4">Add items to purchase order</p>
                   <button
                     onClick={addNewItem}
-                    className="px-6 py-2.5 bg-purple-600 text-white rounded-xl font-medium active:scale-95 transition-all"
+                    className="px-6 py-2.5 bg-teal-600 text-white rounded-xl font-medium active:scale-95 transition-all"
                   >
                     Add First Item
                   </button>
@@ -763,7 +755,7 @@ const PurchaseOrders = ({ onNavigate }: Props) => {
                         <span className="text-xs text-slate-600">GST: {item.gst_rate}%</span>
                         <div className="text-right">
                           <p className="text-xs text-slate-600">Amount</p>
-                          <p className="text-lg font-bold text-purple-700">₹{item.amount.toFixed(2)}</p>
+                          <p className="text-lg font-bold text-teal-700">₹{item.amount.toFixed(2)}</p>
                         </div>
                       </div>
                     </div>
@@ -806,7 +798,7 @@ const PurchaseOrders = ({ onNavigate }: Props) => {
                 )}
                 <div className="flex justify-between text-lg font-bold pt-3 border-t-2 border-slate-300">
                   <span className="text-slate-900">Total</span>
-                  <span className="text-purple-700">₹{totals.total.toFixed(2)}</span>
+                  <span className="text-teal-700">₹{totals.total.toFixed(2)}</span>
                 </div>
               </div>
             </div>
@@ -829,7 +821,7 @@ const PurchaseOrders = ({ onNavigate }: Props) => {
             <button
               onClick={handleSubmit}
               disabled={saving || items.length === 0}
-              className="w-full bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 disabled:from-slate-400 disabled:to-slate-500 text-white font-bold py-4 rounded-2xl shadow-lg active:scale-[0.98] transition-all flex items-center justify-center gap-3"
+              className="w-full bg-gradient-to-r from-teal-600 to-teal-700 hover:from-teal-700 hover:to-teal-800 disabled:from-slate-400 disabled:to-slate-500 text-white font-bold py-4 rounded-2xl shadow-lg active:scale-[0.98] transition-all flex items-center justify-center gap-3"
             >
               {saving ? (
                 <>
@@ -855,8 +847,8 @@ const PurchaseOrders = ({ onNavigate }: Props) => {
   if (view === 'view' && selectedPO) {
     return (
       <div className="min-h-screen bg-slate-50">
-        {/* HERO SECTION */}
-        <div className="bg-gradient-to-br from-purple-600 to-pink-600 px-4 py-6 md:px-6 md:py-8">
+        {/* HERO SECTION - MATCHES PURCHASE INVOICES */}
+        <div className="bg-gradient-to-br from-teal-600 to-teal-700 px-4 py-6 md:px-6 md:py-8">
           <div className="max-w-6xl mx-auto">
             <div className="flex items-center gap-3 mb-3">
               <button
@@ -871,7 +863,7 @@ const PurchaseOrders = ({ onNavigate }: Props) => {
                 </div>
                 <div className="flex-1">
                   <h1 className="text-xl md:text-2xl font-bold text-white">{selectedPO.po_number}</h1>
-                  <p className="text-purple-100 text-sm">{selectedPO.vendor?.name}</p>
+                  <p className="text-teal-100 text-sm">{selectedPO.vendor?.name}</p>
                 </div>
               </div>
             </div>
@@ -880,7 +872,7 @@ const PurchaseOrders = ({ onNavigate }: Props) => {
             <div className="flex justify-between items-center">
               {getStatusBadge(selectedPO.status)}
               <div className="text-right">
-                <p className="text-purple-100 text-xs">Total Amount</p>
+                <p className="text-teal-100 text-xs">Total Amount</p>
                 <p className="text-white text-2xl font-bold">₹{selectedPO.total_amount.toFixed(0)}</p>
               </div>
             </div>
@@ -893,7 +885,7 @@ const PurchaseOrders = ({ onNavigate }: Props) => {
           {/* PO Details */}
           <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-4">
             <h3 className="font-bold text-slate-900 mb-3 flex items-center gap-2">
-              <Calendar size={18} className="text-purple-600" />
+              <Calendar size={18} className="text-teal-600" />
               Order Details
             </h3>
             <div className="space-y-2 text-sm">
@@ -920,7 +912,7 @@ const PurchaseOrders = ({ onNavigate }: Props) => {
           <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
             <div className="p-4 border-b border-slate-200">
               <h3 className="font-bold text-slate-900 flex items-center gap-2">
-                <Package size={18} className="text-purple-600" />
+                <Package size={18} className="text-teal-600" />
                 Items ({poItems.length})
               </h3>
             </div>
@@ -934,7 +926,7 @@ const PurchaseOrders = ({ onNavigate }: Props) => {
                         Qty: {item.quantity} • Rate: ₹{item.rate} • GST: {item.gst_rate}%
                       </p>
                     </div>
-                    <p className="text-base font-bold text-purple-700">₹{item.amount.toFixed(0)}</p>
+                    <p className="text-base font-bold text-teal-700">₹{item.amount.toFixed(0)}</p>
                   </div>
                   {item.received_quantity > 0 && (
                     <div className="pt-2 border-t border-slate-300 flex items-center gap-2 text-xs">
@@ -957,7 +949,7 @@ const PurchaseOrders = ({ onNavigate }: Props) => {
           {/* Tax Summary */}
           <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-4">
             <h3 className="font-bold text-slate-900 mb-3 flex items-center gap-2">
-              <TrendingUp size={18} className="text-purple-600" />
+              <TrendingUp size={18} className="text-teal-600" />
               Tax Summary
             </h3>
             <div className="space-y-2 text-sm">
@@ -985,7 +977,7 @@ const PurchaseOrders = ({ onNavigate }: Props) => {
               )}
               <div className="flex justify-between text-base font-bold pt-2 border-t-2 border-slate-300">
                 <span className="text-slate-900">Total</span>
-                <span className="text-purple-700">₹{selectedPO.total_amount.toFixed(2)}</span>
+                <span className="text-teal-700">₹{selectedPO.total_amount.toFixed(2)}</span>
               </div>
             </div>
           </div>
