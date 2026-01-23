@@ -195,7 +195,7 @@ const AppContent = () => {
           </div>
           <div>
             <h1 className="text-base font-bold text-slate-900">{getPageTitle()}</h1>
-            <p className="text-xs text-slate-600">{storeInfo.city}</p>
+            <p className="text-xs text-slate-600">{storeInfo.name}</p>
           </div>
         </div>
         <button
