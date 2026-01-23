@@ -130,10 +130,10 @@ const AppContent = () => {
   ];
 
   const bottomNavItems = [
-    { id: 'dashboard' as Page, label: 'Home', icon: Home },
+    { id: 'dashboard' as Page, label: 'Dashboard', icon: Home },
+    { id: 'inventory' as Page, label: 'Items', icon: Package },
     { id: 'sales' as Page, label: 'Sales', icon: ShoppingCart },
     { id: 'purchase-invoices' as Page, label: 'Purchase', icon: ShoppingBag },
-    { id: 'reports' as Page, label: 'Reports', icon: BarChart3 },
     { id: 'menu' as Page, label: 'Menu', icon: Menu }
   ];
 
@@ -194,8 +194,8 @@ const AppContent = () => {
             <Store className="text-white" size={20} />
           </div>
           <div>
-            <h1 className="text-base font-bold text-slate-900">{getPageTitle()}</h1>
-            <p className="text-xs text-slate-600">{storeInfo.name}</p>
+            <h1 className="text-sm font-bold text-slate-900">{getPageTitle()} | {storeInfo.name}</h1>
+            <p className="text-xs text-slate-600">{storeInfo.city}</p>
           </div>
         </div>
         <button
