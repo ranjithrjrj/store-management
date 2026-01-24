@@ -38,7 +38,8 @@ const PurchaseInvoices = () => {
     invoice_date: new Date().toISOString().split('T')[0],
     received_date: new Date().toISOString().split('T')[0],
     payment_status: 'pending',
-    notes: ''
+    notes: '',
+    po_reference: '' // Track which PO this invoice came from
   });
 
   const [items, setItems] = useState<PurchaseItem[]>([]);
@@ -119,12 +120,36 @@ const PurchaseInvoices = () => {
       setFormData({
         ...formData,
         vendor_id: po.vendor_id,
-        invoice_number: `INV-${Date.now()}`
+        invoice_number: `INV-${Date.now()}`,
+        notes: po.notes || '', // Copy PO notes
+        po_reference: po.po_number // Save PO number reference
       });
 
       const vendor = vendors.find(v => v.id === po.vendor_id);
       if (vendor) {
         setIsIntrastate(vendor.state_code === '33');
+      }
+
+      // Copy additional charges from PO
+      if (po.charges_details) {
+        try {
+          const charges = JSON.parse(po.charges_details);
+          setAdditionalCharges(charges.map((c: any) => ({
+            id: Date.now().toString() + Math.random(),
+            name: c.name,
+            amount: c.amount
+          })));
+        } catch (e) {
+          console.error('Error parsing charges:', e);
+        }
+      }
+
+      // Copy discount from PO
+      if (po.discount_value && po.discount_value > 0) {
+        setDiscount({
+          type: po.discount_type || 'amount',
+          value: po.discount_value
+        });
       }
 
       if (poItems) {
@@ -364,7 +389,8 @@ const PurchaseInvoices = () => {
         pending_amount: totals.total,
         payment_status: formData.payment_status,
         notes: formData.notes || null,
-        charges_details: additionalCharges.length > 0 ? JSON.stringify(additionalCharges) : null
+        charges_details: additionalCharges.length > 0 ? JSON.stringify(additionalCharges) : null,
+        po_reference: formData.po_reference || null // Save PO reference if converting from PO
       };
 
       if (formData.vendor_id === 'unregistered') {
@@ -462,7 +488,8 @@ const PurchaseInvoices = () => {
         invoice_date: new Date().toISOString().split('T')[0],
         received_date: new Date().toISOString().split('T')[0],
         payment_status: 'pending',
-        notes: ''
+        notes: '',
+        po_reference: ''
       });
       setItems([]);
       setAdditionalCharges([]);
