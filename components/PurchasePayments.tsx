@@ -284,6 +284,17 @@ const PurchasePayments = () => {
     if (!deletingPayment) return;
 
     try {
+      // Get payment details before deleting
+      const payment = payments.find(p => p.id === deletingPayment.id);
+      if (!payment) {
+        toast.error('Error', 'Payment not found');
+        return;
+      }
+
+      const paymentAmount = payment.amount;
+      const invoiceId = payment.purchase_invoice_id;
+
+      // Delete payment
       const { error } = await supabase
         .from('purchase_payments')
         .delete()
@@ -291,7 +302,32 @@ const PurchasePayments = () => {
 
       if (error) throw error;
 
-      toast.success('Deleted!', `Payment ${deletingPayment.payment_number} has been deleted.`);
+      // Recalculate invoice amounts
+      if (invoiceId) {
+        const { data: invoice } = await supabase
+          .from('purchase_invoices')
+          .select('total_amount, paid_amount')
+          .eq('id', invoiceId)
+          .single();
+
+        if (invoice) {
+          const newPaidAmount = (invoice.paid_amount || 0) - paymentAmount;
+          const newPendingAmount = invoice.total_amount - newPaidAmount;
+          const newStatus = newPendingAmount <= 0 ? 'paid' : 
+                           newPendingAmount < invoice.total_amount ? 'partial' : 'pending';
+
+          await supabase
+            .from('purchase_invoices')
+            .update({
+              paid_amount: newPaidAmount,
+              pending_amount: newPendingAmount,
+              payment_status: newStatus
+            })
+            .eq('id', invoiceId);
+        }
+      }
+
+      toast.success('Deleted!', `Payment ${deletingPayment.payment_number} deleted and invoice updated.`);
       await loadPayments();
       
       if (view === 'details') {
