@@ -7,7 +7,7 @@ import {
   ShoppingCart, Plus, Trash2, X, Search, Package, 
   Calendar, FileText, TrendingUp, Check, ChevronRight, 
   AlertCircle, Clock, CheckCircle, XCircle, Filter, 
-  Camera, DollarSign, AlertTriangle
+  Camera, AlertTriangle
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { Button, Badge, LoadingSpinner, ConfirmDialog, useToast } from '@/components/ui';
@@ -978,7 +978,7 @@ const PurchaseOrders = ({ onNavigate }: Props) => {
             <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
               <div className="p-4 bg-gradient-to-r from-green-600 to-emerald-600">
                 <div className="flex items-center gap-2">
-                  <DollarSign className="text-white" size={20} />
+                  <TrendingUp className="text-white" size={20} />
                   <h3 className="font-bold text-white">Summary</h3>
                 </div>
               </div>
@@ -1357,6 +1357,18 @@ const PurchaseOrders = ({ onNavigate }: Props) => {
 
           <div className="h-4 md:hidden" />
         </div>
+
+        {/* Delete Confirmation Dialog */}
+        <ConfirmDialog
+          isOpen={!!deletingPO}
+          onClose={() => setDeletingPO(null)}
+          onConfirm={handleDelete}
+          title="Delete Purchase Order"
+          message={`Are you sure you want to delete PO "${deletingPO?.po_number}"? This will also delete all items. This action cannot be undone.`}
+          confirmText="Delete"
+          cancelText="Cancel"
+          variant="danger"
+        />
       </div>
     );
   }
