@@ -3,7 +3,7 @@
 
 'use client';
 import React, { useState, useEffect } from 'react';
-import { Plus, Trash2, Printer, Save, ShoppingCart, User, Package, Calendar, AlertTriangle, DollarSign } from 'lucide-react';
+import { Plus, Trash2, Printer, Save, ShoppingCart, User, Package, Calendar, AlertTriangle, TrendingUp } from 'lucide-react';
 import { printInvoice } from '@/lib/thermalPrinter';
 import { supabase } from '@/lib/supabase';
 import { Button, Card, Input, Select, Badge, LoadingSpinner, ConfirmDialog, useToast } from '@/components/ui';
@@ -49,6 +49,7 @@ const SalesInvoice = () => {
   const [storeSettings, setStoreSettings] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [showSaveConfirm, setShowSaveConfirm] = useState(false);
 
   // Credit note states
   const [availableCreditNotes, setAvailableCreditNotes] = useState<any[]>([]);
@@ -883,7 +884,7 @@ const SalesInvoice = () => {
         {/* Actions */}
         <div className="flex justify-end">
           <Button
-            onClick={() => setShowPrintSettings(true)}
+            onClick={() => setShowSaveConfirm(true)}
             disabled={items.length === 0}
             variant="primary"
             icon={<Printer size={20} />}
@@ -892,6 +893,29 @@ const SalesInvoice = () => {
           </Button>
         </div>
       </div>
+
+      {/* Save & Print Confirmation Dialog */}
+      <ConfirmDialog
+        isOpen={showSaveConfirm}
+        onClose={() => setShowSaveConfirm(false)}
+        onConfirm={() => { 
+          setShowSaveConfirm(false); 
+          setShowPrintSettings(true); 
+        }}
+        title="Create Sales Invoice"
+        message={`Create invoice for ${formData.customer_name} with ${items.length} item(s) totaling ₹${totals.total.toFixed(0)}?
+
+This will:
+• Generate invoice and print receipt
+• Update inventory (deduct ${items.reduce((sum, i) => sum + i.quantity, 0)} items from stock)
+• Record ${formData.payment_method === 'credit' ? 'credit sale' : 'payment'}
+${formData.payment_method === 'credit_note' && creditNoteAmount > 0 ? `• Apply credit note: ₹${creditNoteAmount.toFixed(0)}` : ''}
+
+${formData.payment_method === 'credit' ? '⚠️ Payment will be pending until collected' : '✓ Payment recorded immediately'}`}
+        confirmText="Create & Print"
+        cancelText="Review"
+        variant="primary"
+      />
 
       {/* Print Settings Modal */}
       {showPrintSettings && (
