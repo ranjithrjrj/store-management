@@ -3,11 +3,11 @@
 
 'use client';
 import React, { useState, useEffect } from 'react';
-import { Plus, Trash2, Printer, Save, ShoppingCart, User, Package, Calendar, AlertTriangle, TrendingUp } from 'lucide-react';
+import { Plus, Trash2, Printer, Save, ShoppingCart, User, Package, Calendar, AlertTriangle, TrendingUp, Camera } from 'lucide-react';
 import { printInvoice } from '@/lib/thermalPrinter';
 import { supabase } from '@/lib/supabase';
 import { Button, Card, Input, Select, Badge, LoadingSpinner, ConfirmDialog, useToast } from '@/components/ui';
-import { useTheme } from '@/contexts/ThemeContext';
+import BarcodeScanner from './BarcodeScanner';
 
 type InvoiceItem = {
   id: string;
@@ -22,7 +22,6 @@ type InvoiceItem = {
 };
 
 const SalesInvoice = () => {
-  const { theme } = useTheme();
   const toast = useToast();
   
   const [formData, setFormData] = useState({
@@ -50,6 +49,8 @@ const SalesInvoice = () => {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [showSaveConfirm, setShowSaveConfirm] = useState(false);
+  const [showBarcodeScanner, setShowBarcodeScanner] = useState(false);
+  const [scanningForItemId, setScanningForItemId] = useState<string | null>(null);
 
   // Credit note states
   const [availableCreditNotes, setAvailableCreditNotes] = useState<any[]>([]);
@@ -215,6 +216,52 @@ const SalesInvoice = () => {
       quantity: 1,
       rate: selectedItem.retail_price,
       discount_percent: selectedItem.discount_percent || 0,
+      gst_rate: selectedItem.gst_rate,
+      amount: selectedItem.retail_price
+    };
+
+    setItems([...items, newItem]);
+  };
+
+  const handleBarcodeScan = async (barcode: string) => {
+    if (!barcode) {
+      toast.error('Invalid scan', 'No barcode detected.');
+      return;
+    }
+
+    try {
+      // Search for item by barcode
+      const { data: itemData, error } = await supabase
+        .from('items')
+        .select('id, name, retail_price, gst_rate, discount_percent')
+        .eq('barcode', barcode)
+        .eq('is_active', true)
+        .single();
+
+      if (error || !itemData) {
+        toast.error('Item not found', `No item found with barcode: ${barcode}`);
+        return;
+      }
+
+      // Check if item already exists
+      const existingItem = items.find(i => i.item_id === itemData.id);
+      if (existingItem) {
+        // Increment quantity
+        updateItem(existingItem.id, 'quantity', existingItem.quantity + 1);
+        toast.success('Quantity updated', `${itemData.name} quantity increased to ${existingItem.quantity + 1}`);
+      } else {
+        // Add new item
+        await addItem(itemData.id);
+        toast.success('Item added', `${itemData.name} added to invoice`);
+      }
+
+      setShowBarcodeScanner(false);
+      setScanningForItemId(null);
+    } catch (err: any) {
+      console.error('Barcode scan error:', err);
+      toast.error('Scan failed', err.message || 'Could not process barcode.');
+    }
+  };
       gst_rate: selectedItem.gst_rate,
       amount: selectedItem.retail_price
     };
@@ -537,21 +584,43 @@ const SalesInvoice = () => {
   }
 
   return (
-    <div className="min-h-screen bg-slate-50 p-4 md:p-6 lg:p-8">
-      <div className="max-w-7xl mx-auto space-y-6">
-        {/* Header */}
-        <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6">
-          <div className="flex items-center gap-3">
-            <div className={`p-3 ${theme.classes.bgPrimaryLight} rounded-xl`}>
-              <ShoppingCart className={theme.classes.textPrimary} size={28} />
+    <div className="min-h-screen bg-slate-50">
+      {/* HERO SECTION - Teal Gradient Header */}
+      <div className="bg-gradient-to-br from-teal-600 to-teal-700 px-4 py-6 md:px-6 md:py-8">
+        <div className="max-w-7xl mx-auto">
+          <div className="flex items-center gap-3 mb-4">
+            <div className="p-3 bg-white/20 rounded-2xl backdrop-blur-sm">
+              <ShoppingCart className="text-white" size={28} />
             </div>
             <div>
-              <h1 className="text-2xl font-bold text-slate-900">Sales Invoice</h1>
-              <p className="text-slate-600 text-sm mt-0.5">Create GST-compliant sales invoices</p>
+              <h1 className="text-2xl md:text-3xl font-bold text-white">Sales Invoice</h1>
+              <p className="text-teal-100 text-sm md:text-base">Create GST-compliant invoices with instant printing</p>
+            </div>
+          </div>
+          
+          {/* Quick Stats */}
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+            <div className="bg-white/10 backdrop-blur-sm rounded-xl p-3 md:p-4 border border-white/20">
+              <p className="text-teal-100 text-xs font-medium">Items in Cart</p>
+              <p className="text-white text-xl md:text-2xl font-bold mt-1">{items.length}</p>
+            </div>
+            <div className="bg-white/10 backdrop-blur-sm rounded-xl p-3 md:p-4 border border-white/20">
+              <p className="text-teal-100 text-xs font-medium">Cart Total</p>
+              <p className="text-white text-xl md:text-2xl font-bold mt-1">
+                ₹{items.length > 0 ? totals.total.toFixed(0) : '0'}
+              </p>
+            </div>
+            <div className="bg-white/10 backdrop-blur-sm rounded-xl p-3 md:p-4 border border-white/20 col-span-2 md:col-span-1">
+              <p className="text-teal-100 text-xs font-medium">Payment Method</p>
+              <p className="text-white text-base md:text-lg font-bold mt-1 capitalize">
+                {formData.payment_method.replace('_', ' ')}
+              </p>
             </div>
           </div>
         </div>
+      </div>
 
+      <div className="max-w-7xl mx-auto px-4 md:px-6 lg:px-8 py-6 space-y-6">
         {/* Customer Selection */}
         <Card padding="lg">
           <h2 className="text-lg font-bold text-slate-900 mb-4">Customer Details</h2>
@@ -713,7 +782,16 @@ const SalesInvoice = () => {
           </div>
 
           <div className="mb-4">
-            <label className="block text-sm font-semibold text-slate-700 mb-2">Add Item</label>
+            <div className="flex items-center justify-between mb-2">
+              <label className="block text-sm font-semibold text-slate-700">Add Item</label>
+              <button
+                onClick={() => setShowBarcodeScanner(true)}
+                className="flex items-center gap-2 px-3 py-1.5 text-sm font-medium text-teal-700 bg-teal-50 rounded-lg hover:bg-teal-100 transition-colors"
+              >
+                <Camera size={16} />
+                Scan Barcode
+              </button>
+            </div>
             <Input
               placeholder="Type to search items..."
               list="items-list"
@@ -863,7 +941,7 @@ const SalesInvoice = () => {
               )}
               <div className="flex justify-between text-xl font-bold text-slate-900 pt-3 border-t-2 border-slate-300">
                 <span>Total</span>
-                <span className={theme.classes.textPrimary}>₹{totals.total.toFixed(2)}</span>
+                <span className="text-teal-600">₹{totals.total.toFixed(2)}</span>
               </div>
               {formData.payment_method === 'credit_note' && selectedCreditNote && (
                 <>
@@ -882,15 +960,17 @@ const SalesInvoice = () => {
         )}
 
         {/* Actions */}
-        <div className="flex justify-end">
-          <Button
-            onClick={() => setShowSaveConfirm(true)}
-            disabled={items.length === 0}
-            variant="primary"
-            icon={<Printer size={20} />}
-          >
-            Save & Print
-          </Button>
+        <div className="sticky bottom-0 bg-white border-t border-slate-200 p-4 md:p-6 -mx-4 md:-mx-6 lg:-mx-8">
+          <div className="max-w-7xl mx-auto">
+            <button
+              onClick={() => setShowSaveConfirm(true)}
+              disabled={items.length === 0}
+              className="w-full bg-gradient-to-r from-teal-600 to-teal-700 hover:from-teal-700 hover:to-teal-800 disabled:from-slate-400 disabled:to-slate-500 text-white font-bold py-4 rounded-2xl shadow-lg active:scale-[0.98] transition-all flex items-center justify-center gap-3"
+            >
+              <Printer size={20} />
+              <span>Save & Print Invoice</span>
+            </button>
+          </div>
         </div>
       </div>
 
@@ -921,37 +1001,37 @@ ${formData.payment_method === 'credit' ? '⚠️ Payment will be pending until c
       {showPrintSettings && (
         <div className="fixed inset-0 bg-black/20 backdrop-blur-sm flex items-start justify-center p-4 z-50 overflow-y-auto">
           <div className="min-h-screen w-full flex items-center justify-center py-8">
-            <Card className="w-full max-w-md">
-              <div className="flex items-center justify-between mb-6">
-                <h3 className="text-xl font-bold text-slate-900">Print Settings</h3>
+            <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md overflow-hidden">
+              <div className="flex items-center justify-between p-4 border-b border-slate-200 bg-gradient-to-r from-teal-600 to-teal-700 rounded-t-3xl">
+                <h3 className="text-xl font-bold text-white">Print Settings</h3>
                 <button
                   onClick={() => setShowPrintSettings(false)}
-                  className="p-2 rounded-lg hover:bg-slate-100"
+                  className="p-2 rounded-lg hover:bg-white/20 text-white transition-colors"
                 >
-                  ×
+                  <X size={24} />
                 </button>
               </div>
 
-              <div className="space-y-4">
+              <div className="p-6 space-y-4">
                 <div>
                   <label className="block text-sm font-semibold text-slate-700 mb-2">Paper Width</label>
                   <div className="flex gap-3">
                     <button
                       onClick={() => setPrintSettings({ ...printSettings, width: '58mm' })}
-                      className={`flex-1 px-4 py-3 rounded-xl font-medium ${
+                      className={`flex-1 px-4 py-3 rounded-xl font-medium transition-all ${
                         printSettings.width === '58mm'
-                          ? `${theme.classes.bgPrimary} text-white`
-                          : 'bg-slate-100 text-slate-600'
+                          ? 'bg-gradient-to-r from-teal-600 to-teal-700 text-white shadow-md'
+                          : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
                       }`}
                     >
                       58mm
                     </button>
                     <button
                       onClick={() => setPrintSettings({ ...printSettings, width: '80mm' })}
-                      className={`flex-1 px-4 py-3 rounded-xl font-medium ${
+                      className={`flex-1 px-4 py-3 rounded-xl font-medium transition-all ${
                         printSettings.width === '80mm'
-                          ? `${theme.classes.bgPrimary} text-white`
-                          : 'bg-slate-100 text-slate-600'
+                          ? 'bg-gradient-to-r from-teal-600 to-teal-700 text-white shadow-md'
+                          : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
                       }`}
                     >
                       80mm
@@ -972,17 +1052,31 @@ ${formData.payment_method === 'credit' ? '⚠️ Payment will be pending until c
               </div>
 
               <div className="flex gap-3 mt-6">
-                <Button onClick={() => setShowPrintSettings(false)} variant="secondary" fullWidth>
+                <button
+                  onClick={() => setShowPrintSettings(false)}
+                  className="flex-1 px-4 py-3 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold rounded-xl transition-colors"
+                >
                   Cancel
-                </Button>
-                <Button onClick={confirmSave} variant="primary" fullWidth loading={saving}>
-                  Save & Print
-                </Button>
+                </button>
+                <button
+                  onClick={confirmSave}
+                  disabled={saving}
+                  className="flex-1 px-4 py-3 bg-gradient-to-r from-teal-600 to-teal-700 hover:from-teal-700 hover:to-teal-800 disabled:from-slate-400 disabled:to-slate-500 text-white font-semibold rounded-xl transition-all shadow-md"
+                >
+                  {saving ? 'Saving...' : 'Save & Print'}
+                </button>
               </div>
-            </Card>
+            </div>
           </div>
         </div>
       )}
+
+      {/* Barcode Scanner Modal */}
+      <BarcodeScanner
+        isOpen={showBarcodeScanner}
+        onClose={() => { setShowBarcodeScanner(false); setScanningForItemId(null); }}
+        onScan={handleBarcodeScan}
+      />
     </div>
   );
 };
