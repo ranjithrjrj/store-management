@@ -8,7 +8,7 @@ import {
   ShoppingBag, TrendingUp, AlertTriangle, User, Check
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
-import { Button, Badge, LoadingSpinner, useToast } from '@/components/ui';
+import { Button, Badge, LoadingSpinner, ConfirmDialog, useToast } from '@/components/ui';
 import { useTheme } from '@/contexts/ThemeContext';
 import BarcodeScanner from './BarcodeScanner';
 import SearchableSelect from './SearchableSelect';
@@ -55,6 +55,7 @@ const PurchaseInvoices = () => {
   const [availableItems, setAvailableItems] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [showSaveConfirm, setShowSaveConfirm] = useState(false);
 
   useEffect(() => {
     loadData();
@@ -927,30 +928,48 @@ const PurchaseInvoices = () => {
           />
         </div>
 
-        {/* Save Button - Prominent */}
-        <div className="sticky bottom-20 md:relative md:bottom-0">
-          <button
-            onClick={handleSubmit}
-            disabled={saving || items.length === 0}
-            className="w-full bg-gradient-to-r from-teal-600 to-teal-700 hover:from-teal-700 hover:to-teal-800 disabled:from-slate-400 disabled:to-slate-500 text-white font-bold py-4 rounded-2xl shadow-lg active:scale-[0.98] transition-all flex items-center justify-center gap-3"
-          >
-            {saving ? (
-              <>
-                <LoadingSpinner size="sm" />
-                Saving Invoice...
-              </>
-            ) : (
-              <>
-                <Check size={24} />
-                Save Invoice
-              </>
-            )}
-          </button>
-        </div>
+        {/* Save Button - Normal placement with confirmation */}
+        <button
+          onClick={() => setShowSaveConfirm(true)}
+          disabled={saving || items.length === 0}
+          className="w-full bg-gradient-to-r from-teal-600 to-teal-700 hover:from-teal-700 hover:to-teal-800 disabled:from-slate-400 disabled:to-slate-500 text-white font-bold py-4 rounded-2xl shadow-lg active:scale-[0.98] transition-all flex items-center justify-center gap-3"
+        >
+          {saving ? (
+            <>
+              <LoadingSpinner size="sm" />
+              Saving Invoice...
+            </>
+          ) : (
+            <>
+              <Check size={24} />
+              Save Invoice
+            </>
+          )}
+        </button>
 
         {/* Bottom Padding for Mobile Nav */}
-        <div className="h-4 md:hidden" />
+        <div className="h-20 md:h-4" />
       </div>
+
+      {/* Save Invoice Confirmation Dialog */}
+      <ConfirmDialog
+        isOpen={showSaveConfirm}
+        onClose={() => setShowSaveConfirm(false)}
+        onConfirm={() => { setShowSaveConfirm(false); handleSubmit(); }}
+        title="Save Purchase Invoice"
+        message={`Save invoice with ${items.length} item(s) totaling ₹${totals?.total.toFixed(0)}?
+
+This will:
+• Create invoice record
+• Update inventory with received items
+• ${linkedPO ? `Mark PO ${linkedPO.po_number} as received` : 'Record new purchase'}
+• Generate accounting entries
+
+Payment can be recorded later from Purchase Payments.`}
+        confirmText="Save Invoice"
+        cancelText="Review"
+        variant="primary"
+      />
 
       {/* Barcode Scanner Modal */}
       <BarcodeScanner
