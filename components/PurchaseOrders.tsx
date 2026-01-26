@@ -70,6 +70,8 @@ const PurchaseOrders = ({ onNavigate }: Props) => {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [deletingPO, setDeletingPO] = useState<{ id: string; po_number: string } | null>(null);
+  const [receivingPO, setReceivingPO] = useState<{ id: string; po_number: string } | null>(null);
+  const [showCreateConfirm, setShowCreateConfirm] = useState(false);
   
   const [formData, setFormData] = useState({
     vendor_id: '',
@@ -173,6 +175,14 @@ const PurchaseOrders = ({ onNavigate }: Props) => {
     if (selectedPO) {
       sessionStorage.setItem('receivePO', JSON.stringify({ po_id: selectedPO.id }));
       onNavigate('purchase-invoices');
+    }
+  };
+
+  const handleConfirmReceive = () => {
+    if (receivingPO) {
+      sessionStorage.setItem('receivePO', JSON.stringify({ po_id: receivingPO.id }));
+      onNavigate('purchase-invoices');
+      setReceivingPO(null);
     }
   };
 
@@ -605,11 +615,9 @@ const PurchaseOrders = ({ onNavigate }: Props) => {
           )}
 
           {/* Bottom Padding for Mobile Nav */}
-          <div className="h-20 md:h-4" />
-        </div>
+          <div className="h-4 md:h-4" />
 
-        {/* Create PO Button at Bottom */}
-        <div className="fixed bottom-20 left-0 right-0 md:relative md:bottom-0 px-4 pb-4 md:max-w-6xl md:mx-auto z-30 bg-slate-50 md:bg-transparent">
+          {/* Create PO Button - Normal placement at bottom */}
           <button
             onClick={handleAddNew}
             className="w-full bg-gradient-to-r from-teal-600 to-teal-700 hover:from-teal-700 hover:to-teal-800 text-white font-bold py-4 rounded-2xl shadow-lg active:scale-[0.98] transition-all flex items-center justify-center gap-3"
@@ -617,6 +625,9 @@ const PurchaseOrders = ({ onNavigate }: Props) => {
             <Plus size={24} />
             Create Purchase Order
           </button>
+
+          {/* Bottom Padding for Mobile Nav */}
+          <div className="h-20 md:h-4" />
         </div>
 
         {/* Filter Bottom Sheet */}
@@ -1149,29 +1160,46 @@ const PurchaseOrders = ({ onNavigate }: Props) => {
             />
           </div>
 
-          {/* Save Button */}
-          <div className="sticky bottom-20 md:relative md:bottom-0">
-            <button
-              onClick={handleSubmit}
-              disabled={saving || items.length === 0}
-              className="w-full bg-gradient-to-r from-teal-600 to-teal-700 hover:from-teal-700 hover:to-teal-800 disabled:from-slate-400 disabled:to-slate-500 text-white font-bold py-4 rounded-2xl shadow-lg active:scale-[0.98] transition-all flex items-center justify-center gap-3"
-            >
-              {saving ? (
-                <>
-                  <LoadingSpinner size="sm" />
-                  Creating PO...
-                </>
-              ) : (
-                <>
-                  <Check size={24} />
-                  Create Purchase Order
-                </>
-              )}
-            </button>
-          </div>
+          {/* Save Button - Normal placement */}
+          <button
+            onClick={() => setShowCreateConfirm(true)}
+            disabled={saving || items.length === 0}
+            className="w-full bg-gradient-to-r from-teal-600 to-teal-700 hover:from-teal-700 hover:to-teal-800 disabled:from-slate-400 disabled:to-slate-500 text-white font-bold py-4 rounded-2xl shadow-lg active:scale-[0.98] transition-all flex items-center justify-center gap-3"
+          >
+            {saving ? (
+              <>
+                <LoadingSpinner size="sm" />
+                Creating PO...
+              </>
+            ) : (
+              <>
+                <Check size={24} />
+                Create Purchase Order
+              </>
+            )}
+          </button>
 
           <div className="h-4 md:hidden" />
         </div>
+
+        {/* Create PO Confirmation Dialog */}
+        <ConfirmDialog
+          isOpen={showCreateConfirm}
+          onClose={() => setShowCreateConfirm(false)}
+          onConfirm={() => { setShowCreateConfirm(false); handleSubmit(); }}
+          title="Create Purchase Order"
+          message={`Create purchase order with ${items.length} item(s) totaling ₹${totals?.total.toFixed(0)}?
+
+This will:
+• Generate a new PO number
+• Reserve items for ordering
+• Notify the vendor (if configured)
+
+You can receive goods later from this PO.`}
+          confirmText="Create PO"
+          cancelText="Review"
+          variant="primary"
+        />
 
         {/* Barcode Scanner Modal */}
         <BarcodeScanner
@@ -1338,7 +1366,7 @@ const PurchaseOrders = ({ onNavigate }: Props) => {
           {selectedPO.status !== 'received' && selectedPO.status !== 'cancelled' && (
             <div className="space-y-3">
               <button
-                onClick={handleReceiveGoods}
+                onClick={() => setReceivingPO({ id: selectedPO.id, po_number: selectedPO.po_number })}
                 className="w-full bg-gradient-to-r from-teal-600 to-teal-700 hover:from-teal-700 hover:to-teal-800 text-white font-bold py-4 rounded-2xl shadow-lg active:scale-[0.98] transition-all flex items-center justify-center gap-3"
               >
                 <Package size={24} />
@@ -1357,6 +1385,26 @@ const PurchaseOrders = ({ onNavigate }: Props) => {
 
           <div className="h-4 md:hidden" />
         </div>
+
+        {/* Receive Goods Confirmation Dialog */}
+        <ConfirmDialog
+          isOpen={!!receivingPO}
+          onClose={() => setReceivingPO(null)}
+          onConfirm={handleConfirmReceive}
+          title="Receive Goods"
+          message={`Are you receiving goods for PO "${receivingPO?.po_number}"?
+
+Please confirm that:
+• All items have been received
+• Items are in good condition
+• Quantities match the purchase order
+• Quality meets expectations
+
+This will create a Purchase Invoice.`}
+          confirmText="Yes, Receive Goods"
+          cancelText="Cancel"
+          variant="primary"
+        />
 
         {/* Delete Confirmation Dialog */}
         <ConfirmDialog
