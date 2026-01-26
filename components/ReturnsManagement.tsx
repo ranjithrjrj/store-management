@@ -3,7 +3,7 @@
 
 'use client';
 import React, { useState, useEffect } from 'react';
-import { RotateCcw, Plus, Search, Calendar, DollarSign, Edit2, Trash2, X, Filter, Package, AlertCircle, Eye } from 'lucide-react';
+import { RotateCcw, Plus, Search, Calendar, CreditCard, Edit2, Trash2, X, Filter, Package, AlertCircle, Eye } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { Button, Card, Input, Select, Badge, EmptyState, LoadingSpinner, ConfirmDialog, useToast } from '@/components/ui';
 import { useTheme } from '@/contexts/ThemeContext';
@@ -47,6 +47,7 @@ const ReturnsManagement = () => {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [showFilterModal, setShowFilterModal] = useState(false);
   const [showProcessConfirm, setShowProcessConfirm] = useState(false);
+  const [showSubmitConfirm, setShowSubmitConfirm] = useState(false);
   const [showViewModal, setShowViewModal] = useState(false);
   const [editingReturn, setEditingReturn] = useState<SalesReturn | null>(null);
   const [viewingReturn, setViewingReturn] = useState<SalesReturn | null>(null);
@@ -1212,7 +1213,7 @@ const ReturnsManagement = () => {
                 <Button onClick={() => setShowModal(false)} variant="secondary" fullWidth disabled={saving}>
                   Cancel
                 </Button>
-                <Button onClick={handleSubmit} variant="primary" fullWidth loading={saving}>
+                <Button onClick={() => setShowSubmitConfirm(true)} variant="primary" fullWidth loading={saving}>
                   {editingReturn ? 'Update Return' : 'Record Return'}
                 </Button>
               </div>
@@ -1220,6 +1221,33 @@ const ReturnsManagement = () => {
           </div>
         </div>
       )}
+
+      {/* Submit Return Confirmation */}
+      <ConfirmDialog
+        isOpen={showSubmitConfirm}
+        onClose={() => setShowSubmitConfirm(false)}
+        onConfirm={() => { 
+          setShowSubmitConfirm(false); 
+          handleSubmit(); 
+        }}
+        title={editingReturn ? "Update Return" : "Record Sales Return"}
+        message={`${editingReturn ? 'Update' : 'Record'} return of ${returnItems.filter(i => i.return_quantity > 0).length} item(s) totaling ₹${totals.total.toFixed(0)}?
+
+${formData.original_invoice_id ? `From Invoice: ${invoices.find(inv => inv.id === formData.original_invoice_id)?.invoice_number || ''}` : ''}
+
+This will:
+• ${editingReturn ? 'Update existing' : 'Create new'} return record
+• Generate return number
+• ${formData.is_restockable ? '✓ Items marked as restockable (good condition)' : '✗ Items marked as NON-restockable (damaged/defective)'}
+
+Important: You must PROCESS the return to:
+• Complete refund to customer
+• Update inventory (if restockable)
+• Create credit note`}
+        confirmText={editingReturn ? "Update Return" : "Record Return"}
+        cancelText="Review"
+        variant="primary"
+      />
 
       {/* Process Confirmation */}
       {showProcessConfirm && processingReturn && (
