@@ -262,12 +262,6 @@ const SalesInvoice = () => {
       toast.error('Scan failed', err.message || 'Could not process barcode.');
     }
   };
-      gst_rate: selectedItem.gst_rate,
-      amount: selectedItem.retail_price
-    };
-
-    setItems([...items, newItem]);
-  };
 
   const updateItem = (id: string, field: string, value: number) => {
     setItems(items.map(item => {
