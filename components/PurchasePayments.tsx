@@ -57,6 +57,7 @@ const PurchasePayments = () => {
   const [showFilterSheet, setShowFilterSheet] = useState(false);
   const [viewingPayment, setViewingPayment] = useState<Payment | null>(null);
   const [deletingPayment, setDeletingPayment] = useState<{ id: string; payment_number: string } | null>(null);
+  const [showPaymentConfirm, setShowPaymentConfirm] = useState(false);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
 
@@ -517,15 +518,15 @@ const PurchasePayments = () => {
             </div>
           )}
 
-          <div className="h-20 md:h-4" />
-        </div>
+          <div className="h-4 md:h-4" />
 
-        {/* Add Payment Button */}
-        <div className="fixed bottom-20 left-0 right-0 md:relative md:bottom-0 px-4 pb-4 md:max-w-6xl md:mx-auto z-30 bg-slate-50 md:bg-transparent">
+          {/* Add Payment Button - Normal placement */}
           <button onClick={handleAddPayment} className="w-full bg-gradient-to-r from-teal-600 to-teal-700 hover:from-teal-700 hover:to-teal-800 text-white font-bold py-4 rounded-2xl shadow-lg active:scale-[0.98] transition-all flex items-center justify-center gap-3">
             <Plus size={24} />
             Record Payment
           </button>
+
+          <div className="h-20 md:h-4" />
         </div>
 
         {/* Filter Sheet */}
@@ -682,17 +683,41 @@ const PurchasePayments = () => {
                 </div>
               </div>
 
-              {/* Submit Button */}
-              <div className="sticky bottom-20 md:relative md:bottom-0">
-                <button onClick={handleSubmitPayment} disabled={saving || paymentForm.amount <= 0} className="w-full bg-gradient-to-r from-teal-600 to-teal-700 hover:from-teal-700 hover:to-teal-800 disabled:from-slate-400 disabled:to-slate-500 text-white font-bold py-4 rounded-2xl shadow-lg active:scale-[0.98] transition-all flex items-center justify-center gap-3">
-                  {saving ? <><LoadingSpinner size="sm" />Recording...</> : <><Check size={24} />Record Payment</>}
-                </button>
-              </div>
+              {/* Submit Button - Normal placement with confirmation */}
+              <button 
+                onClick={() => setShowPaymentConfirm(true)} 
+                disabled={saving || paymentForm.amount <= 0} 
+                className="w-full bg-gradient-to-r from-teal-600 to-teal-700 hover:from-teal-700 hover:to-teal-800 disabled:from-slate-400 disabled:to-slate-500 text-white font-bold py-4 rounded-2xl shadow-lg active:scale-[0.98] transition-all flex items-center justify-center gap-3"
+              >
+                {saving ? <><LoadingSpinner size="sm" />Recording...</> : <><Check size={24} />Record Payment</>}
+              </button>
             </>
           )}
 
-          <div className="h-4 md:hidden" />
+          <div className="h-20 md:hidden" />
         </div>
+
+        {/* Record Payment Confirmation Dialog */}
+        {selectedRecord && (
+          <ConfirmDialog
+            isOpen={showPaymentConfirm}
+            onClose={() => setShowPaymentConfirm(false)}
+            onConfirm={() => { setShowPaymentConfirm(false); handleSubmitPayment(); }}
+            title="Record Payment"
+            message={`Record payment of ₹${paymentForm.amount.toFixed(0)} for invoice ${selectedRecord.invoice_number}?
+
+Invoice Details:
+• Total: ₹${selectedRecord.total_amount.toFixed(0)}
+• Already Paid: ₹${selectedRecord.paid_amount.toFixed(0)}
+• This Payment: ₹${paymentForm.amount.toFixed(0)}
+• Remaining: ₹${(selectedRecord.pending_amount - paymentForm.amount).toFixed(0)}
+
+Payment Method: ${paymentForm.payment_method.toUpperCase()}${paymentForm.reference_number ? `\nReference: ${paymentForm.reference_number}` : ''}`}
+            confirmText="Record Payment"
+            cancelText="Review"
+            variant="primary"
+          />
+        )}
       </div>
     );
   }
