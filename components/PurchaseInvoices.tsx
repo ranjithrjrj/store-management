@@ -5,7 +5,7 @@
 import React, { useState, useEffect } from 'react';
 import { 
   Plus, Trash2, Save, X, Camera, Package, Calendar, 
-  ShoppingBag, DollarSign, AlertTriangle, User, Check
+  ShoppingBag, TrendingUp, AlertTriangle, User, Check
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { Button, Badge, LoadingSpinner, useToast } from '@/components/ui';
@@ -756,7 +756,7 @@ const PurchaseInvoices = () => {
           <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
             <div className="p-4 bg-gradient-to-r from-green-600 to-emerald-600">
               <div className="flex items-center gap-2">
-                <DollarSign className="text-white" size={20} />
+                <TrendingUp className="text-white" size={20} />
                 <h3 className="font-bold text-white">Summary</h3>
               </div>
             </div>
