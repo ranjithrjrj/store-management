@@ -3,7 +3,7 @@
 
 'use client';
 import React, { useState, useEffect } from 'react';
-import { Plus, Trash2, Printer, Save, ShoppingCart, User, Package, Calendar, AlertTriangle, TrendingUp, Camera } from 'lucide-react';
+import { Plus, Trash2, Printer, Save, ShoppingCart, User, Package, Calendar, AlertTriangle, TrendingUp, Camera, X } from 'lucide-react';
 import { printInvoice } from '@/lib/thermalPrinter';
 import { supabase } from '@/lib/supabase';
 import { Button, Card, Input, Select, Badge, LoadingSpinner, ConfirmDialog, useToast } from '@/components/ui';
