@@ -57,6 +57,7 @@ const SalesOrders = ({ onNavigate }: SalesOrdersProps = {}) => {
   const [showViewModal, setShowViewModal] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [showConvertConfirm, setShowConvertConfirm] = useState(false);
+  const [showCreateConfirm, setShowCreateConfirm] = useState(false);
   const [viewingOrder, setViewingOrder] = useState<SalesOrder | null>(null);
   const [editingOrder, setEditingOrder] = useState<SalesOrder | null>(null);
   const [deletingOrder, setDeletingOrder] = useState<{ id: string; order_number: string } | null>(null);
@@ -963,7 +964,7 @@ const SalesOrders = ({ onNavigate }: SalesOrdersProps = {}) => {
                 <Button onClick={() => { setShowAddModal(false); setShowEditModal(false); }} variant="secondary" fullWidth>
                   Cancel
                 </Button>
-                <Button onClick={handleSaveOrder} variant="primary" fullWidth loading={saving}>
+                <Button onClick={() => setShowCreateConfirm(true)} variant="primary" fullWidth loading={saving}>
                   {editingOrder ? 'Update Order' : 'Create Order'}
                 </Button>
               </div>
@@ -1141,6 +1142,29 @@ const SalesOrders = ({ onNavigate }: SalesOrdersProps = {}) => {
         />
       )}
 
+      {/* Create Order Confirmation */}
+      <ConfirmDialog
+        isOpen={showCreateConfirm}
+        onClose={() => setShowCreateConfirm(false)}
+        onConfirm={() => { 
+          setShowCreateConfirm(false); 
+          handleSaveOrder(); 
+        }}
+        title={editingOrder ? "Update Sales Order" : "Create Sales Order"}
+        message={`${editingOrder ? 'Update' : 'Create'} order for ${formData.customer_name} with ${items.length} item(s) totaling ₹${totals.total.toFixed(0)}?
+
+This will:
+• ${editingOrder ? 'Update existing' : 'Generate new'} sales order number
+• Reserve items for this order
+• Customer can be invoiced later
+${formData.expected_delivery ? `• Expected delivery: ${new Date(formData.expected_delivery).toLocaleDateString()}` : ''}
+
+Note: This does NOT affect inventory until converted to invoice.`}
+        confirmText={editingOrder ? "Update Order" : "Create Order"}
+        cancelText="Review"
+        variant="primary"
+      />
+
       {/* Convert Confirmation */}
       {showConvertConfirm && convertingOrder && (
         <ConfirmDialog
@@ -1151,7 +1175,19 @@ const SalesOrders = ({ onNavigate }: SalesOrdersProps = {}) => {
           }}
           onConfirm={handleConvertConfirm}
           title="Convert to Invoice"
-          message={`Convert order "${convertingOrder.order_number}" to sales invoice? This will mark the order as converted and open the Sales Invoice page with pre-filled data for you to complete.`}
+          message={`Convert order ${convertingOrder.order_number} to sales invoice?
+
+Order Details:
+• Customer: ${convertingOrder.customer_name}
+• Total: ₹${convertingOrder.total_amount.toFixed(0)}
+
+This will:
+• Mark order as converted (cannot be edited)
+• Open Sales Invoice page with pre-filled data
+• You can then complete payment and print invoice
+• Inventory will be deducted when invoice is saved
+
+Continue?`}
           confirmText="Convert & Continue"
           cancelText="Cancel"
           variant="primary"
