@@ -3,10 +3,10 @@
 
 'use client';
 import React, { useState, useEffect } from 'react';
-import { FileText, Plus, Search, X, Eye, Edit2, Trash2, CheckCircle, User, Package, Calendar, AlertTriangle } from 'lucide-react';
+import { FileText, Plus, Search, X, Eye, Edit2, Trash2, CheckCircle, User, Package, Calendar, AlertTriangle, Camera } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { Button, Card, Input, Select, Badge, EmptyState, LoadingSpinner, ConfirmDialog, useToast } from '@/components/ui';
-import { useTheme } from '@/contexts/ThemeContext';
+import BarcodeScanner from './BarcodeScanner';
 
 type OrderItem = {
   id: string;
@@ -46,7 +46,6 @@ type SalesOrdersProps = {
 };
 
 const SalesOrders = ({ onNavigate }: SalesOrdersProps = {}) => {
-  const { theme } = useTheme();
   const toast = useToast();
   
   const [orders, setOrders] = useState<SalesOrder[]>([]);
@@ -66,6 +65,8 @@ const SalesOrders = ({ onNavigate }: SalesOrdersProps = {}) => {
   const [loading, setLoading] = useState(true);
   const [loadingItems, setLoadingItems] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [showBarcodeScanner, setShowBarcodeScanner] = useState(false);
+  const [scanningForItemId, setScanningForItemId] = useState<string | null>(null);
 
   // Form state
   const [formData, setFormData] = useState({
@@ -211,6 +212,42 @@ const SalesOrders = ({ onNavigate }: SalesOrdersProps = {}) => {
     };
 
     setItems([...items, newItem]);
+  };
+
+  const handleBarcodeScan = async (barcode: string) => {
+    if (!barcode) {
+      toast.error('Invalid scan', 'No barcode detected.');
+      return;
+    }
+
+    try {
+      const { data: itemData, error } = await supabase
+        .from('items')
+        .select('id, name, retail_price, gst_rate, discount_percent')
+        .eq('barcode', barcode)
+        .eq('is_active', true)
+        .single();
+
+      if (error || !itemData) {
+        toast.error('Item not found', `No item found with barcode: ${barcode}`);
+        return;
+      }
+
+      const existingItem = items.find(i => i.item_id === itemData.id);
+      if (existingItem) {
+        updateItem(existingItem.id, 'quantity', existingItem.quantity + 1);
+        toast.success('Quantity updated', `${itemData.name} quantity increased to ${existingItem.quantity + 1}`);
+      } else {
+        await addItem(itemData.id);
+        toast.success('Item added', `${itemData.name} added to order`);
+      }
+
+      setShowBarcodeScanner(false);
+      setScanningForItemId(null);
+    } catch (err: any) {
+      console.error('Barcode scan error:', err);
+      toast.error('Scan failed', err.message || 'Could not process barcode.');
+    }
   };
 
   const updateItem = (id: string, field: string, value: number) => {
@@ -576,31 +613,70 @@ const SalesOrders = ({ onNavigate }: SalesOrdersProps = {}) => {
     );
   }
 
+  // Calculate stats
+  const stats = {
+    total: orders.length,
+    pending: orders.filter(o => o.status === 'pending').length,
+    confirmed: orders.filter(o => o.status === 'confirmed').length,
+    converted: orders.filter(o => o.status === 'converted').length
+  };
+
   return (
-    <div className="min-h-screen bg-slate-50 p-4 md:p-6 lg:p-8">
-      <div className="max-w-7xl mx-auto space-y-6">
-        {/* Header */}
-        <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6">
-          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+    <div className="min-h-screen bg-slate-50">
+      {/* HERO SECTION - Teal Gradient Header */}
+      <div className="bg-gradient-to-br from-teal-600 to-teal-700 px-4 py-6 md:px-6 md:py-8">
+        <div className="max-w-7xl mx-auto">
+          <div className="flex items-center justify-between mb-4">
             <div className="flex items-center gap-3">
-              <div className="p-3 bg-blue-100 rounded-xl">
-                <FileText className="text-blue-700" size={28} />
+              <div className="p-3 bg-white/20 rounded-2xl backdrop-blur-sm">
+                <FileText className="text-white" size={28} />
               </div>
               <div>
-                <h1 className="text-2xl font-bold text-slate-900">Sales Orders</h1>
-                <p className="text-slate-600 text-sm mt-0.5">Create and manage sales orders</p>
+                <h1 className="text-2xl md:text-3xl font-bold text-white">Sales Orders</h1>
+                <p className="text-teal-100 text-sm md:text-base">Create and manage pre-sale orders</p>
               </div>
             </div>
-            <Button
+            <button
               onClick={handleAddOrder}
-              variant="primary"
-              icon={<Plus size={20} />}
+              className="hidden md:flex items-center gap-2 px-4 py-2.5 bg-white/20 hover:bg-white/30 backdrop-blur-sm text-white font-semibold rounded-xl transition-all border border-white/30"
             >
-              Add Order
-            </Button>
+              <Plus size={20} />
+              <span>Add Order</span>
+            </button>
           </div>
-        </div>
+          
+          {/* Quick Stats */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            <div className="bg-white/10 backdrop-blur-sm rounded-xl p-3 md:p-4 border border-white/20">
+              <p className="text-teal-100 text-xs font-medium">Total Orders</p>
+              <p className="text-white text-xl md:text-2xl font-bold mt-1">{stats.total}</p>
+            </div>
+            <div className="bg-white/10 backdrop-blur-sm rounded-xl p-3 md:p-4 border border-white/20">
+              <p className="text-teal-100 text-xs font-medium">Pending</p>
+              <p className="text-white text-xl md:text-2xl font-bold mt-1">{stats.pending}</p>
+            </div>
+            <div className="bg-white/10 backdrop-blur-sm rounded-xl p-3 md:p-4 border border-white/20">
+              <p className="text-teal-100 text-xs font-medium">Confirmed</p>
+              <p className="text-white text-xl md:text-2xl font-bold mt-1">{stats.confirmed}</p>
+            </div>
+            <div className="bg-white/10 backdrop-blur-sm rounded-xl p-3 md:p-4 border border-white/20">
+              <p className="text-teal-100 text-xs font-medium">Converted</p>
+              <p className="text-white text-xl md:text-2xl font-bold mt-1">{stats.converted}</p>
+            </div>
+          </div>
 
+          {/* Mobile Add Button */}
+          <button
+            onClick={handleAddOrder}
+            className="md:hidden w-full mt-4 bg-white/20 hover:bg-white/30 backdrop-blur-sm text-white font-bold py-3 rounded-xl transition-all border border-white/30 flex items-center justify-center gap-2"
+          >
+            <Plus size={20} />
+            <span>Add Order</span>
+          </button>
+        </div>
+      </div>
+
+      <div className="max-w-7xl mx-auto px-4 md:px-6 lg:px-8 py-6 space-y-6">
         {/* Search & Filter */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <Card padding="md">
@@ -735,20 +811,20 @@ const SalesOrders = ({ onNavigate }: SalesOrdersProps = {}) => {
       {(showAddModal || showEditModal) && (
         <div className="fixed inset-0 bg-black/20 backdrop-blur-sm flex items-start justify-center p-4 z-50 overflow-y-auto">
           <div className="min-h-screen w-full flex items-center justify-center py-8">
-            <Card className="w-full max-w-4xl">
-              <div className="flex items-center justify-between mb-6">
-                <h3 className="text-xl font-bold text-slate-900">
+            <div className="bg-white rounded-3xl shadow-2xl w-full max-w-4xl overflow-hidden">
+              <div className="flex items-center justify-between p-4 border-b border-slate-200 bg-gradient-to-r from-teal-600 to-teal-700 rounded-t-3xl">
+                <h3 className="text-xl font-bold text-white">
                   {editingOrder ? 'Edit Order' : 'Create Sales Order'}
                 </h3>
                 <button
                   onClick={() => { setShowAddModal(false); setShowEditModal(false); }}
-                  className="p-2 rounded-lg hover:bg-slate-100"
+                  className="p-2 rounded-lg hover:bg-white/20 text-white transition-colors"
                 >
                   <X size={24} />
                 </button>
               </div>
 
-              <div className="space-y-6">
+              <div className="p-6 space-y-6">
                 {/* Customer Details */}
                 <div>
                   <h4 className="font-semibold text-slate-900 mb-3">Customer Details</h4>
@@ -809,7 +885,16 @@ const SalesOrders = ({ onNavigate }: SalesOrdersProps = {}) => {
 
                 {/* Items */}
                 <div>
-                  <h4 className="font-semibold text-slate-900 mb-3">Items</h4>
+                  <div className="flex items-center justify-between mb-3">
+                    <h4 className="font-semibold text-slate-900">Items</h4>
+                    <button
+                      onClick={() => setShowBarcodeScanner(true)}
+                      className="flex items-center gap-2 px-3 py-1.5 text-sm font-medium text-blue-700 bg-blue-50 rounded-lg hover:bg-blue-100 transition-colors"
+                    >
+                      <Camera size={16} />
+                      Scan
+                    </button>
+                  </div>
                   <div className="mb-4">
                     <Input
                       placeholder="Type to search items..."
@@ -961,14 +1046,21 @@ const SalesOrders = ({ onNavigate }: SalesOrdersProps = {}) => {
               </div>
 
               <div className="flex gap-3 mt-6">
-                <Button onClick={() => { setShowAddModal(false); setShowEditModal(false); }} variant="secondary" fullWidth>
+                <button
+                  onClick={() => { setShowAddModal(false); setShowEditModal(false); }}
+                  className="flex-1 px-4 py-3 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold rounded-xl transition-colors"
+                >
                   Cancel
-                </Button>
-                <Button onClick={() => setShowCreateConfirm(true)} variant="primary" fullWidth loading={saving}>
-                  {editingOrder ? 'Update Order' : 'Create Order'}
-                </Button>
+                </button>
+                <button
+                  onClick={() => setShowCreateConfirm(true)}
+                  disabled={saving}
+                  className="flex-1 px-4 py-3 bg-gradient-to-r from-teal-600 to-teal-700 hover:from-teal-700 hover:to-teal-800 disabled:from-slate-400 disabled:to-slate-500 text-white font-semibold rounded-xl transition-all shadow-md"
+                >
+                  {saving ? 'Saving...' : (editingOrder ? 'Update Order' : 'Create Order')}
+                </button>
               </div>
-            </Card>
+            </div>
           </div>
         </div>
       )}
@@ -977,20 +1069,22 @@ const SalesOrders = ({ onNavigate }: SalesOrdersProps = {}) => {
       {showViewModal && viewingOrder && (
         <div className="fixed inset-0 bg-black/20 backdrop-blur-sm flex items-start justify-center p-4 z-50 overflow-y-auto">
           <div className="min-h-screen w-full flex items-center justify-center py-8">
-            <Card className="w-full max-w-4xl">
-              <div className="flex items-center justify-between mb-6">
+            <div className="bg-white rounded-3xl shadow-2xl w-full max-w-4xl overflow-hidden">
+              <div className="flex items-center justify-between p-4 border-b border-slate-200 bg-gradient-to-r from-teal-600 to-teal-700 rounded-t-3xl">
                 <div>
-                  <h3 className="text-2xl font-bold text-slate-900">{viewingOrder.order_number}</h3>
-                  <Badge variant={statusColors[viewingOrder.status]} className="mt-2">
-                    {viewingOrder.status}
-                  </Badge>
+                  <h3 className="text-2xl font-bold text-white">{viewingOrder.order_number}</h3>
+                  <div className="mt-2">
+                    <Badge variant={statusColors[viewingOrder.status]}>
+                      {viewingOrder.status}
+                    </Badge>
+                  </div>
                 </div>
-                <button onClick={() => setShowViewModal(false)} className="p-2 rounded-lg hover:bg-slate-100">
+                <button onClick={() => setShowViewModal(false)} className="p-2 rounded-lg hover:bg-white/20 text-white transition-colors">
                   <X size={24} />
                 </button>
               </div>
 
-              <div className="space-y-6">
+              <div className="p-6 space-y-6">
                 <div className="bg-slate-50 rounded-xl p-5">
                   <h4 className="font-bold text-slate-900 mb-4">Customer Information</h4>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
@@ -1116,11 +1210,14 @@ const SalesOrders = ({ onNavigate }: SalesOrdersProps = {}) => {
               </div>
 
               <div className="mt-6">
-                <Button onClick={() => setShowViewModal(false)} variant="secondary" fullWidth>
+                <button
+                  onClick={() => setShowViewModal(false)}
+                  className="w-full px-4 py-3 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold rounded-xl transition-colors"
+                >
                   Close
-                </Button>
+                </button>
               </div>
-            </Card>
+            </div>
           </div>
         </div>
       )}
@@ -1193,6 +1290,13 @@ Continue?`}
           variant="primary"
         />
       )}
+
+      {/* Barcode Scanner Modal */}
+      <BarcodeScanner
+        isOpen={showBarcodeScanner}
+        onClose={() => { setShowBarcodeScanner(false); setScanningForItemId(null); }}
+        onScan={handleBarcodeScan}
+      />
     </div>
   );
 };
