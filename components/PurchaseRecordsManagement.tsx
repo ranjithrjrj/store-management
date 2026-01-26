@@ -476,6 +476,49 @@ const PurchaseRecordsManagement = () => {
 
         <div className="max-w-6xl mx-auto px-4 py-4 md:px-6 md:py-6 space-y-4">
           
+          {/* Payment History - MOVED TO TOP */}
+          <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+            <div className="p-4 border-b bg-gradient-to-r from-green-50 to-emerald-50">
+              <h3 className="font-bold text-slate-900 flex items-center gap-2">
+                <CreditCard size={18} className="text-green-600" />
+                Payment History ({recordPayments.length})
+              </h3>
+            </div>
+            <div className="p-4">
+              {loadingPayments ? (
+                <div className="text-center py-8"><LoadingSpinner /></div>
+              ) : recordPayments.length === 0 ? (
+                <div className="text-center py-6">
+                  <CreditCard size={32} className="text-slate-300 mx-auto mb-2" />
+                  <p className="text-slate-500 text-sm">No payments recorded yet</p>
+                  <p className="text-xs text-slate-400 mt-1">Payments will appear here once recorded</p>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {recordPayments.map((payment) => (
+                    <div key={payment.id} className="bg-gradient-to-r from-green-50 to-emerald-50 rounded-xl p-3 border border-green-200">
+                      <div className="flex items-start justify-between mb-2">
+                        <div className="flex-1">
+                          <p className="font-semibold text-slate-900">{payment.payment_number}</p>
+                          <p className="text-xs text-slate-600 mt-0.5">
+                            {new Date(payment.payment_date).toLocaleDateString()} • {payment.payment_method.toUpperCase()}
+                          </p>
+                          {payment.reference_number && (
+                            <p className="text-xs text-slate-500 mt-0.5">Ref: {payment.reference_number}</p>
+                          )}
+                          {payment.notes && (
+                            <p className="text-xs text-slate-600 mt-1">{payment.notes}</p>
+                          )}
+                        </div>
+                        <p className="text-base font-bold text-green-600">₹{payment.amount.toFixed(0)}</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+
           {/* Invoice Details */}
           <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-4">
             <h3 className="font-bold text-slate-900 mb-3 flex items-center gap-2"><Calendar size={18} className="text-teal-600" />Details</h3>
@@ -504,47 +547,6 @@ const PurchaseRecordsManagement = () => {
                   </div>
                 </div>
               ))}
-            </div>
-          </div>
-
-          {/* Payment History */}
-          <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
-            <div className="p-4 border-b">
-              <h3 className="font-bold text-slate-900 flex items-center gap-2">
-                <CreditCard size={18} className="text-teal-600" />
-                Payment History ({recordPayments.length})
-              </h3>
-            </div>
-            <div className="p-4">
-              {loadingPayments ? (
-                <div className="text-center py-8"><LoadingSpinner /></div>
-              ) : recordPayments.length === 0 ? (
-                <div className="text-center py-6">
-                  <p className="text-slate-500 text-sm">No payments recorded yet</p>
-                </div>
-              ) : (
-                <div className="space-y-3">
-                  {recordPayments.map((payment) => (
-                    <div key={payment.id} className="bg-slate-50 rounded-xl p-3 border border-slate-200">
-                      <div className="flex items-start justify-between mb-2">
-                        <div className="flex-1">
-                          <p className="font-semibold text-slate-900">{payment.payment_number}</p>
-                          <p className="text-xs text-slate-600 mt-0.5">
-                            {new Date(payment.payment_date).toLocaleDateString()} • {payment.payment_method.toUpperCase()}
-                          </p>
-                          {payment.reference_number && (
-                            <p className="text-xs text-slate-500 mt-0.5">Ref: {payment.reference_number}</p>
-                          )}
-                          {payment.notes && (
-                            <p className="text-xs text-slate-600 mt-1">{payment.notes}</p>
-                          )}
-                        </div>
-                        <p className="text-base font-bold text-green-600">₹{payment.amount.toFixed(0)}</p>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
             </div>
           </div>
 
