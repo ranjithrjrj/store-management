@@ -1,12 +1,12 @@
 // FILE PATH: components/PurchaseRecordsManagement.tsx
-// Purchase Records Management - View and Manage Purchase Invoices - COMPLETE REDESIGN
+// Purchase Records Management - FIXED: No rounding, Payment History
 
 'use client';
 import React, { useState, useEffect } from 'react';
 import { 
   ShoppingBag, Search, X, Trash2, Calendar, FileText, 
   Package, TrendingUp, Filter, ChevronRight, Clock, 
-  CheckCircle, AlertCircle, DollarSign
+  CheckCircle, AlertCircle, CreditCard
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { LoadingSpinner, ConfirmDialog, useToast } from '@/components/ui';
@@ -48,6 +48,17 @@ type PurchaseRecordItem = {
   amount: number;
 };
 
+type Payment = {
+  id: string;
+  payment_number: string;
+  payment_date: string;
+  amount: number;
+  payment_method: string;
+  reference_number?: string;
+  notes?: string;
+  created_at: string;
+};
+
 const PurchaseRecordsManagement = () => {
   const { theme } = useTheme();
   const toast = useToast();
@@ -67,9 +78,11 @@ const PurchaseRecordsManagement = () => {
   const [showFilterSheet, setShowFilterSheet] = useState(false);
   const [viewingRecord, setViewingRecord] = useState<PurchaseRecord | null>(null);
   const [recordItems, setRecordItems] = useState<PurchaseRecordItem[]>([]);
+  const [recordPayments, setRecordPayments] = useState<Payment[]>([]);
   const [deletingRecord, setDeletingRecord] = useState<{ id: string; invoice_number: string } | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadingItems, setLoadingItems] = useState(false);
+  const [loadingPayments, setLoadingPayments] = useState(false);
 
   useEffect(() => {
     loadData();
@@ -132,10 +145,31 @@ const PurchaseRecordsManagement = () => {
     }
   }
 
+  async function loadRecordPayments(recordId: string) {
+    try {
+      setLoadingPayments(true);
+      
+      const { data, error } = await supabase
+        .from('purchase_payments')
+        .select('*')
+        .eq('purchase_invoice_id', recordId)
+        .order('payment_date', { ascending: false });
+
+      if (error) throw error;
+      setRecordPayments(data || []);
+    } catch (err: any) {
+      console.error('Error loading payments:', err);
+      toast.error('Failed to load', 'Could not load payment history.');
+    } finally {
+      setLoadingPayments(false);
+    }
+  }
+
   const handleView = async (record: PurchaseRecord) => {
     setViewingRecord(record);
     setView('details');
     await loadRecordItems(record.id);
+    await loadRecordPayments(record.id);
   };
 
   const handleDelete = async () => {
@@ -258,7 +292,7 @@ const PurchaseRecordsManagement = () => {
   if (view === 'list') {
     return (
       <div className="min-h-screen bg-slate-50">
-        {/* HERO - Teal theme */}
+        {/* HERO */}
         <div className="bg-gradient-to-br from-teal-600 to-teal-700 px-4 py-6 md:px-6 md:py-8">
           <div className="max-w-6xl mx-auto">
             <div className="flex items-center gap-3 mb-2">
@@ -271,6 +305,7 @@ const PurchaseRecordsManagement = () => {
               </div>
             </div>
             
+            {/* Stats - NO ROUNDING */}
             <div className="mt-4 grid grid-cols-2 md:grid-cols-4 gap-2">
               <div className="bg-white/10 backdrop-blur-sm rounded-xl p-3 border border-white/20">
                 <p className="text-teal-100 text-xs font-medium">Total</p>
@@ -286,7 +321,7 @@ const PurchaseRecordsManagement = () => {
               </div>
               <div className="bg-white/10 backdrop-blur-sm rounded-xl p-3 border border-white/20">
                 <p className="text-teal-100 text-xs font-medium">Total ₹</p>
-                <p className="text-white text-xl font-bold mt-0.5">{(stats.totalAmount / 1000).toFixed(0)}K</p>
+                <p className="text-white text-xl font-bold mt-0.5">₹{stats.totalAmount.toFixed(0)}</p>
               </div>
             </div>
           </div>
@@ -352,7 +387,7 @@ const PurchaseRecordsManagement = () => {
                   <div className="flex items-center justify-between pt-3 border-t border-slate-200">
                     <div className="flex items-center gap-4 text-xs text-slate-600">
                       <div className="flex items-center gap-1"><Calendar size={14} />{new Date(record.invoice_date).toLocaleDateString()}</div>
-                      {record.pending_amount > 0 && <div className="flex items-center gap-1 text-red-600"><DollarSign size={14} />₹{record.pending_amount.toFixed(0)}</div>}
+                      {record.pending_amount > 0 && <div className="flex items-center gap-1 text-red-600"><CreditCard size={14} />Pending: ₹{record.pending_amount.toFixed(0)}</div>}
                     </div>
                     <div className="flex items-center gap-2">
                       <span className="text-lg font-bold text-teal-700">₹{record.total_amount.toFixed(0)}</span>
@@ -440,6 +475,8 @@ const PurchaseRecordsManagement = () => {
         </div>
 
         <div className="max-w-6xl mx-auto px-4 py-4 md:px-6 md:py-6 space-y-4">
+          
+          {/* Invoice Details */}
           <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-4">
             <h3 className="font-bold text-slate-900 mb-3 flex items-center gap-2"><Calendar size={18} className="text-teal-600" />Details</h3>
             <div className="space-y-2 text-sm">
@@ -450,6 +487,7 @@ const PurchaseRecordsManagement = () => {
             </div>
           </div>
 
+          {/* Items */}
           <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
             <div className="p-4 border-b"><h3 className="font-bold text-slate-900 flex items-center gap-2"><Package size={18} className="text-teal-600" />Items ({recordItems.length})</h3></div>
             <div className="p-4 space-y-3">
@@ -458,7 +496,7 @@ const PurchaseRecordsManagement = () => {
                   <div className="flex items-start justify-between mb-2">
                     <div className="flex-1">
                       <p className="font-semibold text-slate-900">{item.item_name}</p>
-                      <p className="text-xs text-slate-600 mt-0.5">Qty: {item.quantity} • ₹{item.rate} • GST {item.gst_rate}%</p>
+                      <p className="text-xs text-slate-600 mt-0.5">Qty: {item.quantity} • ₹{item.rate.toFixed(0)} • GST {item.gst_rate}%</p>
                       {item.batch_number && <p className="text-xs text-slate-500">Batch: {item.batch_number}</p>}
                       {item.expiry_date && <p className="text-xs text-slate-500">Exp: {new Date(item.expiry_date).toLocaleDateString()}</p>}
                     </div>
@@ -469,16 +507,59 @@ const PurchaseRecordsManagement = () => {
             </div>
           </div>
 
+          {/* Payment History */}
+          <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+            <div className="p-4 border-b">
+              <h3 className="font-bold text-slate-900 flex items-center gap-2">
+                <CreditCard size={18} className="text-teal-600" />
+                Payment History ({recordPayments.length})
+              </h3>
+            </div>
+            <div className="p-4">
+              {loadingPayments ? (
+                <div className="text-center py-8"><LoadingSpinner /></div>
+              ) : recordPayments.length === 0 ? (
+                <div className="text-center py-6">
+                  <p className="text-slate-500 text-sm">No payments recorded yet</p>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {recordPayments.map((payment) => (
+                    <div key={payment.id} className="bg-slate-50 rounded-xl p-3 border border-slate-200">
+                      <div className="flex items-start justify-between mb-2">
+                        <div className="flex-1">
+                          <p className="font-semibold text-slate-900">{payment.payment_number}</p>
+                          <p className="text-xs text-slate-600 mt-0.5">
+                            {new Date(payment.payment_date).toLocaleDateString()} • {payment.payment_method.toUpperCase()}
+                          </p>
+                          {payment.reference_number && (
+                            <p className="text-xs text-slate-500 mt-0.5">Ref: {payment.reference_number}</p>
+                          )}
+                          {payment.notes && (
+                            <p className="text-xs text-slate-600 mt-1">{payment.notes}</p>
+                          )}
+                        </div>
+                        <p className="text-base font-bold text-green-600">₹{payment.amount.toFixed(0)}</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Summary */}
           <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-4">
             <h3 className="font-bold text-slate-900 mb-3 flex items-center gap-2"><TrendingUp size={18} className="text-teal-600" />Summary</h3>
             <div className="space-y-2 text-sm">
-              <div className="flex justify-between"><span className="text-slate-600">Subtotal</span><span className="font-semibold text-slate-900">₹{viewingRecord.subtotal.toFixed(2)}</span></div>
-              {viewingRecord.cgst_amount > 0 && <><div className="flex justify-between"><span className="text-slate-600">CGST</span><span>₹{viewingRecord.cgst_amount.toFixed(2)}</span></div><div className="flex justify-between"><span className="text-slate-600">SGST</span><span>₹{viewingRecord.sgst_amount.toFixed(2)}</span></div></>}
-              {viewingRecord.igst_amount > 0 && <div className="flex justify-between"><span className="text-slate-600">IGST</span><span>₹{viewingRecord.igst_amount.toFixed(2)}</span></div>}
-              {viewingRecord.additional_charges > 0 && <div className="flex justify-between"><span className="text-slate-600">Charges</span><span>₹{viewingRecord.additional_charges.toFixed(2)}</span></div>}
-              {viewingRecord.discount_amount > 0 && <div className="flex justify-between text-green-600"><span>Discount</span><span>-₹{viewingRecord.discount_amount.toFixed(2)}</span></div>}
-              <div className="flex justify-between text-base font-bold pt-2 border-t-2"><span className="text-slate-900">Total</span><span className="text-teal-700">₹{viewingRecord.total_amount.toFixed(2)}</span></div>
-              {viewingRecord.pending_amount > 0 && <div className="flex justify-between text-base font-bold pt-2 border-t"><span className="text-red-700">Pending</span><span className="text-red-700">₹{viewingRecord.pending_amount.toFixed(2)}</span></div>}
+              <div className="flex justify-between"><span className="text-slate-600">Subtotal</span><span className="font-semibold text-slate-900">₹{viewingRecord.subtotal.toFixed(0)}</span></div>
+              {viewingRecord.cgst_amount > 0 && <><div className="flex justify-between"><span className="text-slate-600">CGST</span><span>₹{viewingRecord.cgst_amount.toFixed(0)}</span></div><div className="flex justify-between"><span className="text-slate-600">SGST</span><span>₹{viewingRecord.sgst_amount.toFixed(0)}</span></div></>}
+              {viewingRecord.igst_amount > 0 && <div className="flex justify-between"><span className="text-slate-600">IGST</span><span>₹{viewingRecord.igst_amount.toFixed(0)}</span></div>}
+              {viewingRecord.additional_charges > 0 && <div className="flex justify-between"><span className="text-slate-600">Charges</span><span>₹{viewingRecord.additional_charges.toFixed(0)}</span></div>}
+              {viewingRecord.discount_amount > 0 && <div className="flex justify-between text-green-600"><span>Discount</span><span>-₹{viewingRecord.discount_amount.toFixed(0)}</span></div>}
+              <div className="flex justify-between text-base font-bold pt-2 border-t-2"><span className="text-slate-900">Total</span><span className="text-teal-700">₹{viewingRecord.total_amount.toFixed(0)}</span></div>
+              {viewingRecord.paid_amount > 0 && <div className="flex justify-between text-base font-bold pt-2 border-t"><span className="text-green-700">Paid</span><span className="text-green-700">₹{viewingRecord.paid_amount.toFixed(0)}</span></div>}
+              {viewingRecord.pending_amount > 0 && <div className="flex justify-between text-base font-bold"><span className="text-red-700">Pending</span><span className="text-red-700">₹{viewingRecord.pending_amount.toFixed(0)}</span></div>}
             </div>
           </div>
 
