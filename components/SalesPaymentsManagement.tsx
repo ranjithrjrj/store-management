@@ -3,7 +3,7 @@
 
 'use client';
 import React, { useState, useEffect } from 'react';
-import { FileText, Search, X, Eye, Trash2, Printer, ShoppingCart, DollarSign, Filter } from 'lucide-react';
+import { FileText, Search, X, Eye, Trash2, Printer, ShoppingCart, CreditCard, Filter } from 'lucide-react';
 import { printInvoice } from '@/lib/thermalPrinter';
 import { supabase } from '@/lib/supabase';
 import { Button, Card, Input, Select, Badge, EmptyState, LoadingSpinner, ConfirmDialog, useToast } from '@/components/ui';
@@ -516,7 +516,7 @@ const SalesPaymentsManagement = () => {
             {filteredPayments.length === 0 ? (
               <Card>
                 <EmptyState
-                  icon={<DollarSign size={64} />}
+                  icon={<CreditCard size={64} />}
                   title={searchTerm ? "No payments found" : "No payment history"}
                   description={
                     searchTerm
@@ -536,7 +536,7 @@ const SalesPaymentsManagement = () => {
                         <div className="flex-1">
                           <div className="flex items-center gap-3 mb-3">
                             <div className={`p-2 ${isRefund ? 'bg-red-50' : 'bg-green-50'} rounded-lg`}>
-                              <DollarSign className={isRefund ? 'text-red-600' : 'text-green-600'} size={20} />
+                              <CreditCard className={isRefund ? 'text-red-600' : 'text-green-600'} size={20} />
                             </div>
                             <div>
                               <h3 className="font-bold text-slate-900">{payment.payment_number}</h3>
