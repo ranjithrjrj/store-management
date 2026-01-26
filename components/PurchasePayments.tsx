@@ -4,7 +4,7 @@
 'use client';
 import React, { useState, useEffect } from 'react';
 import { 
-  DollarSign, Plus, Search, X, Trash2, Calendar, FileText, 
+  Plus, Search, X, Trash2, Calendar, FileText, 
   CreditCard, Filter, ChevronRight, Package, TrendingUp, Check
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
@@ -380,7 +380,7 @@ const PurchasePayments = () => {
           <div className="max-w-6xl mx-auto">
             <div className="flex items-center gap-3 mb-2">
               <div className="p-3 bg-white/20 rounded-2xl backdrop-blur-sm">
-                <DollarSign className="text-white" size={28} />
+                <CreditCard className="text-white" size={28} />
               </div>
               <div>
                 <h1 className="text-2xl md:text-3xl font-bold text-white">Purchase Payments</h1>
@@ -395,7 +395,7 @@ const PurchasePayments = () => {
               </div>
               <div className="bg-white/10 backdrop-blur-sm rounded-xl p-3 border border-white/20">
                 <p className="text-teal-100 text-xs font-medium">Total Paid</p>
-                <p className="text-white text-xl font-bold mt-0.5">₹{(stats.totalAmount / 1000).toFixed(0)}K</p>
+                <p className="text-white text-xl font-bold mt-0.5">₹{stats.totalAmount.toFixed(0)}</p>
               </div>
               <div className="bg-white/10 backdrop-blur-sm rounded-xl p-3 border border-white/20">
                 <p className="text-teal-100 text-xs font-medium">This Month</p>
@@ -403,7 +403,7 @@ const PurchasePayments = () => {
               </div>
               <div className="bg-white/10 backdrop-blur-sm rounded-xl p-3 border border-white/20">
                 <p className="text-teal-100 text-xs font-medium">Month Total</p>
-                <p className="text-white text-xl font-bold mt-0.5">₹{(stats.thisMonthAmount / 1000).toFixed(0)}K</p>
+                <p className="text-white text-xl font-bold mt-0.5">₹{stats.thisMonthAmount.toFixed(0)}</p>
               </div>
             </div>
           </div>
@@ -449,7 +449,7 @@ const PurchasePayments = () => {
           {filteredPayments.length === 0 ? (
             <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-12 text-center">
               <div className="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                <DollarSign size={32} className="text-slate-400" />
+                <CreditCard size={32} className="text-slate-400" />
               </div>
               <h3 className="text-lg font-bold text-slate-900 mb-2">No payments found</h3>
               <p className="text-sm text-slate-600">{searchTerm ? "Try adjusting filters" : "Payments will appear here"}</p>
@@ -555,7 +555,7 @@ const PurchasePayments = () => {
                 <FileText size={18} className="inline mr-2" />Invoice Number
               </button>
               <button onClick={() => handleSearchByChange('vendor')} className={`flex-1 px-4 py-3 rounded-xl font-medium transition-all ${searchBy === 'vendor' ? 'bg-teal-600 text-white' : 'bg-slate-100 text-slate-600'}`}>
-                <DollarSign size={18} className="inline mr-2" />Vendor Name
+                <CreditCard size={18} className="inline mr-2" />Vendor Name
               </button>
             </div>
           </div>
