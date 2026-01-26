@@ -1,12 +1,16 @@
 // FILE PATH: components/PurchasePayments.tsx
-// Purchase Payments Management - Record and track vendor payments
+// Purchase Payments Management - COMPLETE REDESIGN with Teal Theme
 
 'use client';
 import React, { useState, useEffect } from 'react';
-import { DollarSign, Plus, Search, X, Eye, Edit2, Trash2, Calendar, FileText, CreditCard, CheckCircle } from 'lucide-react';
+import { 
+  DollarSign, Plus, Search, X, Trash2, Calendar, FileText, 
+  CreditCard, Filter, ChevronRight, Package, TrendingUp, Check
+} from 'lucide-react';
 import { supabase } from '@/lib/supabase';
-import { Button, Card, Input, Select, Badge, EmptyState, LoadingSpinner, ConfirmDialog, useToast } from '@/components/ui';
+import { LoadingSpinner, ConfirmDialog, useToast } from '@/components/ui';
 import { useTheme } from '@/contexts/ThemeContext';
+import SearchableSelect from './SearchableSelect';
 
 type Payment = {
   id: string;
@@ -41,28 +45,23 @@ const PurchasePayments = () => {
   const { theme } = useTheme();
   const toast = useToast();
   
+  const [view, setView] = useState<'list' | 'add' | 'details'>('list');
   const [payments, setPayments] = useState<Payment[]>([]);
+  const [vendors, setVendors] = useState<any[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterMethod, setFilterMethod] = useState('all');
   const [filterDateFrom, setFilterDateFrom] = useState('');
   const [filterDateTo, setFilterDateTo] = useState('');
   const [sortBy, setSortBy] = useState('payment_date');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
-  const [showFilterModal, setShowFilterModal] = useState(false);
-  const [showAddModal, setShowAddModal] = useState(false);
-  const [showViewModal, setShowViewModal] = useState(false);
-  const [showEditModal, setShowEditModal] = useState(false);
-  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
-  const [showPaymentConfirm, setShowPaymentConfirm] = useState(false);
+  const [showFilterSheet, setShowFilterSheet] = useState(false);
   const [viewingPayment, setViewingPayment] = useState<Payment | null>(null);
-  const [editingPayment, setEditingPayment] = useState<Payment | null>(null);
   const [deletingPayment, setDeletingPayment] = useState<{ id: string; payment_number: string } | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
 
   // Add payment flow
   const [searchBy, setSearchBy] = useState<'invoice' | 'vendor'>('invoice');
-  const [vendors, setVendors] = useState<any[]>([]);
   const [unpaidRecords, setUnpaidRecords] = useState<PurchaseRecord[]>([]);
   const [selectedVendor, setSelectedVendor] = useState('');
   const [selectedRecord, setSelectedRecord] = useState<PurchaseRecord | null>(null);
@@ -144,26 +143,7 @@ const PurchasePayments = () => {
       const { data: records, error } = await query;
       if (error) throw error;
 
-      // Calculate paid and pending amounts for each record
-      const recordsWithAmounts = await Promise.all(
-        (records || []).map(async (record) => {
-          const { data: payments } = await supabase
-            .from('purchase_payments')
-            .select('amount')
-            .eq('purchase_invoice_id', record.id);
-
-          const paid_amount = payments?.reduce((sum, p) => sum + p.amount, 0) || 0;
-          const pending_amount = record.total_amount - paid_amount;
-
-          return {
-            ...record,
-            paid_amount,
-            pending_amount
-          };
-        })
-      );
-
-      setUnpaidRecords(recordsWithAmounts);
+      setUnpaidRecords(records || []);
     } catch (err: any) {
       console.error('Error loading records:', err);
       toast.error('Failed to load', 'Could not load purchase records.');
@@ -180,7 +160,7 @@ const PurchasePayments = () => {
         .from('purchase_invoice_items')
         .select(`
           *,
-          item:items(name, unit:units(abbreviation))
+          item:items(name)
         `)
         .eq('purchase_invoice_id', recordId);
 
@@ -194,7 +174,7 @@ const PurchasePayments = () => {
   }
 
   const handleAddPayment = () => {
-    setShowAddModal(true);
+    setView('add');
     setSearchBy('invoice');
     setSelectedVendor('');
     setSelectedRecord(null);
@@ -235,7 +215,7 @@ const PurchasePayments = () => {
     await loadRecordItems(record.id);
   };
 
-  const handleSubmitPayment = () => {
+  const handleSubmitPayment = async () => {
     if (!selectedRecord) {
       toast.warning('Select invoice', 'Please select an invoice first.');
       return;
@@ -248,19 +228,12 @@ const PurchasePayments = () => {
       toast.warning('Amount exceeds pending', 'Payment amount cannot exceed pending amount.');
       return;
     }
-    setShowPaymentConfirm(true);
-  };
-
-  const handleConfirmPayment = async () => {
-    if (!selectedRecord) return;
 
     try {
       setSaving(true);
-      setShowPaymentConfirm(false);
 
       const paymentNumber = `PAY-${Date.now()}`;
 
-      // Insert payment
       const { error: paymentError } = await supabase
         .from('purchase_payments')
         .insert({
@@ -275,22 +248,24 @@ const PurchasePayments = () => {
 
       if (paymentError) throw paymentError;
 
-      // Calculate new payment status
       const newPaidAmount = selectedRecord.paid_amount + paymentForm.amount;
       const newPendingAmount = selectedRecord.total_amount - newPaidAmount;
-      const newStatus = newPendingAmount <= 0 ? 'paid' : newPendingAmount < selectedRecord.total_amount ? 'partial' : 'pending';
+      const newStatus = newPendingAmount <= 0 ? 'paid' : 'partial';
 
-      // Update purchase record payment status
       const { error: updateError } = await supabase
         .from('purchase_invoices')
-        .update({ payment_status: newStatus })
+        .update({ 
+          paid_amount: newPaidAmount,
+          pending_amount: newPendingAmount,
+          payment_status: newStatus 
+        })
         .eq('id', selectedRecord.id);
 
       if (updateError) throw updateError;
 
       toast.success('Payment recorded!', `Payment ${paymentNumber} has been saved.`);
       await loadPayments();
-      setShowAddModal(false);
+      setView('list');
       setSelectedRecord(null);
     } catch (err: any) {
       console.error('Error recording payment:', err);
@@ -302,58 +277,10 @@ const PurchasePayments = () => {
 
   const handleView = (payment: Payment) => {
     setViewingPayment(payment);
-    setShowViewModal(true);
+    setView('details');
   };
 
-  const handleEdit = (payment: Payment) => {
-    setEditingPayment(payment);
-    setPaymentForm({
-      payment_date: payment.payment_date,
-      amount: payment.amount,
-      payment_method: payment.payment_method,
-      reference_number: payment.reference_number || '',
-      notes: payment.notes || ''
-    });
-    setShowEditModal(true);
-  };
-
-  const handleUpdatePayment = async () => {
-    if (!editingPayment) return;
-
-    try {
-      setSaving(true);
-
-      const { error } = await supabase
-        .from('purchase_payments')
-        .update({
-          payment_date: paymentForm.payment_date,
-          amount: paymentForm.amount,
-          payment_method: paymentForm.payment_method,
-          reference_number: paymentForm.reference_number || null,
-          notes: paymentForm.notes || null
-        })
-        .eq('id', editingPayment.id);
-
-      if (error) throw error;
-
-      toast.success('Updated!', 'Payment has been updated.');
-      await loadPayments();
-      setShowEditModal(false);
-      setEditingPayment(null);
-    } catch (err: any) {
-      console.error('Error updating payment:', err);
-      toast.error('Failed to update', err.message || 'Could not update payment.');
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const handleDeleteClick = (payment: Payment) => {
-    setDeletingPayment({ id: payment.id, payment_number: payment.payment_number });
-    setShowDeleteConfirm(true);
-  };
-
-  const handleDeleteConfirm = async () => {
+  const handleDelete = async () => {
     if (!deletingPayment) return;
 
     try {
@@ -366,28 +293,28 @@ const PurchasePayments = () => {
 
       toast.success('Deleted!', `Payment ${deletingPayment.payment_number} has been deleted.`);
       await loadPayments();
+      
+      if (view === 'details') {
+        setView('list');
+      }
     } catch (err: any) {
       console.error('Error deleting payment:', err);
       toast.error('Failed to delete', err.message || 'Could not delete payment.');
     } finally {
-      setShowDeleteConfirm(false);
       setDeletingPayment(null);
     }
   };
 
   const filteredPayments = payments
     .filter(payment => {
-      // Search filter
       const searchLower = searchTerm.toLowerCase();
       const matchesSearch = 
         payment.payment_number.toLowerCase().includes(searchLower) ||
         payment.purchase_invoice?.invoice_number.toLowerCase().includes(searchLower) ||
         payment.purchase_invoice?.vendor?.name.toLowerCase().includes(searchLower);
       
-      // Payment method filter
       const matchesMethod = filterMethod === 'all' || payment.payment_method === filterMethod;
       
-      // Date range filter
       const paymentDate = new Date(payment.payment_date);
       const matchesDateFrom = !filterDateFrom || paymentDate >= new Date(filterDateFrom);
       const matchesDateTo = !filterDateTo || paymentDate <= new Date(filterDateTo);
@@ -395,7 +322,7 @@ const PurchasePayments = () => {
       return matchesSearch && matchesMethod && matchesDateFrom && matchesDateTo;
     })
     .sort((a, b) => {
-      let aVal, bVal;
+      let aVal: any, bVal: any;
       
       switch (sortBy) {
         case 'payment_date':
@@ -426,680 +353,360 @@ const PurchasePayments = () => {
       }
     });
 
+  const stats = {
+    total: payments.length,
+    totalAmount: payments.reduce((sum, p) => sum + p.amount, 0),
+    thisMonth: payments.filter(p => new Date(p.payment_date).getMonth() === new Date().getMonth()).length,
+    thisMonthAmount: payments.filter(p => new Date(p.payment_date).getMonth() === new Date().getMonth()).reduce((sum, p) => sum + p.amount, 0)
+  };
+
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-slate-50">
+      <div className="min-h-screen flex items-center justify-center p-4">
         <div className="text-center">
           <LoadingSpinner size="lg" />
-          <p className="mt-4 text-slate-600 font-medium">Loading payments...</p>
+          <p className="text-slate-600 mt-4 font-medium">Loading payments...</p>
         </div>
       </div>
     );
   }
 
-  return (
-    <div className="min-h-screen bg-slate-50 p-4 md:p-6 lg:p-8">
-      <div className="max-w-7xl mx-auto space-y-6">
-        {/* Header */}
-        <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6">
-          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-            <div className="flex items-center gap-3">
-              <div className="p-3 bg-emerald-100 rounded-xl">
-                <DollarSign className="text-emerald-700" size={28} />
+  // LIST VIEW
+  if (view === 'list') {
+    return (
+      <div className="min-h-screen bg-slate-50">
+        {/* HERO */}
+        <div className="bg-gradient-to-br from-teal-600 to-teal-700 px-4 py-6 md:px-6 md:py-8">
+          <div className="max-w-6xl mx-auto">
+            <div className="flex items-center gap-3 mb-2">
+              <div className="p-3 bg-white/20 rounded-2xl backdrop-blur-sm">
+                <DollarSign className="text-white" size={28} />
               </div>
               <div>
-                <h1 className="text-2xl font-bold text-slate-900">Purchase Payments</h1>
-                <p className="text-slate-600 text-sm mt-0.5">Record and track vendor payments</p>
+                <h1 className="text-2xl md:text-3xl font-bold text-white">Purchase Payments</h1>
+                <p className="text-teal-100 text-sm md:text-base">Record and track payments</p>
               </div>
             </div>
-            <Button
-              onClick={handleAddPayment}
-              variant="primary"
-              icon={<Plus size={20} />}
-              className="shadow-sm"
-            >
-              Add Payment
-            </Button>
+            
+            <div className="mt-4 grid grid-cols-2 md:grid-cols-4 gap-2">
+              <div className="bg-white/10 backdrop-blur-sm rounded-xl p-3 border border-white/20">
+                <p className="text-teal-100 text-xs font-medium">Total Payments</p>
+                <p className="text-white text-xl font-bold mt-0.5">{stats.total}</p>
+              </div>
+              <div className="bg-white/10 backdrop-blur-sm rounded-xl p-3 border border-white/20">
+                <p className="text-teal-100 text-xs font-medium">Total Paid</p>
+                <p className="text-white text-xl font-bold mt-0.5">₹{(stats.totalAmount / 1000).toFixed(0)}K</p>
+              </div>
+              <div className="bg-white/10 backdrop-blur-sm rounded-xl p-3 border border-white/20">
+                <p className="text-teal-100 text-xs font-medium">This Month</p>
+                <p className="text-white text-xl font-bold mt-0.5">{stats.thisMonth}</p>
+              </div>
+              <div className="bg-white/10 backdrop-blur-sm rounded-xl p-3 border border-white/20">
+                <p className="text-teal-100 text-xs font-medium">Month Total</p>
+                <p className="text-white text-xl font-bold mt-0.5">₹{(stats.thisMonthAmount / 1000).toFixed(0)}K</p>
+              </div>
+            </div>
           </div>
         </div>
 
-        {/* Search and Filters */}
-        <Card padding="md">
-          <div className="flex flex-col md:flex-row gap-3">
-            <div className="flex-1">
-              <Input
-                placeholder="Search by payment number, invoice, or vendor..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                leftIcon={<Search size={18} />}
-                rightIcon={searchTerm ? (
-                  <button onClick={() => setSearchTerm('')} className="text-slate-400 hover:text-slate-600">
+        <div className="max-w-6xl mx-auto px-4 py-4 md:px-6 md:py-6 space-y-4">
+          
+          {/* Search & Filter */}
+          <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-3">
+            <div className="flex gap-2">
+              <div className="flex-1 relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+                <input
+                  type="text"
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  placeholder="Search payment, invoice, or vendor..."
+                  className="w-full pl-10 pr-10 py-2.5 border-2 border-slate-300 rounded-xl focus:ring-2 focus:ring-teal-500 text-slate-900 text-sm"
+                />
+                {searchTerm && (
+                  <button onClick={() => setSearchTerm('')} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600">
                     <X size={18} />
                   </button>
-                ) : undefined}
-              />
+                )}
+              </div>
+              <select value={sortBy} onChange={(e) => setSortBy(e.target.value)} className="px-3 py-2.5 border-2 border-slate-300 rounded-xl text-slate-900 text-sm bg-white">
+                <option value="payment_date">Date</option>
+                <option value="amount">Amount</option>
+                <option value="payment_number">Payment #</option>
+                <option value="vendor">Vendor</option>
+              </select>
+              <button onClick={() => setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc')} className="px-3 py-2.5 border-2 border-slate-300 rounded-xl text-slate-700 text-sm font-medium">
+                {sortOrder === 'desc' ? '↓' : '↑'}
+              </button>
+              <button onClick={() => setShowFilterSheet(true)} className="px-4 py-2.5 bg-teal-600 hover:bg-teal-700 text-white rounded-xl flex items-center gap-2 font-medium shadow-sm">
+                <Filter size={18} />
+                <span className="hidden sm:inline text-sm">Filter</span>
+              </button>
             </div>
-            
-            <Select
-              value={sortBy}
-              onChange={(e) => setSortBy(e.target.value)}
-              className="md:w-48"
-            >
-              <option value="payment_date">Sort by Date</option>
-              <option value="amount">Sort by Amount</option>
-              <option value="payment_number">Sort by Payment #</option>
-              <option value="vendor">Sort by Vendor</option>
-            </Select>
-            
-            <Button
-              onClick={() => setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc')}
-              variant="secondary"
-              size="md"
-            >
-              {sortOrder === 'desc' ? '↓ Newest' : '↑ Oldest'}
-            </Button>
-            
-            <Button
-              onClick={() => setShowFilterModal(true)}
-              variant="secondary"
-              size="md"
-              className="relative"
-            >
-              🔍 Filters
-              {(filterMethod !== 'all' || filterDateFrom || filterDateTo) && (
-                <span className="absolute -top-1 -right-1 w-5 h-5 bg-blue-600 text-white text-xs rounded-full flex items-center justify-center">
-                  {[filterMethod !== 'all', filterDateFrom, filterDateTo].filter(Boolean).length}
-                </span>
-              )}
-            </Button>
           </div>
-        </Card>
 
-        {/* Active Filters Display */}
-        {(filterMethod !== 'all' || filterDateFrom || filterDateTo) && (
-          <div className="flex flex-wrap gap-2 px-2">
-            {filterMethod !== 'all' && (
-              <Badge variant="primary">
-                Method: {filterMethod} 
-                <button onClick={() => setFilterMethod('all')} className="ml-2">×</button>
-              </Badge>
-            )}
-            {filterDateFrom && (
-              <Badge variant="primary">
-                From: {new Date(filterDateFrom).toLocaleDateString()}
-                <button onClick={() => setFilterDateFrom('')} className="ml-2">×</button>
-              </Badge>
-            )}
-            {filterDateTo && (
-              <Badge variant="primary">
-                To: {new Date(filterDateTo).toLocaleDateString()}
-                <button onClick={() => setFilterDateTo('')} className="ml-2">×</button>
-              </Badge>
-            )}
-            <button 
-              onClick={() => { setFilterMethod('all'); setFilterDateFrom(''); setFilterDateTo(''); }}
-              className="text-sm text-slate-600 hover:text-slate-900 underline"
-            >
-              Clear all
-            </button>
-          </div>
-        )}
-
-        {/* Payments List */}
-        {filteredPayments.length === 0 ? (
-          <Card>
-            <EmptyState
-              icon={<DollarSign size={64} />}
-              title={searchTerm ? "No payments found" : "No payments yet"}
-              description={
-                searchTerm
-                  ? "Try adjusting your search"
-                  : "Payments will appear here once you record them"
-              }
-              action={
-                !searchTerm ? (
-                  <Button onClick={handleAddPayment} variant="primary" icon={<Plus size={18} />}>
-                    Record First Payment
-                  </Button>
-                ) : null
-              }
-            />
-          </Card>
-        ) : (
-          <div className="space-y-3">
-            {filteredPayments.map((payment) => (
-              <Card key={payment.id} hover padding="lg">
-                <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-                  <div className="flex-1">
-                    <div className="flex items-center gap-3 mb-3">
-                      <div className="p-2 bg-emerald-50 rounded-lg">
-                        <CreditCard className="text-emerald-600" size={20} />
-                      </div>
-                      <div>
-                        <h3 className="font-bold text-slate-900">{payment.payment_number}</h3>
-                        <p className="text-sm text-slate-600">
-                          Invoice: {payment.purchase_invoice?.invoice_number}
-                        </p>
-                      </div>
+          {/* Payments List */}
+          {filteredPayments.length === 0 ? (
+            <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-12 text-center">
+              <div className="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                <DollarSign size={32} className="text-slate-400" />
+              </div>
+              <h3 className="text-lg font-bold text-slate-900 mb-2">No payments found</h3>
+              <p className="text-sm text-slate-600">{searchTerm ? "Try adjusting filters" : "Payments will appear here"}</p>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {filteredPayments.map((payment) => (
+                <button key={payment.id} onClick={() => handleView(payment)} className="w-full bg-white rounded-2xl shadow-sm border border-slate-200 p-4 hover:shadow-md transition-all active:scale-[0.99] text-left">
+                  <div className="flex items-start justify-between mb-3">
+                    <div>
+                      <h3 className="font-bold text-slate-900 text-base">{payment.payment_number}</h3>
+                      <p className="text-sm text-slate-600">{payment.purchase_invoice?.vendor?.name}</p>
+                      <p className="text-xs text-teal-600 mt-0.5">Invoice: {payment.purchase_invoice?.invoice_number}</p>
                     </div>
-                    
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
-                      <div>
-                        <p className="text-slate-500 font-medium">Vendor</p>
-                        <p className="text-slate-900 font-semibold">{payment.purchase_invoice?.vendor?.name}</p>
-                      </div>
-                      <div>
-                        <p className="text-slate-500 font-medium">Date</p>
-                        <p className="text-slate-900 font-semibold">{new Date(payment.payment_date).toLocaleDateString()}</p>
-                      </div>
-                      <div>
-                        <p className="text-slate-500 font-medium">Amount</p>
-                        <p className="text-emerald-600 font-bold text-lg">₹{payment.amount.toLocaleString()}</p>
-                      </div>
-                      <div>
-                        <p className="text-slate-500 font-medium">Method</p>
-                        <Badge variant="neutral" size="sm">{payment.payment_method}</Badge>
-                      </div>
+                    <div className="px-2.5 py-1 bg-teal-100 text-teal-700 rounded-full text-xs font-semibold">{payment.payment_method.toUpperCase()}</div>
+                  </div>
+                  <div className="flex items-center justify-between pt-3 border-t border-slate-200">
+                    <div className="flex items-center gap-1 text-xs text-slate-600">
+                      <Calendar size={14} />
+                      {new Date(payment.payment_date).toLocaleDateString()}
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-lg font-bold text-teal-700">₹{payment.amount.toFixed(0)}</span>
+                      <ChevronRight size={18} className="text-slate-400" />
                     </div>
                   </div>
+                </button>
+              ))}
+            </div>
+          )}
 
-                  <div className="flex gap-2">
-                    <button
-                      onClick={() => handleView(payment)}
-                      className="p-2.5 rounded-lg bg-slate-100 text-slate-600 hover:bg-slate-200 transition-colors"
-                      title="View"
-                    >
-                      <Eye size={18} />
-                    </button>
-                    <button
-                      onClick={() => handleEdit(payment)}
-                      className="p-2.5 rounded-lg bg-blue-50 text-blue-600 hover:bg-blue-100 transition-colors"
-                      title="Edit"
-                    >
-                      <Edit2 size={18} />
-                    </button>
-                    <button
-                      onClick={() => handleDeleteClick(payment)}
-                      className="p-2.5 rounded-lg bg-red-50 text-red-600 hover:bg-red-100 transition-colors"
-                      title="Delete"
-                    >
-                      <Trash2 size={18} />
-                    </button>
+          <div className="h-20 md:h-4" />
+        </div>
+
+        {/* Add Payment Button */}
+        <div className="fixed bottom-20 left-0 right-0 md:relative md:bottom-0 px-4 pb-4 md:max-w-6xl md:mx-auto z-30 bg-slate-50 md:bg-transparent">
+          <button onClick={handleAddPayment} className="w-full bg-gradient-to-r from-teal-600 to-teal-700 hover:from-teal-700 hover:to-teal-800 text-white font-bold py-4 rounded-2xl shadow-lg active:scale-[0.98] transition-all flex items-center justify-center gap-3">
+            <Plus size={24} />
+            Record Payment
+          </button>
+        </div>
+
+        {/* Filter Sheet */}
+        {showFilterSheet && (
+          <>
+            <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-[60]" onClick={() => setShowFilterSheet(false)} />
+            <div className="fixed bottom-0 left-0 right-0 bg-white rounded-t-3xl z-[70] max-h-[80vh] flex flex-col shadow-2xl">
+              <div className="flex items-center justify-between p-4 border-b bg-gradient-to-r from-teal-600 to-teal-700 rounded-t-3xl">
+                <h2 className="text-xl font-bold text-white">Filter Payments</h2>
+                <button onClick={() => setShowFilterSheet(false)} className="p-2 hover:bg-white/20 rounded-lg"><X size={24} className="text-white" /></button>
+              </div>
+              <div className="flex-1 overflow-y-auto p-4 space-y-4">
+                <div>
+                  <label className="text-sm font-bold text-slate-900 mb-2 block">Payment Method</label>
+                  <select value={filterMethod} onChange={(e) => setFilterMethod(e.target.value)} className="w-full px-3 py-2.5 border-2 border-slate-300 rounded-lg text-slate-900">
+                    <option value="all">All Methods</option>
+                    <option value="cash">Cash</option>
+                    <option value="card">Card</option>
+                    <option value="upi">UPI</option>
+                    <option value="bank_transfer">Bank Transfer</option>
+                    <option value="cheque">Cheque</option>
+                  </select>
+                </div>
+                <div className="pt-3 border-t">
+                  <label className="text-sm font-bold text-slate-900 mb-2 block">Date Range</label>
+                  <div className="grid grid-cols-2 gap-2">
+                    <div><label className="text-xs text-slate-600 mb-1 block">From</label><input type="date" value={filterDateFrom} onChange={(e) => setFilterDateFrom(e.target.value)} className="w-full px-2 py-2 border-2 border-slate-300 rounded-lg text-slate-900 text-sm" /></div>
+                    <div><label className="text-xs text-slate-600 mb-1 block">To</label><input type="date" value={filterDateTo} onChange={(e) => setFilterDateTo(e.target.value)} className="w-full px-2 py-2 border-2 border-slate-300 rounded-lg text-slate-900 text-sm" /></div>
                   </div>
                 </div>
-              </Card>
-            ))}
-          </div>
+                <button onClick={() => { setFilterMethod('all'); setFilterDateFrom(''); setFilterDateTo(''); setShowFilterSheet(false); }} className="w-full px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-medium mt-2">Clear Filters</button>
+              </div>
+            </div>
+          </>
         )}
       </div>
+    );
+  }
 
-      {/* Add Payment Modal */}
-      {showAddModal && (
-        <div className="fixed inset-0 bg-black/20 backdrop-blur-sm flex items-start justify-center p-4 z-50 overflow-y-auto">
-          <div className="min-h-screen w-full flex items-center justify-center py-8">
-            <Card className="w-full max-w-4xl">
-              <div className="flex items-center justify-between mb-6">
-                <div className="flex items-center gap-3">
-                  <div className="p-2.5 bg-emerald-100 rounded-xl">
-                    <Plus className="text-emerald-700" size={24} />
-                  </div>
-                  <h3 className="text-xl font-bold text-slate-900">Record Payment</h3>
-                </div>
-                <button
-                  onClick={() => setShowAddModal(false)}
-                  className="p-2 rounded-lg hover:bg-slate-100 transition-colors"
-                >
-                  <X size={24} className="text-slate-600" />
-                </button>
+  // ADD PAYMENT VIEW
+  if (view === 'add') {
+    return (
+      <div className="min-h-screen bg-slate-50">
+        <div className="bg-gradient-to-br from-teal-600 to-teal-700 px-4 py-6 md:px-6 md:py-8">
+          <div className="max-w-6xl mx-auto">
+            <div className="flex items-center gap-3 mb-2">
+              <button onClick={() => setView('list')} className="p-2 bg-white/20 rounded-xl backdrop-blur-sm hover:bg-white/30"><X className="text-white" size={24} /></button>
+              <div className="flex items-center gap-3 flex-1">
+                <div className="p-3 bg-white/20 rounded-2xl backdrop-blur-sm"><Plus className="text-white" size={28} /></div>
+                <div><h1 className="text-xl md:text-2xl font-bold text-white">Record Payment</h1><p className="text-teal-100 text-sm">Add new payment</p></div>
               </div>
+            </div>
+          </div>
+        </div>
 
-              <div className="space-y-6">
-                {/* Search By */}
-                <div>
-                  <label className="block text-sm font-semibold text-slate-700 mb-2">Search By</label>
-                  <div className="flex gap-3">
-                    <button
-                      onClick={() => handleSearchByChange('invoice')}
-                      className={`flex-1 px-4 py-3 rounded-xl font-medium transition-all ${
-                        searchBy === 'invoice'
-                          ? 'bg-emerald-600 text-white shadow-md'
-                          : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                      }`}
-                    >
-                      <FileText size={18} className="inline mr-2" />
-                      Invoice Number
-                    </button>
-                    <button
-                      onClick={() => handleSearchByChange('vendor')}
-                      className={`flex-1 px-4 py-3 rounded-xl font-medium transition-all ${
-                        searchBy === 'vendor'
-                          ? 'bg-emerald-600 text-white shadow-md'
-                          : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                      }`}
-                    >
-                      <DollarSign size={18} className="inline mr-2" />
-                      Vendor Name
-                    </button>
-                  </div>
-                </div>
+        <div className="max-w-6xl mx-auto px-4 py-4 md:px-6 md:py-6 space-y-4">
+          
+          {/* Search By */}
+          <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-4">
+            <label className="block text-sm font-bold text-slate-900 mb-2">Search By</label>
+            <div className="flex gap-3">
+              <button onClick={() => handleSearchByChange('invoice')} className={`flex-1 px-4 py-3 rounded-xl font-medium transition-all ${searchBy === 'invoice' ? 'bg-teal-600 text-white' : 'bg-slate-100 text-slate-600'}`}>
+                <FileText size={18} className="inline mr-2" />Invoice Number
+              </button>
+              <button onClick={() => handleSearchByChange('vendor')} className={`flex-1 px-4 py-3 rounded-xl font-medium transition-all ${searchBy === 'vendor' ? 'bg-teal-600 text-white' : 'bg-slate-100 text-slate-600'}`}>
+                <DollarSign size={18} className="inline mr-2" />Vendor Name
+              </button>
+            </div>
+          </div>
 
-                {/* Vendor Selection (if searchBy === 'vendor') */}
-                {searchBy === 'vendor' && (
-                  <div>
-                    <label className="block text-sm font-semibold text-slate-700 mb-2">Select Vendor</label>
-                    <Select
-                      value={selectedVendor}
-                      onChange={(e) => handleVendorSelect(e.target.value)}
-                    >
-                      <option value="">Choose a vendor</option>
-                      {vendors.map(vendor => (
-                        <option key={vendor.id} value={vendor.id}>{vendor.name}</option>
-                      ))}
-                    </Select>
-                  </div>
-                )}
+          {/* Vendor Selection */}
+          {searchBy === 'vendor' && (
+            <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-4">
+              <label className="block text-sm font-bold text-slate-900 mb-2">Select Vendor</label>
+              <SearchableSelect
+                options={vendors.map(v => ({ value: v.id, label: v.name }))}
+                value={selectedVendor}
+                onChange={handleVendorSelect}
+                placeholder="Choose vendor"
+              />
+            </div>
+          )}
 
-                {/* Invoice Selection */}
-                {((searchBy === 'invoice' && unpaidRecords.length > 0) || 
-                  (searchBy === 'vendor' && selectedVendor && unpaidRecords.length > 0)) && (
-                  <div>
-                    <label className="block text-sm font-semibold text-slate-700 mb-2">Select Invoice</label>
-                    {loadingRecords ? (
-                      <div className="text-center py-8">
-                        <LoadingSpinner />
-                      </div>
-                    ) : (
-                      <div className="space-y-2 max-h-64 overflow-y-auto">
-                        {unpaidRecords.map(record => (
-                          <button
-                            key={record.id}
-                            onClick={() => handleRecordSelect(record)}
-                            className={`w-full text-left p-4 rounded-xl border-2 transition-all ${
-                              selectedRecord?.id === record.id
-                                ? 'border-emerald-600 bg-emerald-50'
-                                : 'border-slate-200 hover:border-slate-300 bg-white'
-                            }`}
-                          >
-                            <div className="flex justify-between items-start mb-2">
-                              <div>
-                                <p className="font-semibold text-slate-900">{record.invoice_number}</p>
-                                <p className="text-sm text-slate-600">{record.vendor?.name}</p>
-                              </div>
-                              <Badge variant={record.payment_status === 'pending' ? 'warning' : 'neutral'} size="sm">
-                                {record.payment_status}
-                              </Badge>
-                            </div>
-                            <div className="grid grid-cols-3 gap-2 text-sm">
-                              <div>
-                                <p className="text-slate-500">Total</p>
-                                <p className="font-semibold text-slate-900">₹{record.total_amount.toLocaleString()}</p>
-                              </div>
-                              <div>
-                                <p className="text-slate-500">Paid</p>
-                                <p className="font-semibold text-emerald-600">₹{record.paid_amount.toLocaleString()}</p>
-                              </div>
-                              <div>
-                                <p className="text-slate-500">Pending</p>
-                                <p className="font-semibold text-red-600">₹{record.pending_amount.toLocaleString()}</p>
-                              </div>
-                            </div>
-                          </button>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                )}
-
-                {/* Selected Invoice Details */}
-                {selectedRecord && (
-                  <>
-                    <div className="bg-slate-50 rounded-xl p-5">
-                      <h4 className="font-bold text-slate-900 mb-4">Invoice Items</h4>
-                      {loadingItems ? (
-                        <LoadingSpinner />
-                      ) : (
-                        <div className="space-y-2">
-                          {recordItems.map((item, idx) => (
-                            <div key={item.id} className="flex justify-between text-sm">
-                              <span className="text-slate-700">
-                                {idx + 1}. {item.item?.name} × {item.quantity}
-                              </span>
-                              <span className="font-semibold text-slate-900">₹{item.amount.toFixed(2)}</span>
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Payment Form */}
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <Input
-                        label="Payment Date"
-                        type="date"
-                        value={paymentForm.payment_date}
-                        onChange={(e) => setPaymentForm({ ...paymentForm, payment_date: e.target.value })}
-                        required
-                        leftIcon={<Calendar size={18} />}
-                      />
-
-                      <Input
-                        label="Payment Amount"
-                        type="number"
-                        step="0.01"
-                        placeholder="0.00"
-                        value={paymentForm.amount || ''}
-                        onChange={(e) => setPaymentForm({ ...paymentForm, amount: parseFloat(e.target.value) || 0 })}
-                        required
-                        leftIcon={<DollarSign size={18} />}
-                        helperText={`Max: ₹${selectedRecord.pending_amount.toLocaleString()}`}
-                      />
-
+          {/* Invoice Selection */}
+          {((searchBy === 'invoice' && unpaidRecords.length > 0) || (searchBy === 'vendor' && selectedVendor && unpaidRecords.length > 0)) && (
+            <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+              <div className="p-4 border-b"><h3 className="font-bold text-slate-900">Select Invoice ({unpaidRecords.length})</h3></div>
+              <div className="p-4 space-y-2 max-h-96 overflow-y-auto">
+                {loadingRecords ? <div className="text-center py-8"><LoadingSpinner /></div> : unpaidRecords.map(record => (
+                  <button key={record.id} onClick={() => handleRecordSelect(record)} className={`w-full text-left p-4 rounded-xl border-2 transition-all ${selectedRecord?.id === record.id ? 'border-teal-600 bg-teal-50' : 'border-slate-200 hover:border-slate-300'}`}>
+                    <div className="flex justify-between items-start mb-2">
                       <div>
-                        <label className="block text-sm font-semibold text-slate-700 mb-2">Payment Method</label>
-                        <Select
-                          value={paymentForm.payment_method}
-                          onChange={(e) => setPaymentForm({ ...paymentForm, payment_method: e.target.value })}
-                        >
-                          <option value="cash">Cash</option>
-                          <option value="card">Card</option>
-                          <option value="upi">UPI</option>
-                          <option value="bank_transfer">Bank Transfer</option>
-                          <option value="cheque">Cheque</option>
-                        </Select>
+                        <p className="font-semibold text-slate-900">{record.invoice_number}</p>
+                        <p className="text-sm text-slate-600">{record.vendor?.name}</p>
                       </div>
-
-                      <Input
-                        label="Reference Number"
-                        placeholder="Transaction/Cheque number (optional)"
-                        value={paymentForm.reference_number}
-                        onChange={(e) => setPaymentForm({ ...paymentForm, reference_number: e.target.value })}
-                      />
+                      <div className={`px-2.5 py-1 rounded-full text-xs font-semibold ${record.payment_status === 'pending' ? 'bg-amber-100 text-amber-700' : 'bg-blue-100 text-blue-700'}`}>{record.payment_status}</div>
                     </div>
-
-                    <Input
-                      label="Notes"
-                      placeholder="Additional notes (optional)"
-                      value={paymentForm.notes}
-                      onChange={(e) => setPaymentForm({ ...paymentForm, notes: e.target.value })}
-                    />
-                  </>
-                )}
-              </div>
-
-              <div className="flex gap-3 mt-6">
-                <Button onClick={() => setShowAddModal(false)} variant="secondary" fullWidth>
-                  Cancel
-                </Button>
-                <Button 
-                  onClick={handleSubmitPayment} 
-                  variant="primary" 
-                  fullWidth 
-                  disabled={!selectedRecord || paymentForm.amount <= 0}
-                >
-                  Record Payment
-                </Button>
-              </div>
-            </Card>
-          </div>
-        </div>
-      )}
-
-      {/* Payment Confirmation Dialog */}
-      {showPaymentConfirm && selectedRecord && (
-        <ConfirmDialog
-          isOpen={showPaymentConfirm}
-          onClose={() => setShowPaymentConfirm(false)}
-          onConfirm={handleConfirmPayment}
-          title="Confirm Payment"
-          message={`
-Record payment of ₹${paymentForm.amount.toLocaleString()} against invoice ${selectedRecord.invoice_number}?
-
-Total: ₹${selectedRecord.total_amount.toLocaleString()}
-Paid: ₹${selectedRecord.paid_amount.toLocaleString()}
-This Payment: ₹${paymentForm.amount.toLocaleString()}
-Remaining: ₹${(selectedRecord.pending_amount - paymentForm.amount).toLocaleString()}
-          `}
-          confirmText="Confirm Payment"
-          cancelText="Cancel"
-          variant="primary"
-        />
-      )}
-
-      {/* View Modal */}
-      {showViewModal && viewingPayment && (
-        <div className="fixed inset-0 bg-black/20 backdrop-blur-sm flex items-start justify-center p-4 z-50 overflow-y-auto">
-          <div className="min-h-screen w-full flex items-center justify-center py-8">
-            <Card className="w-full max-w-2xl">
-              <div className="flex items-center justify-between mb-6">
-                <h3 className="text-xl font-bold text-slate-900">Payment Details</h3>
-                <button
-                  onClick={() => setShowViewModal(false)}
-                  className="p-2 rounded-lg hover:bg-slate-100"
-                >
-                  <X size={24} />
-                </button>
-              </div>
-
-              <div className="space-y-4">
-                <div className="bg-slate-50 rounded-xl p-4 grid grid-cols-2 gap-4">
-                  <div>
-                    <p className="text-sm text-slate-500">Payment Number</p>
-                    <p className="font-semibold text-slate-900">{viewingPayment.payment_number}</p>
-                  </div>
-                  <div>
-                    <p className="text-sm text-slate-500">Date</p>
-                    <p className="font-semibold text-slate-900">{new Date(viewingPayment.payment_date).toLocaleDateString()}</p>
-                  </div>
-                  <div>
-                    <p className="text-sm text-slate-500">Invoice</p>
-                    <p className="font-semibold text-slate-900">{viewingPayment.purchase_invoice?.invoice_number}</p>
-                  </div>
-                  <div>
-                    <p className="text-sm text-slate-500">Vendor</p>
-                    <p className="font-semibold text-slate-900">{viewingPayment.purchase_invoice?.vendor?.name}</p>
-                  </div>
-                  <div>
-                    <p className="text-sm text-slate-500">Amount</p>
-                    <p className="font-bold text-emerald-600 text-lg">₹{viewingPayment.amount.toLocaleString()}</p>
-                  </div>
-                  <div>
-                    <p className="text-sm text-slate-500">Method</p>
-                    <p className="font-semibold text-slate-900">{viewingPayment.payment_method}</p>
-                  </div>
-                  {viewingPayment.reference_number && (
-                    <div className="col-span-2">
-                      <p className="text-sm text-slate-500">Reference</p>
-                      <p className="font-semibold text-slate-900">{viewingPayment.reference_number}</p>
+                    <div className="grid grid-cols-3 gap-2 text-xs">
+                      <div><p className="text-slate-500">Total</p><p className="font-semibold">₹{record.total_amount.toFixed(0)}</p></div>
+                      <div><p className="text-slate-500">Paid</p><p className="font-semibold text-green-600">₹{record.paid_amount.toFixed(0)}</p></div>
+                      <div><p className="text-slate-500">Pending</p><p className="font-semibold text-red-600">₹{record.pending_amount.toFixed(0)}</p></div>
                     </div>
-                  )}
-                  {viewingPayment.notes && (
-                    <div className="col-span-2">
-                      <p className="text-sm text-slate-500">Notes</p>
-                      <p className="text-slate-900">{viewingPayment.notes}</p>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Selected Invoice Items */}
+          {selectedRecord && (
+            <>
+              <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+                <div className="p-4 border-b"><h3 className="font-bold text-slate-900 flex items-center gap-2"><Package size={18} className="text-teal-600" />Invoice Items</h3></div>
+                <div className="p-4 space-y-2">
+                  {loadingItems ? <LoadingSpinner /> : recordItems.map((item, idx) => (
+                    <div key={item.id} className="flex justify-between text-sm">
+                      <span className="text-slate-700">{idx + 1}. {item.item?.name} × {item.quantity}</span>
+                      <span className="font-semibold text-slate-900">₹{item.amount.toFixed(0)}</span>
                     </div>
-                  )}
+                  ))}
                 </div>
               </div>
 
-              <div className="mt-6">
-                <Button onClick={() => setShowViewModal(false)} variant="secondary" fullWidth>
-                  Close
-                </Button>
-              </div>
-            </Card>
-          </div>
-        </div>
-      )}
-
-      {/* Edit Modal */}
-      {showEditModal && editingPayment && (
-        <div className="fixed inset-0 bg-black/20 backdrop-blur-sm flex items-start justify-center p-4 z-50 overflow-y-auto">
-          <div className="min-h-screen w-full flex items-center justify-center py-8">
-            <Card className="w-full max-w-2xl">
-              <div className="flex items-center justify-between mb-6">
-                <h3 className="text-xl font-bold text-slate-900">Edit Payment</h3>
-                <button
-                  onClick={() => setShowEditModal(false)}
-                  className="p-2 rounded-lg hover:bg-slate-100"
-                >
-                  <X size={24} />
-                </button>
-              </div>
-
-              <div className="space-y-4">
+              {/* Payment Form */}
+              <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-4 space-y-4">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <Input
-                    label="Payment Date"
-                    type="date"
-                    value={paymentForm.payment_date}
-                    onChange={(e) => setPaymentForm({ ...paymentForm, payment_date: e.target.value })}
-                    required
-                  />
-
-                  <Input
-                    label="Amount"
-                    type="number"
-                    step="0.01"
-                    value={paymentForm.amount || ''}
-                    onChange={(e) => setPaymentForm({ ...paymentForm, amount: parseFloat(e.target.value) || 0 })}
-                    required
-                  />
-
                   <div>
-                    <label className="block text-sm font-semibold text-slate-700 mb-2">Payment Method</label>
-                    <Select
-                      value={paymentForm.payment_method}
-                      onChange={(e) => setPaymentForm({ ...paymentForm, payment_method: e.target.value })}
-                    >
+                    <label className="block text-xs font-bold text-slate-700 mb-1.5">Payment Date</label>
+                    <input type="date" value={paymentForm.payment_date} onChange={(e) => setPaymentForm({ ...paymentForm, payment_date: e.target.value })} className="w-full px-3 py-2.5 border-2 border-slate-300 rounded-lg focus:ring-2 focus:ring-teal-500 text-slate-900 text-sm" />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1.5">Amount (₹)</label>
+                    <input type="number" step="0.01" value={paymentForm.amount || ''} onChange={(e) => setPaymentForm({ ...paymentForm, amount: parseFloat(e.target.value) || 0 })} className="w-full px-3 py-2.5 border-2 border-slate-300 rounded-lg focus:ring-2 focus:ring-teal-500 text-slate-900 text-sm" />
+                    <p className="text-xs text-slate-500 mt-1">Max: ₹{selectedRecord.pending_amount.toFixed(0)}</p>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1.5">Payment Method</label>
+                    <select value={paymentForm.payment_method} onChange={(e) => setPaymentForm({ ...paymentForm, payment_method: e.target.value })} className="w-full px-3 py-2.5 border-2 border-slate-300 rounded-lg focus:ring-2 focus:ring-teal-500 text-slate-900 text-sm">
                       <option value="cash">Cash</option>
                       <option value="card">Card</option>
                       <option value="upi">UPI</option>
                       <option value="bank_transfer">Bank Transfer</option>
                       <option value="cheque">Cheque</option>
-                    </Select>
+                    </select>
                   </div>
-
-                  <Input
-                    label="Reference Number"
-                    placeholder="Optional"
-                    value={paymentForm.reference_number}
-                    onChange={(e) => setPaymentForm({ ...paymentForm, reference_number: e.target.value })}
-                  />
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1.5">Reference Number</label>
+                    <input type="text" value={paymentForm.reference_number} onChange={(e) => setPaymentForm({ ...paymentForm, reference_number: e.target.value })} placeholder="Transaction ID (optional)" className="w-full px-3 py-2.5 border-2 border-slate-300 rounded-lg focus:ring-2 focus:ring-teal-500 text-slate-900 text-sm" />
+                  </div>
                 </div>
-
-                <Input
-                  label="Notes"
-                  placeholder="Optional"
-                  value={paymentForm.notes}
-                  onChange={(e) => setPaymentForm({ ...paymentForm, notes: e.target.value })}
-                />
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1.5">Notes</label>
+                  <textarea value={paymentForm.notes} onChange={(e) => setPaymentForm({ ...paymentForm, notes: e.target.value })} rows={2} placeholder="Additional notes (optional)" className="w-full px-3 py-2.5 border-2 border-slate-300 rounded-lg focus:ring-2 focus:ring-teal-500 text-slate-900 text-sm resize-none" />
+                </div>
               </div>
 
-              <div className="flex gap-3 mt-6">
-                <Button onClick={() => setShowEditModal(false)} variant="secondary" fullWidth>
-                  Cancel
-                </Button>
-                <Button onClick={handleUpdatePayment} variant="primary" fullWidth loading={saving}>
-                  Update Payment
-                </Button>
+              {/* Submit Button */}
+              <div className="sticky bottom-20 md:relative md:bottom-0">
+                <button onClick={handleSubmitPayment} disabled={saving || paymentForm.amount <= 0} className="w-full bg-gradient-to-r from-teal-600 to-teal-700 hover:from-teal-700 hover:to-teal-800 disabled:from-slate-400 disabled:to-slate-500 text-white font-bold py-4 rounded-2xl shadow-lg active:scale-[0.98] transition-all flex items-center justify-center gap-3">
+                  {saving ? <><LoadingSpinner size="sm" />Recording...</> : <><Check size={24} />Record Payment</>}
+                </button>
               </div>
-            </Card>
+            </>
+          )}
+
+          <div className="h-4 md:hidden" />
+        </div>
+      </div>
+    );
+  }
+
+  // DETAILS VIEW
+  if (view === 'details' && viewingPayment) {
+    return (
+      <div className="min-h-screen bg-slate-50">
+        <div className="bg-gradient-to-br from-teal-600 to-teal-700 px-4 py-6 md:px-6 md:py-8">
+          <div className="max-w-6xl mx-auto">
+            <div className="flex items-center gap-3 mb-3">
+              <button onClick={() => setView('list')} className="p-2 bg-white/20 rounded-xl backdrop-blur-sm hover:bg-white/30"><X className="text-white" size={24} /></button>
+              <div className="flex items-center gap-3 flex-1">
+                <div className="p-3 bg-white/20 rounded-2xl backdrop-blur-sm"><CreditCard className="text-white" size={28} /></div>
+                <div className="flex-1">
+                  <h1 className="text-xl md:text-2xl font-bold text-white">{viewingPayment.payment_number}</h1>
+                  <p className="text-teal-100 text-sm">{viewingPayment.purchase_invoice?.vendor?.name}</p>
+                </div>
+              </div>
+            </div>
+            <div className="flex justify-between items-center">
+              <div className="px-2.5 py-1 bg-white/20 rounded-full text-xs font-semibold text-white">{viewingPayment.payment_method.toUpperCase()}</div>
+              <div className="text-right"><p className="text-teal-100 text-xs">Amount</p><p className="text-white text-2xl font-bold">₹{viewingPayment.amount.toFixed(0)}</p></div>
+            </div>
           </div>
         </div>
-      )}
 
-      {/* Delete Confirmation */}
-      {showDeleteConfirm && deletingPayment && (
-        <ConfirmDialog
-          isOpen={showDeleteConfirm}
-          onClose={() => {
-            setShowDeleteConfirm(false);
-            setDeletingPayment(null);
-          }}
-          onConfirm={handleDeleteConfirm}
-          title="Delete Payment"
-          message={`Are you sure you want to delete payment "${deletingPayment.payment_number}"? This action cannot be undone.`}
-          confirmText="Delete"
-          cancelText="Cancel"
-          variant="danger"
-        />
-      )}
-
-      {/* Filter Modal */}
-      {showFilterModal && (
-        <div className="fixed inset-0 bg-black/20 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-          <Card className="w-full max-w-lg">
-            <div className="flex items-center justify-between mb-6">
-              <h3 className="text-xl font-bold text-slate-900">Filter Payments</h3>
-              <button onClick={() => setShowFilterModal(false)} className="text-slate-400 hover:text-slate-600">
-                <X size={24} />
-              </button>
+        <div className="max-w-6xl mx-auto px-4 py-4 md:px-6 md:py-6 space-y-4">
+          <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-4">
+            <h3 className="font-bold text-slate-900 mb-3 flex items-center gap-2"><FileText size={18} className="text-teal-600" />Payment Details</h3>
+            <div className="space-y-2 text-sm">
+              <div className="flex justify-between"><span className="text-slate-600">Payment Date</span><span className="font-medium text-slate-900">{new Date(viewingPayment.payment_date).toLocaleDateString()}</span></div>
+              <div className="flex justify-between"><span className="text-slate-600">Invoice</span><span className="font-medium text-teal-700">{viewingPayment.purchase_invoice?.invoice_number}</span></div>
+              <div className="flex justify-between"><span className="text-slate-600">Vendor</span><span className="font-medium text-slate-900">{viewingPayment.purchase_invoice?.vendor?.name}</span></div>
+              <div className="flex justify-between"><span className="text-slate-600">Method</span><span className="font-medium text-slate-900">{viewingPayment.payment_method}</span></div>
+              {viewingPayment.reference_number && <div className="flex justify-between"><span className="text-slate-600">Reference</span><span className="font-medium text-slate-900">{viewingPayment.reference_number}</span></div>}
+              {viewingPayment.notes && <div className="pt-2 border-t"><p className="text-slate-600 mb-1">Notes</p><p className="text-slate-900">{viewingPayment.notes}</p></div>}
             </div>
+          </div>
 
-            <div className="space-y-4">
-              {/* Payment Method Filter */}
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-2">Payment Method</label>
-                <Select
-                  value={filterMethod}
-                  onChange={(e) => setFilterMethod(e.target.value)}
-                >
-                  <option value="all">All Methods</option>
-                  <option value="cash">Cash</option>
-                  <option value="card">Card</option>
-                  <option value="upi">UPI</option>
-                  <option value="bank_transfer">Bank Transfer</option>
-                  <option value="cheque">Cheque</option>
-                </Select>
-              </div>
-
-              {/* Date Range Filter */}
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-2">From Date</label>
-                  <Input
-                    type="date"
-                    value={filterDateFrom}
-                    onChange={(e) => setFilterDateFrom(e.target.value)}
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-2">To Date</label>
-                  <Input
-                    type="date"
-                    value={filterDateTo}
-                    onChange={(e) => setFilterDateTo(e.target.value)}
-                  />
-                </div>
-              </div>
-
-              {/* Actions */}
-              <div className="flex gap-3 pt-4">
-                <Button
-                  onClick={() => {
-                    setFilterMethod('all');
-                    setFilterDateFrom('');
-                    setFilterDateTo('');
-                  }}
-                  variant="secondary"
-                  fullWidth
-                >
-                  Clear Filters
-                </Button>
-                <Button
-                  onClick={() => setShowFilterModal(false)}
-                  variant="primary"
-                  fullWidth
-                >
-                  Apply Filters
-                </Button>
-              </div>
-            </div>
-          </Card>
+          <button onClick={() => setDeletingPayment({ id: viewingPayment.id, payment_number: viewingPayment.payment_number })} className="w-full bg-red-50 hover:bg-red-100 border-2 border-red-200 text-red-700 font-bold py-3 rounded-2xl flex items-center justify-center gap-2"><Trash2 size={20} />Delete Payment</button>
+          <div className="h-4 md:hidden" />
         </div>
-      )}
-    </div>
-  );
+
+        <ConfirmDialog isOpen={!!deletingPayment} onClose={() => setDeletingPayment(null)} onConfirm={handleDelete} title="Delete Payment" message={`Delete payment "${deletingPayment?.payment_number}"? Cannot be undone.`} confirmText="Delete" cancelText="Cancel" variant="danger" />
+      </div>
+    );
+  }
+
+  return null;
 };
 
 export default PurchasePayments;
