@@ -3,10 +3,10 @@
 
 'use client';
 import React, { useState, useEffect } from 'react';
-import { RotateCcw, Plus, Search, Calendar, CreditCard, Edit2, Trash2, X, Filter, Package, AlertCircle, Eye } from 'lucide-react';
+import { RotateCcw, Plus, Search, Calendar, CreditCard, Edit2, Trash2, X, Filter, Package, AlertCircle, Eye, Camera } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { Button, Card, Input, Select, Badge, EmptyState, LoadingSpinner, ConfirmDialog, useToast } from '@/components/ui';
-import { useTheme } from '@/contexts/ThemeContext';
+import BarcodeScanner from './BarcodeScanner';
 
 type ReturnItem = {
   id: string;
@@ -36,7 +36,6 @@ type SalesReturn = {
 };
 
 const ReturnsManagement = () => {
-  const { theme } = useTheme();
   const toast = useToast();
   
   const [returns, setReturns] = useState<SalesReturn[]>([]);
@@ -56,6 +55,7 @@ const ReturnsManagement = () => {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [loadingInvoiceItems, setLoadingInvoiceItems] = useState(false);
+  const [showBarcodeScanner, setShowBarcodeScanner] = useState(false);
   
   // Filter and sort states
   const [filters, setFilters] = useState({
@@ -270,6 +270,54 @@ const ReturnsManagement = () => {
 
       return { ...item, return_quantity: quantity, amount };
     }));
+  };
+
+  const handleBarcodeScan = async (barcode: string) => {
+    if (!barcode) {
+      toast.error('Invalid scan', 'No barcode detected.');
+      return;
+    }
+
+    if (!formData.original_invoice_id) {
+      toast.warning('Select invoice first', 'Please select an invoice before scanning items.');
+      setShowBarcodeScanner(false);
+      return;
+    }
+
+    try {
+      // Find item in invoice items by barcode
+      const { data: itemData, error } = await supabase
+        .from('items')
+        .select('id, name')
+        .eq('barcode', barcode)
+        .single();
+
+      if (error || !itemData) {
+        toast.error('Item not found', `No item found with barcode: ${barcode}`);
+        return;
+      }
+
+      // Find this item in the return items list
+      const returnItem = returnItems.find(i => i.item_id === itemData.id);
+      if (!returnItem) {
+        toast.warning('Item not in invoice', `${itemData.name} was not in the selected invoice.`);
+        return;
+      }
+
+      // Increment return quantity
+      const newQuantity = Math.min(returnItem.return_quantity + 1, returnItem.original_quantity);
+      if (newQuantity === returnItem.return_quantity) {
+        toast.warning('Maximum reached', `Already returning all ${returnItem.original_quantity} units of ${itemData.name}.`);
+      } else {
+        updateReturnItem(returnItem.id, newQuantity);
+        toast.success('Quantity updated', `${itemData.name} return quantity: ${newQuantity}`);
+      }
+
+      setShowBarcodeScanner(false);
+    } catch (err: any) {
+      console.error('Barcode scan error:', err);
+      toast.error('Scan failed', err.message || 'Could not process barcode.');
+    }
   };
 
   const calculateTotals = () => {
@@ -665,42 +713,57 @@ const ReturnsManagement = () => {
   }
 
   return (
-    <div className="min-h-screen bg-slate-50 p-4 md:p-6 lg:p-8">
-      <div className="max-w-7xl mx-auto space-y-6">
-        {/* Header */}
-        <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6">
-          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-4">
+    <div className="min-h-screen bg-slate-50">
+      {/* HERO SECTION - Teal Gradient Header */}
+      <div className="bg-gradient-to-br from-teal-600 to-teal-700 px-4 py-6 md:px-6 md:py-8">
+        <div className="max-w-7xl mx-auto">
+          <div className="flex items-center justify-between mb-4">
             <div className="flex items-center gap-3">
-              <div className={`p-3 ${theme.classes.bgPrimaryLight} rounded-xl`}>
-                <RotateCcw className={theme.classes.textPrimary} size={28} />
+              <div className="p-3 bg-white/20 rounded-2xl backdrop-blur-sm">
+                <RotateCcw className="text-white" size={28} />
               </div>
               <div>
-                <h1 className="text-2xl font-bold text-slate-900">Returns & Refunds</h1>
-                <p className="text-slate-600 text-sm mt-0.5">Manage sales returns, refunds, and credit notes</p>
+                <h1 className="text-2xl md:text-3xl font-bold text-white">Returns & Refunds</h1>
+                <p className="text-teal-100 text-sm md:text-base">Process returns and issue credit notes</p>
               </div>
             </div>
-            <Button onClick={handleAddNew} variant="primary" icon={<Plus size={20} />}>
-              Record Return
-            </Button>
+            <button
+              onClick={handleAddNew}
+              className="hidden md:flex items-center gap-2 px-4 py-2.5 bg-white/20 hover:bg-white/30 backdrop-blur-sm text-white font-semibold rounded-xl transition-all border border-white/30"
+            >
+              <Plus size={20} />
+              <span>Record Return</span>
+            </button>
+          </div>
+          
+          {/* Quick Stats */}
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+            <div className="bg-white/10 backdrop-blur-sm rounded-xl p-3 md:p-4 border border-white/20">
+              <p className="text-teal-100 text-xs font-medium">Total Returns</p>
+              <p className="text-white text-xl md:text-2xl font-bold mt-1">₹{totalReturns.toLocaleString()}</p>
+            </div>
+            <div className="bg-white/10 backdrop-blur-sm rounded-xl p-3 md:p-4 border border-white/20">
+              <p className="text-teal-100 text-xs font-medium">Pending</p>
+              <p className="text-white text-xl md:text-2xl font-bold mt-1">{pendingCount}</p>
+            </div>
+            <div className="bg-white/10 backdrop-blur-sm rounded-xl p-3 md:p-4 border border-white/20 col-span-2 md:col-span-1">
+              <p className="text-teal-100 text-xs font-medium">Completed</p>
+              <p className="text-white text-xl md:text-2xl font-bold mt-1">{completedCount}</p>
+            </div>
           </div>
 
-          {/* Summary Cards */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div className={`${theme.classes.bgPrimaryLight} rounded-xl p-4`}>
-              <p className={`text-sm ${theme.classes.textPrimary} font-medium`}>Total Returns</p>
-              <p className={`text-2xl font-bold ${theme.classes.textPrimary} mt-1`}>₹{totalReturns.toLocaleString()}</p>
-            </div>
-            <div className="bg-amber-50 rounded-xl p-4">
-              <p className="text-sm text-amber-600 font-medium">Pending</p>
-              <p className="text-2xl font-bold text-amber-700 mt-1">{pendingCount}</p>
-            </div>
-            <div className="bg-green-50 rounded-xl p-4">
-              <p className="text-sm text-green-600 font-medium">Completed</p>
-              <p className="text-2xl font-bold text-green-700 mt-1">{completedCount}</p>
-            </div>
-          </div>
+          {/* Mobile Record Button */}
+          <button
+            onClick={handleAddNew}
+            className="md:hidden w-full mt-4 bg-white/20 hover:bg-white/30 backdrop-blur-sm text-white font-bold py-3 rounded-xl transition-all border border-white/30 flex items-center justify-center gap-2"
+          >
+            <Plus size={20} />
+            <span>Record Return</span>
+          </button>
         </div>
+      </div>
 
+      <div className="max-w-7xl mx-auto px-4 md:px-6 lg:px-8 py-6 space-y-6">
         {/* Search & Filters */}
         <Card padding="md">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
@@ -716,14 +779,13 @@ const ReturnsManagement = () => {
               ) : undefined}
             />
             <div className="flex gap-2">
-              <Button
+              <button
                 onClick={() => setShowFilterModal(true)}
-                variant="secondary"
-                icon={<Filter size={18} />}
-                className="flex-1"
+                className="flex-1 inline-flex items-center justify-center gap-2 px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold rounded-xl transition-colors"
               >
+                <Filter size={18} />
                 Filters
-              </Button>
+              </button>
               <Select
                 value={`${sortBy}-${sortOrder}`}
                 onChange={(e) => {
@@ -746,7 +808,7 @@ const ReturnsManagement = () => {
               onClick={() => setFilterStatus('all')}
               className={`flex-1 px-4 py-2 rounded-xl font-medium transition-all ${
                 filterStatus === 'all'
-                  ? `${theme.classes.bgPrimary} text-white shadow-md`
+                  ? 'bg-gradient-to-r from-teal-600 to-teal-700 text-white shadow-md'
                   : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
               }`}
             >
@@ -798,9 +860,13 @@ const ReturnsManagement = () => {
               }
               action={
                 !searchTerm && (
-                  <Button onClick={handleAddNew} variant="primary" icon={<Plus size={18} />}>
+                  <button
+                    onClick={handleAddNew}
+                    className="inline-flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-teal-600 to-teal-700 hover:from-teal-700 hover:to-teal-800 text-white font-semibold rounded-xl transition-all shadow-md"
+                  >
+                    <Plus size={18} />
                     Record First Return
-                  </Button>
+                  </button>
                 )
               }
             />
@@ -812,8 +878,8 @@ const ReturnsManagement = () => {
                 <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                   <div className="flex-1">
                     <div className="flex items-center gap-3 mb-3">
-                      <div className={`p-2 ${theme.classes.bgPrimaryLight} rounded-lg`}>
-                        <RotateCcw className={theme.classes.textPrimary} size={20} />
+                      <div className="p-2 bg-teal-50 rounded-lg">
+                        <RotateCcw className="text-teal-600" size={20} />
                       </div>
                       <div>
                         <h3 className="font-bold text-slate-900">{returnRecord.return_number}</h3>
@@ -846,7 +912,7 @@ const ReturnsManagement = () => {
                       </div>
                       <div>
                         <p className="text-slate-500 font-medium">Amount</p>
-                        <p className={`${theme.classes.textPrimary} font-bold text-lg`}>₹{returnRecord.total_amount.toLocaleString()}</p>
+                        <p className="text-teal-600 font-bold text-lg">₹{returnRecord.total_amount.toLocaleString()}</p>
                       </div>
                       {returnRecord.original_invoice_number && (
                         <div>
@@ -885,14 +951,13 @@ const ReturnsManagement = () => {
                         >
                           <Edit2 size={18} />
                         </button>
-                        <Button
+                        <button
                           onClick={() => handleProcessClick(returnRecord)}
-                          variant="primary"
-                          size="sm"
-                          icon={<Package size={16} />}
+                          className="inline-flex items-center gap-1.5 px-3 py-2 bg-gradient-to-r from-teal-600 to-teal-700 hover:from-teal-700 hover:to-teal-800 text-white text-sm font-semibold rounded-lg transition-all shadow-sm"
                         >
+                          <Package size={16} />
                           Process
-                        </Button>
+                        </button>
                       </>
                     )}
                     <button
@@ -914,23 +979,23 @@ const ReturnsManagement = () => {
       {showFilterModal && (
         <div className="fixed inset-0 bg-black/20 backdrop-blur-sm flex items-start justify-center p-4 z-50 overflow-y-auto">
           <div className="min-h-screen w-full flex items-center justify-center py-8">
-            <Card className="w-full max-w-2xl">
-              <div className="flex items-center justify-between mb-6">
+            <div className="bg-white rounded-3xl shadow-2xl w-full max-w-2xl overflow-hidden">
+              <div className="flex items-center justify-between p-4 border-b border-slate-200 bg-gradient-to-r from-teal-600 to-teal-700 rounded-t-3xl">
                 <div className="flex items-center gap-3">
-                  <div className={`p-2.5 ${theme.classes.bgPrimaryLight} rounded-xl`}>
-                    <Filter className={theme.classes.textPrimary} size={24} />
+                  <div className="p-2.5 bg-white/20 rounded-xl backdrop-blur-sm">
+                    <Filter className="text-white" size={24} />
                   </div>
-                  <h3 className="text-xl font-bold text-slate-900">Filter Returns</h3>
+                  <h3 className="text-xl font-bold text-white">Filter Returns</h3>
                 </div>
                 <button
                   onClick={() => setShowFilterModal(false)}
-                  className="p-2 rounded-lg hover:bg-slate-100"
+                  className="p-2 rounded-lg hover:bg-white/20 text-white transition-colors"
                 >
                   <X size={24} />
                 </button>
               </div>
 
-              <div className="space-y-4">
+              <div className="p-6 space-y-4">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <Input
                     label="Start Date"
@@ -997,16 +1062,18 @@ const ReturnsManagement = () => {
                       customerName: ''
                     });
                   }}
-                  variant="secondary"
-                  fullWidth
+                  className="flex-1 px-4 py-3 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold rounded-xl transition-colors"
                 >
                   Clear Filters
-                </Button>
-                <Button onClick={() => setShowFilterModal(false)} variant="primary" fullWidth>
+                </button>
+                <button
+                  onClick={() => setShowFilterModal(false)}
+                  className="flex-1 px-4 py-3 bg-gradient-to-r from-teal-600 to-teal-700 hover:from-teal-700 hover:to-teal-800 text-white font-semibold rounded-xl transition-all shadow-md"
+                >
                   Apply Filters
-                </Button>
+                </button>
               </div>
-            </Card>
+            </div>
           </div>
         </div>
       )}
@@ -1050,10 +1117,19 @@ const ReturnsManagement = () => {
                 {/* Items to Return */}
                 {formData.original_invoice_id && (
                   <div>
-                    <h4 className="font-bold text-slate-900 mb-4 flex items-center gap-2">
-                      <Package size={20} />
-                      Items to Return
-                    </h4>
+                    <div className="flex items-center justify-between mb-4">
+                      <h4 className="font-bold text-slate-900 flex items-center gap-2">
+                        <Package size={20} />
+                        Items to Return
+                      </h4>
+                      <button
+                        onClick={() => setShowBarcodeScanner(true)}
+                        className="flex items-center gap-2 px-3 py-1.5 text-sm font-medium text-teal-700 bg-teal-50 rounded-lg hover:bg-teal-100 transition-colors"
+                      >
+                        <Camera size={16} />
+                        Scan
+                      </button>
+                    </div>
                     
                     {loadingInvoiceItems ? (
                       <div className="text-center py-8">
@@ -1154,7 +1230,7 @@ const ReturnsManagement = () => {
                       )}
                       <div className="flex justify-between pt-3 border-t-2 border-slate-300">
                         <span className="font-bold text-lg">Total Refund</span>
-                        <span className={`font-bold text-2xl ${theme.classes.textPrimary}`}>₹{totals.total.toFixed(2)}</span>
+                        <span className="font-bold text-2xl text-teal-600">₹{totals.total.toFixed(2)}</span>
                       </div>
                     </div>
                   </div>
@@ -1210,12 +1286,20 @@ const ReturnsManagement = () => {
               </div>
 
               <div className="flex gap-3 mt-6">
-                <Button onClick={() => setShowModal(false)} variant="secondary" fullWidth disabled={saving}>
+                <button
+                  onClick={() => setShowModal(false)}
+                  disabled={saving}
+                  className="flex-1 px-4 py-3 bg-slate-100 hover:bg-slate-200 disabled:bg-slate-50 disabled:text-slate-400 text-slate-700 font-semibold rounded-xl transition-colors"
+                >
                   Cancel
-                </Button>
-                <Button onClick={() => setShowSubmitConfirm(true)} variant="primary" fullWidth loading={saving}>
-                  {editingReturn ? 'Update Return' : 'Record Return'}
-                </Button>
+                </button>
+                <button
+                  onClick={() => setShowSubmitConfirm(true)}
+                  disabled={saving}
+                  className="flex-1 px-4 py-3 bg-gradient-to-r from-teal-600 to-teal-700 hover:from-teal-700 hover:to-teal-800 disabled:from-slate-400 disabled:to-slate-500 text-white font-semibold rounded-xl transition-all shadow-md"
+                >
+                  {saving ? 'Saving...' : (editingReturn ? 'Update Return' : 'Record Return')}
+                </button>
               </div>
             </Card>
           </div>
@@ -1419,19 +1503,32 @@ This action cannot be undone.`}
               </div>
 
               <div className="flex gap-3 mt-6 pt-6 border-t border-slate-200">
-                <Button onClick={() => setShowViewModal(false)} variant="secondary" fullWidth>
+                <button
+                  onClick={() => setShowViewModal(false)}
+                  className="flex-1 px-4 py-3 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold rounded-xl transition-colors"
+                >
                   Close
-                </Button>
+                </button>
                 {viewingReturn.refund_status === 'pending' && (
-                  <Button onClick={() => { setShowViewModal(false); handleEdit(viewingReturn); }} variant="primary" fullWidth>
+                  <button
+                    onClick={() => { setShowViewModal(false); handleEdit(viewingReturn); }}
+                    className="flex-1 px-4 py-3 bg-gradient-to-r from-teal-600 to-teal-700 hover:from-teal-700 hover:to-teal-800 text-white font-semibold rounded-xl transition-all shadow-md"
+                  >
                     Edit Return
-                  </Button>
+                  </button>
                 )}
               </div>
             </Card>
           </div>
         </div>
       )}
+
+      {/* Barcode Scanner Modal */}
+      <BarcodeScanner
+        isOpen={showBarcodeScanner}
+        onClose={() => setShowBarcodeScanner(false)}
+        onScan={handleBarcodeScan}
+      />
     </div>
   );
 };
