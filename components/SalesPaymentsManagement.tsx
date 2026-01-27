@@ -203,6 +203,15 @@ const SalesPaymentsManagement = () => {
         `)
         .eq('invoice_id', printingInvoice.id);
 
+      // Map items to match thermal printer expected structure
+      const mappedItems = (itemsData || []).map(item => ({
+        name: item.item?.name || 'Unknown Item',
+        quantity: item.quantity,
+        rate: item.rate,
+        gst_rate: item.gst_rate,
+        total: item.total_amount
+      }));
+
       await printInvoice(
         {
           store_name: storeSettings.store_name,
@@ -217,9 +226,9 @@ const SalesPaymentsManagement = () => {
           invoice_number: printingInvoice.invoice_number,
           invoice_date: printingInvoice.invoice_date,
           customer_name: printingInvoice.customer_name,
-          customer_phone: printingInvoice.customer_phone,
-          customer_gstin: printingInvoice.customer_gstin,
-          items: itemsData || [],
+          customer_phone: printingInvoice.customer_phone || undefined,
+          customer_gstin: printingInvoice.customer_gstin || undefined,
+          items: mappedItems,
           subtotal: printingInvoice.subtotal,
           discount_amount: printingInvoice.discount_amount,
           cgst_amount: printingInvoice.cgst_amount,
