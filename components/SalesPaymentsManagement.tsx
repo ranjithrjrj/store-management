@@ -204,7 +204,15 @@ const SalesPaymentsManagement = () => {
         .eq('invoice_id', printingInvoice.id);
 
       await printInvoice(
-        storeSettings,
+        {
+          store_name: storeSettings.store_name,
+          address: storeSettings.address,
+          city: storeSettings.city,
+          state: storeSettings.state,
+          pincode: storeSettings.pincode,
+          phone: storeSettings.phone,
+          gstin: storeSettings.gstin
+        },
         {
           invoice_number: printingInvoice.invoice_number,
           invoice_date: printingInvoice.invoice_date,
