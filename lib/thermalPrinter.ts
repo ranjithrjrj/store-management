@@ -81,6 +81,28 @@ export class ThermalPrinter {
     return char.repeat(this.maxChars);
   }
 
+  // Measure actual display width of text (handles Unicode/Tamil characters)
+  private measureTextWidth(text: string): number {
+    let width = 0;
+    for (let i = 0; i < text.length; i++) {
+      const code = text.charCodeAt(i);
+      // Tamil Unicode range: 0x0B80-0x0BFF
+      // Other Indic scripts: 0x0900-0x0DFF
+      // CJK: 0x4E00-0x9FFF
+      // These characters are typically 1.5-2x wider than ASCII
+      if (
+        (code >= 0x0900 && code <= 0x0DFF) || // Indic scripts
+        (code >= 0x4E00 && code <= 0x9FFF) || // CJK
+        (code >= 0x3040 && code <= 0x30FF)    // Japanese
+      ) {
+        width += 2; // Wide character
+      } else {
+        width += 1; // Normal ASCII character
+      }
+    }
+    return width;
+  }
+
   // Generate invoice print data
   generateInvoice(store: StoreInfo, invoice: InvoiceData, footer?: string, terms?: string): string {
     let output = '';
@@ -123,14 +145,31 @@ export class ThermalPrinter {
               'TOTAL'.padStart(totalWidth) + '\n';
     output += this.separator('-') + '\n';
 
-    // Items
+    // Items with special handling for long/Unicode names
     invoice.items.forEach(item => {
-      const itemLine = item.name.substring(0, itemWidth).padEnd(itemWidth);
-      const qtyStr = item.quantity.toString().padStart(qtyWidth);
-      const rateStr = item.rate.toFixed(0).padStart(rateWidth);
-      const totalStr = item.total.toFixed(0).padStart(totalWidth);
+      // Check if item name is too long (Unicode chars or long names)
+      const itemNameLength = this.measureTextWidth(item.name);
       
-      output += itemLine + qtyStr + rateStr + totalStr + '\n';
+      if (itemNameLength > itemWidth) {
+        // Item name is too long - print on separate line
+        output += item.name.substring(0, this.maxChars) + '\n';
+        
+        // Then print qty, rate, total on next line with proper alignment
+        const qtyStr = item.quantity.toString().padStart(qtyWidth);
+        const rateStr = item.rate.toFixed(0).padStart(rateWidth);
+        const totalStr = item.total.toFixed(0).padStart(totalWidth);
+        
+        // Indent to align with columns
+        output += ' '.repeat(itemWidth) + qtyStr + rateStr + totalStr + '\n';
+      } else {
+        // Item name fits - print normally
+        const itemLine = item.name.substring(0, itemWidth).padEnd(itemWidth);
+        const qtyStr = item.quantity.toString().padStart(qtyWidth);
+        const rateStr = item.rate.toFixed(0).padStart(rateWidth);
+        const totalStr = item.total.toFixed(0).padStart(totalWidth);
+        
+        output += itemLine + qtyStr + rateStr + totalStr + '\n';
+      }
       
       if (item.gst_rate > 0) {
         output += `  (GST ${item.gst_rate}%)\n`;
