@@ -1,4 +1,5 @@
 // FILE PATH: lib/thermalPrinter.ts
+// Fixed 80mm width and added customization options
 
 type StoreInfo = {
   store_name: string;
@@ -46,7 +47,8 @@ export class ThermalPrinter {
   
   constructor(width: '58mm' | '80mm' = '80mm') {
     this.width = width;
-    this.maxChars = width === '58mm' ? 32 : 48;
+    // FIXED: 80mm uses 42 chars, not 48
+    this.maxChars = width === '58mm' ? 32 : 42;
   }
 
   // Format text to fit printer width
@@ -107,17 +109,19 @@ export class ThermalPrinter {
     
     output += this.separator('=') + '\n';
 
-    // Items header
-    output += 'ITEM' + ' '.repeat(this.maxChars - 22) + 'QTY   RATE  TOTAL\n';
+    // Items header - FIXED width calculation
+    const itemColWidth = this.maxChars - 20; // Space for qty/rate/total columns
+    output += 'ITEM' + ' '.repeat(itemColWidth - 4) + 'QTY  RATE  TOTAL\n';
     output += this.separator('-') + '\n';
 
     // Items
     invoice.items.forEach(item => {
-      const itemLine = item.name.substring(0, this.maxChars - 22);
+      const itemLine = item.name.substring(0, itemColWidth);
       const qtyStr = item.quantity.toString().padStart(3);
-      const rateStr = item.rate.toFixed(2).padStart(6);
-      const totalStr = item.total.toFixed(2).padStart(7);
-      output += itemLine + ' '.repeat(this.maxChars - itemLine.length - 17) + qtyStr + rateStr + totalStr + '\n';
+      const rateStr = item.rate.toFixed(0).padStart(5);
+      const totalStr = item.total.toFixed(0).padStart(6);
+      const spacing = itemColWidth - itemLine.length;
+      output += itemLine + ' '.repeat(spacing) + qtyStr + ' ' + rateStr + ' ' + totalStr + '\n';
       
       if (item.gst_rate > 0) {
         output += `  (GST ${item.gst_rate}%)\n`;
@@ -170,6 +174,34 @@ export class ThermalPrinter {
 
 /**
  * Print invoice using various methods
+ * 
+ * HOW TO CUSTOMIZE STATIC CONTENT:
+ * ================================
+ * 
+ * 1. FOOTER TEXT (Thank you message):
+ *    Pass 'footer' in options:
+ *    printInvoice(store, invoice, { footer: 'Visit Again!' })
+ * 
+ * 2. TERMS & CONDITIONS:
+ *    Pass 'terms' in options:
+ *    printInvoice(store, invoice, { terms: 'No refunds on sale items' })
+ * 
+ * 3. STORE INFO (name, address, phone, GSTIN):
+ *    Update in store_settings table in database
+ *    OR pass custom storeInfo object:
+ *    printInvoice({ 
+ *      store_name: 'My Store',
+ *      address: '123 Main St',
+ *      city: 'Chennai',
+ *      state: 'Tamil Nadu',
+ *      pincode: '600001',
+ *      phone: '9876543210',
+ *      gstin: '33AAAAA0000A1Z5'
+ *    }, invoice)
+ * 
+ * 4. CHANGE DEFAULT FOOTER/TERMS:
+ *    Edit the default values in the function below (lines 219-220)
+ * 
  * @param storeInfo Store details
  * @param invoiceData Invoice data
  * @param options Print options
@@ -181,7 +213,9 @@ export async function printInvoice(
 ): Promise<void> {
   const {
     width = '80mm',
+    // CUSTOMIZE DEFAULT FOOTER HERE:
     footer = 'Thank you for your business!',
+    // CUSTOMIZE DEFAULT TERMS HERE:
     terms = 'Goods once sold cannot be returned',
     method = 'iframe'
   } = options;
