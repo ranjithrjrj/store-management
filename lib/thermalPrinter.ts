@@ -325,7 +325,7 @@ function printUsingIframe(content: string, width: '58mm' | '80mm'): Promise<void
  */
 function printPreview(content: string): Promise<void> {
   return new Promise((resolve) => {
-    const previewWindow = window.open('', '_blank', 'width=400,height=600');
+    const previewWindow = window.open('', '_blank', 'width=500,height=700');
     if (!previewWindow) {
       alert('Please allow popups to preview print');
       resolve();
@@ -339,17 +339,30 @@ function printPreview(content: string): Promise<void> {
         <title>Print Preview</title>
         <style>
           body {
-            font-family: 'Courier New', monospace;
-            font-size: 12pt;
+            font-family: 'Courier New', Courier, monospace;
+            font-size: 11pt;
             padding: 20px;
             background: #f0f0f0;
           }
           pre {
             background: white;
-            padding: 20px;
+            padding: 15px;
             border: 1px solid #ccc;
-            white-space: pre-wrap;
-            word-wrap: break-word;
+            white-space: pre;
+            overflow-x: auto;
+            font-family: 'Courier New', Courier, monospace;
+            font-size: 11pt;
+            line-height: 1.3;
+          }
+          @media print {
+            body {
+              background: white;
+              padding: 0;
+            }
+            pre {
+              border: none;
+              padding: 5mm;
+            }
           }
         </style>
       </head>
