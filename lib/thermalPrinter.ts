@@ -284,15 +284,19 @@ function printUsingIframe(content: string, width: '58mm' | '80mm'): Promise<void
             }
             body {
               margin: 0;
-              padding: 5mm;
-              font-family: 'Courier New', monospace;
-              font-size: 10pt;
-              width: ${widthMm}mm;
+              padding: 2mm;
+              font-family: 'Courier New', Courier, monospace;
+              font-size: 9pt;
+              line-height: 1.2;
             }
             pre {
               margin: 0;
-              white-space: pre-wrap;
-              word-wrap: break-word;
+              padding: 0;
+              white-space: pre;
+              overflow: hidden;
+              font-family: 'Courier New', Courier, monospace;
+              font-size: 9pt;
+              line-height: 1.2;
             }
           </style>
         </head>
