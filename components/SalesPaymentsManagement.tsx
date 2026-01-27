@@ -7,7 +7,6 @@ import { FileText, Search, X, Eye, Trash2, Printer, ShoppingCart, CreditCard, Fi
 import { printInvoice } from '@/lib/thermalPrinter';
 import { supabase } from '@/lib/supabase';
 import { Button, Card, Input, Select, Badge, EmptyState, LoadingSpinner, ConfirmDialog, useToast } from '@/components/ui';
-import { useTheme } from '@/contexts/ThemeContext';
 
 type SalesInvoice = {
   id: string;
@@ -49,7 +48,6 @@ type Payment = {
 };
 
 const SalesPaymentsManagement = () => {
-  const { theme } = useTheme();
   const toast = useToast();
   
   const [activeTab, setActiveTab] = useState<'invoices' | 'payments'>('invoices');
@@ -329,21 +327,39 @@ const SalesPaymentsManagement = () => {
   }
 
   return (
-    <div className="min-h-screen bg-slate-50 p-4 md:p-6 lg:p-8">
-      <div className="max-w-7xl mx-auto space-y-6">
-        {/* Header */}
-        <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6">
-          <div className="flex items-center gap-3">
-            <div className={`p-3 ${theme.classes.bgPrimaryLight} rounded-xl`}>
-              <ShoppingCart className={theme.classes.textPrimary} size={28} />
+    <div className="min-h-screen bg-slate-50">
+      {/* HERO SECTION - Teal Gradient Header */}
+      <div className="bg-gradient-to-br from-teal-600 to-teal-700 px-4 py-6 md:px-6 md:py-8">
+        <div className="max-w-7xl mx-auto">
+          <div className="flex items-center gap-3 mb-4">
+            <div className="p-3 bg-white/20 rounded-2xl backdrop-blur-sm">
+              <ShoppingCart className="text-white" size={28} />
             </div>
             <div>
-              <h1 className="text-2xl font-bold text-slate-900">Sales & Payments</h1>
-              <p className="text-slate-600 text-sm mt-0.5">View invoices with returns and track all payments</p>
+              <h1 className="text-2xl md:text-3xl font-bold text-white">Sales & Payments</h1>
+              <p className="text-teal-100 text-sm md:text-base">Track invoices, returns, and payment history</p>
+            </div>
+          </div>
+          
+          {/* Quick Stats */}
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+            <div className="bg-white/10 backdrop-blur-sm rounded-xl p-3 md:p-4 border border-white/20">
+              <p className="text-teal-100 text-xs font-medium">Total Invoices</p>
+              <p className="text-white text-xl md:text-2xl font-bold mt-1">{invoices.length}</p>
+            </div>
+            <div className="bg-white/10 backdrop-blur-sm rounded-xl p-3 md:p-4 border border-white/20">
+              <p className="text-teal-100 text-xs font-medium">Total Payments</p>
+              <p className="text-white text-xl md:text-2xl font-bold mt-1">{payments.length}</p>
+            </div>
+            <div className="bg-white/10 backdrop-blur-sm rounded-xl p-3 md:p-4 border border-white/20 col-span-2 md:col-span-1">
+              <p className="text-teal-100 text-xs font-medium">Active Tab</p>
+              <p className="text-white text-base md:text-lg font-bold mt-1 capitalize">{activeTab}</p>
             </div>
           </div>
         </div>
+      </div>
 
+      <div className="max-w-7xl mx-auto px-4 md:px-6 lg:px-8 py-6 space-y-6">
         {/* Tabs */}
         <Card padding="md">
           <div className="flex gap-3 mb-4">
@@ -351,7 +367,7 @@ const SalesPaymentsManagement = () => {
               onClick={() => setActiveTab('invoices')}
               className={`flex-1 px-4 py-3 rounded-xl font-medium transition-all ${
                 activeTab === 'invoices'
-                  ? `${theme.classes.bgPrimary} text-white shadow-md`
+                  ? 'bg-gradient-to-r from-teal-600 to-teal-700 text-white shadow-md'
                   : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
               }`}
             >
@@ -361,7 +377,7 @@ const SalesPaymentsManagement = () => {
               onClick={() => setActiveTab('payments')}
               className={`flex-1 px-4 py-3 rounded-xl font-medium transition-all ${
                 activeTab === 'payments'
-                  ? `${theme.classes.bgPrimary} text-white shadow-md`
+                  ? 'bg-gradient-to-r from-teal-600 to-teal-700 text-white shadow-md'
                   : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
               }`}
             >
@@ -383,14 +399,13 @@ const SalesPaymentsManagement = () => {
               ) : undefined}
             />
             <div className="flex gap-2">
-              <Button
+              <button
                 onClick={() => setShowFilterModal(true)}
-                variant="secondary"
-                icon={<Filter size={18} />}
-                className="flex-1"
+                className="flex-1 inline-flex items-center justify-center gap-2 px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold rounded-xl transition-colors"
               >
+                <Filter size={18} />
                 Filters
-              </Button>
+              </button>
               <Select
                 value={`${sortBy}-${sortOrder}`}
                 onChange={(e) => {
@@ -435,8 +450,8 @@ const SalesPaymentsManagement = () => {
                       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                         <div className="flex-1">
                           <div className="flex items-center gap-3 mb-3">
-                            <div className={`p-2 ${theme.classes.bgPrimaryLight} rounded-lg`}>
-                              <FileText className={theme.classes.textPrimary} size={20} />
+                            <div className="p-2 bg-teal-50 rounded-lg">
+                              <FileText className="text-teal-600" size={20} />
                             </div>
                             <div>
                               <h3 className="font-bold text-slate-900">{invoice.invoice_number}</h3>
@@ -473,7 +488,7 @@ const SalesPaymentsManagement = () => {
                             )}
                             <div>
                               <p className="text-slate-500 font-medium">Net Amount</p>
-                              <p className={`${theme.classes.textPrimary} font-bold text-lg`}>₹{netAmount.toLocaleString()}</p>
+                              <p className="text-teal-600 font-bold text-lg">₹{netAmount.toLocaleString()}</p>
                             </div>
                           </div>
                         </div>
@@ -488,7 +503,7 @@ const SalesPaymentsManagement = () => {
                           </button>
                           <button
                             onClick={() => handlePrintClick(invoice)}
-                            className={`p-2.5 rounded-lg ${theme.classes.bgPrimaryLight} ${theme.classes.textPrimary} hover:opacity-80 transition-colors`}
+                            className="p-2.5 rounded-lg bg-teal-50 text-teal-600 hover:bg-teal-100 transition-colors"
                             title="Reprint"
                           >
                             <Printer size={18} />
@@ -587,23 +602,23 @@ const SalesPaymentsManagement = () => {
       {showFilterModal && (
         <div className="fixed inset-0 bg-black/20 backdrop-blur-sm flex items-start justify-center p-4 z-50 overflow-y-auto">
           <div className="min-h-screen w-full flex items-center justify-center py-8">
-            <Card className="w-full max-w-2xl">
-              <div className="flex items-center justify-between mb-6">
+            <div className="bg-white rounded-3xl shadow-2xl w-full max-w-2xl overflow-hidden">
+              <div className="flex items-center justify-between p-4 border-b border-slate-200 bg-gradient-to-r from-teal-600 to-teal-700 rounded-t-3xl">
                 <div className="flex items-center gap-3">
-                  <div className={`p-2.5 ${theme.classes.bgPrimaryLight} rounded-xl`}>
-                    <Filter className={theme.classes.textPrimary} size={24} />
+                  <div className="p-2.5 bg-white/20 rounded-xl backdrop-blur-sm">
+                    <Filter className="text-white" size={24} />
                   </div>
-                  <h3 className="text-xl font-bold text-slate-900">Filter {activeTab === 'invoices' ? 'Invoices' : 'Payments'}</h3>
+                  <h3 className="text-xl font-bold text-white">Filter {activeTab === 'invoices' ? 'Invoices' : 'Payments'}</h3>
                 </div>
                 <button
                   onClick={() => setShowFilterModal(false)}
-                  className="p-2 rounded-lg hover:bg-slate-100"
+                  className="p-2 rounded-lg hover:bg-white/20 text-white transition-colors"
                 >
                   <X size={24} />
                 </button>
               </div>
 
-              <div className="space-y-4">
+              <div className="p-6 space-y-4">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <Input
                     label="Start Date"
@@ -678,8 +693,8 @@ const SalesPaymentsManagement = () => {
                 />
               </div>
 
-              <div className="flex gap-3 mt-6">
-                <Button
+              <div className="flex gap-3 mt-6 p-6 border-t border-slate-200">
+                <button
                   onClick={() => {
                     setFilters({
                       startDate: '',
@@ -691,16 +706,18 @@ const SalesPaymentsManagement = () => {
                       customerName: ''
                     });
                   }}
-                  variant="secondary"
-                  fullWidth
+                  className="flex-1 px-4 py-3 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold rounded-xl transition-colors"
                 >
                   Clear Filters
-                </Button>
-                <Button onClick={() => setShowFilterModal(false)} variant="primary" fullWidth>
+                </button>
+                <button
+                  onClick={() => setShowFilterModal(false)}
+                  className="flex-1 px-4 py-3 bg-gradient-to-r from-teal-600 to-teal-700 hover:from-teal-700 hover:to-teal-800 text-white font-semibold rounded-xl transition-all shadow-md"
+                >
                   Apply Filters
-                </Button>
+                </button>
               </div>
-            </Card>
+            </div>
           </div>
         </div>
       )}
@@ -789,7 +806,7 @@ const SalesPaymentsManagement = () => {
                       )}
                       <div className="flex justify-between pt-3 border-t-2 border-slate-300">
                         <span className="font-bold text-lg">Net Amount</span>
-                        <span className={`font-bold text-2xl ${theme.classes.textPrimary}`}>
+                        <span className="font-bold text-2xl text-teal-600">
                           ₹{(viewingInvoice.total_amount - (viewingInvoice.returned_amount || 0)).toFixed(2)}
                         </span>
                       </div>
@@ -799,9 +816,12 @@ const SalesPaymentsManagement = () => {
               )}
 
               <div className="mt-6">
-                <Button onClick={() => setShowViewModal(false)} variant="secondary" fullWidth>
+                <button
+                  onClick={() => setShowViewModal(false)}
+                  className="w-full px-4 py-3 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold rounded-xl transition-colors"
+                >
                   Close
-                </Button>
+                </button>
               </div>
             </Card>
           </div>
@@ -831,7 +851,7 @@ const SalesPaymentsManagement = () => {
                       onClick={() => setPrintSettings({ ...printSettings, width: '58mm' })}
                       className={`flex-1 px-4 py-3 rounded-xl font-medium ${
                         printSettings.width === '58mm'
-                          ? `${theme.classes.bgPrimary} text-white`
+                          ? 'bg-gradient-to-r from-teal-600 to-teal-700 text-white'
                           : 'bg-slate-100 text-slate-600'
                       }`}
                     >
@@ -841,7 +861,7 @@ const SalesPaymentsManagement = () => {
                       onClick={() => setPrintSettings({ ...printSettings, width: '80mm' })}
                       className={`flex-1 px-4 py-3 rounded-xl font-medium ${
                         printSettings.width === '80mm'
-                          ? `${theme.classes.bgPrimary} text-white`
+                          ? 'bg-gradient-to-r from-teal-600 to-teal-700 text-white'
                           : 'bg-slate-100 text-slate-600'
                       }`}
                     >
@@ -865,12 +885,19 @@ const SalesPaymentsManagement = () => {
               </div>
 
               <div className="flex gap-3 mt-6">
-                <Button onClick={() => setShowPrintSettings(false)} variant="secondary" fullWidth>
+                <button
+                  onClick={() => setShowPrintSettings(false)}
+                  className="flex-1 px-4 py-3 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold rounded-xl transition-colors"
+                >
                   Cancel
-                </Button>
-                <Button onClick={handlePrint} variant="primary" fullWidth loading={printing}>
-                  Print Invoice
-                </Button>
+                </button>
+                <button
+                  onClick={handlePrint}
+                  disabled={printing}
+                  className="flex-1 px-4 py-3 bg-gradient-to-r from-teal-600 to-teal-700 hover:from-teal-700 hover:to-teal-800 disabled:from-slate-400 disabled:to-slate-500 text-white font-semibold rounded-xl transition-all shadow-md"
+                >
+                  {printing ? 'Printing...' : 'Print Invoice'}
+                </button>
               </div>
             </Card>
           </div>
