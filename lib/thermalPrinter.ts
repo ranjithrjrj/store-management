@@ -109,19 +109,28 @@ export class ThermalPrinter {
     
     output += this.separator('=') + '\n';
 
-    // Items header - FIXED width calculation
-    const itemColWidth = this.maxChars - 20; // Space for qty/rate/total columns
-    output += 'ITEM' + ' '.repeat(itemColWidth - 4) + 'QTY  RATE  TOTAL\n';
+    // Items header - FIXED with proper column widths
+    // For 80mm (42 chars): Item=22, Qty=4, Rate=7, Total=9
+    // For 58mm (32 chars): Item=16, Qty=4, Rate=6, Total=6
+    const itemWidth = this.width === '58mm' ? 16 : 22;
+    const qtyWidth = 4;
+    const rateWidth = this.width === '58mm' ? 6 : 7;
+    const totalWidth = this.width === '58mm' ? 6 : 9;
+    
+    output += 'ITEM'.padEnd(itemWidth) + 
+              'QTY'.padStart(qtyWidth) + 
+              'RATE'.padStart(rateWidth) + 
+              'TOTAL'.padStart(totalWidth) + '\n';
     output += this.separator('-') + '\n';
 
     // Items
     invoice.items.forEach(item => {
-      const itemLine = item.name.substring(0, itemColWidth);
-      const qtyStr = item.quantity.toString().padStart(3);
-      const rateStr = item.rate.toFixed(0).padStart(5);
-      const totalStr = item.total.toFixed(0).padStart(6);
-      const spacing = itemColWidth - itemLine.length;
-      output += itemLine + ' '.repeat(spacing) + qtyStr + ' ' + rateStr + ' ' + totalStr + '\n';
+      const itemLine = item.name.substring(0, itemWidth).padEnd(itemWidth);
+      const qtyStr = item.quantity.toString().padStart(qtyWidth);
+      const rateStr = item.rate.toFixed(0).padStart(rateWidth);
+      const totalStr = item.total.toFixed(0).padStart(totalWidth);
+      
+      output += itemLine + qtyStr + rateStr + totalStr + '\n';
       
       if (item.gst_rate > 0) {
         output += `  (GST ${item.gst_rate}%)\n`;
