@@ -24,3 +24,43 @@ body {
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
 }
+
+/* Samsung Tablet Fix - Handles all the issues */
+
+/* Fix 1: Force light mode colors (fixes dark mode issue) */
+@media (prefers-color-scheme: dark) {
+  body {
+    background-color: #f8fafc !important; /* slate-50 */
+    color: #0f172a !important; /* slate-900 */
+  }
+  
+  /* Ensure gradients have solid fallback */
+  .bg-gradient-to-r,
+  .bg-gradient-to-br,
+  .bg-gradient-to-l {
+    background-color: #0d9488 !important; /* Solid teal fallback */
+  }
+}
+
+/* Fix 2: Force proper sizing on Samsung tablets */
+@media only screen 
+  and (min-width: 1024px) 
+  and (max-width: 1280px)
+  and (-webkit-min-device-pixel-ratio: 2) {
+  
+  /* Force tablet layout instead of desktop */
+  html {
+    font-size: 18px !important; /* Larger text */
+  }
+  
+  /* Make everything more visible */
+  body * {
+    -webkit-font-smoothing: antialiased;
+  }
+  
+  /* Ensure icons are visible */
+  svg {
+    min-width: 24px !important;
+    min-height: 24px !important;
+  }
+}
