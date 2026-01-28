@@ -111,30 +111,37 @@ const InventoryManagement = () => {
 
       if (itemsError) throw itemsError;
 
-      // Get stock for each item
-      const itemsWithStock = await Promise.all((itemsData || []).map(async (item) => {
-        const { data: normalStockData } = await supabase
-          .from('inventory_batches')
-          .select('quantity')
-          .eq('item_id', item.id)
-          .eq('status', 'normal');
+      // Get stock for all items with single aggregated query
+      const { data: stockData, error: stockError } = await supabase
+        .from('inventory_batches')
+        .select('item_id, status, quantity');
 
-        const { data: returnedStockData } = await supabase
-          .from('inventory_batches')
-          .select('quantity')
-          .eq('item_id', item.id)
-          .eq('status', 'returned');
+      if (stockError) throw stockError;
 
-        const normal = (normalStockData || []).reduce((sum, record) => sum + (record.quantity || 0), 0);
-        const returned = (returnedStockData || []).reduce((sum, record) => sum + (record.quantity || 0), 0);
+      // Aggregate stock by item_id and status
+      const stockByItem = (stockData || []).reduce((acc, batch) => {
+        if (!acc[batch.item_id]) {
+          acc[batch.item_id] = { normal: 0, returned: 0 };
+        }
+        const qty = parseFloat(batch.quantity) || 0; // Handle null/undefined/string quantities
+        if (batch.status === 'normal') {
+          acc[batch.item_id].normal += qty;
+        } else if (batch.status === 'returned') {
+          acc[batch.item_id].returned += qty;
+        }
+        return acc;
+      }, {} as Record<string, { normal: number; returned: number }>);
 
+      // Map stock to items
+      const itemsWithStock = (itemsData || []).map((item) => {
+        const stock = stockByItem[item.id] || { normal: 0, returned: 0 };
         return {
           ...item,
-          normal_stock: normal,
-          returned_stock: returned,
-          current_stock: normal + returned
+          normal_stock: stock.normal,
+          returned_stock: stock.returned,
+          current_stock: stock.normal + stock.returned
         };
-      }));
+      });
 
       setCategories(categoriesData || []);
       setUnits(unitsData || []);
