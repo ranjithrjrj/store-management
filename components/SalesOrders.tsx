@@ -6,6 +6,7 @@ import React, { useState, useEffect } from 'react';
 import { FileText, Plus, Search, X, Eye, Edit2, Trash2, CheckCircle, User, Package, Calendar, AlertTriangle, Camera } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { Button, Card, Input, Select, Badge, EmptyState, LoadingSpinner, ConfirmDialog, useToast } from '@/components/ui';
+import { useTheme } from '@/contexts/ThemeContext';
 import BarcodeScanner from './BarcodeScanner';
 
 type OrderItem = {
@@ -46,6 +47,7 @@ type SalesOrdersProps = {
 };
 
 const SalesOrders = ({ onNavigate }: SalesOrdersProps = {}) => {
+  const { theme } = useTheme();
   const toast = useToast();
   
   const [orders, setOrders] = useState<SalesOrder[]>([]);
@@ -57,6 +59,7 @@ const SalesOrders = ({ onNavigate }: SalesOrdersProps = {}) => {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [showConvertConfirm, setShowConvertConfirm] = useState(false);
   const [showCreateConfirm, setShowCreateConfirm] = useState(false);
+  const [showBarcodeScanner, setShowBarcodeScanner] = useState(false);
   const [viewingOrder, setViewingOrder] = useState<SalesOrder | null>(null);
   const [editingOrder, setEditingOrder] = useState<SalesOrder | null>(null);
   const [deletingOrder, setDeletingOrder] = useState<{ id: string; order_number: string } | null>(null);
@@ -65,7 +68,6 @@ const SalesOrders = ({ onNavigate }: SalesOrdersProps = {}) => {
   const [loading, setLoading] = useState(true);
   const [loadingItems, setLoadingItems] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [showBarcodeScanner, setShowBarcodeScanner] = useState(false);
   const [scanningForItemId, setScanningForItemId] = useState<string | null>(null);
 
   // Form state
@@ -115,7 +117,7 @@ const SalesOrders = ({ onNavigate }: SalesOrdersProps = {}) => {
       const [customersData, itemsData] = await Promise.all([
         supabase.from('customers').select('*').eq('is_active', true).order('name'),
         supabase.from('items').select(`
-          id, name, gst_rate, retail_price, discount_percent,
+          id, name, gst_rate, retail_price, discount_percent, barcode,
           unit:units(abbreviation)
         `).eq('is_active', true).order('name')
       ]);
@@ -613,70 +615,31 @@ const SalesOrders = ({ onNavigate }: SalesOrdersProps = {}) => {
     );
   }
 
-  // Calculate stats
-  const stats = {
-    total: orders.length,
-    pending: orders.filter(o => o.status === 'pending').length,
-    confirmed: orders.filter(o => o.status === 'confirmed').length,
-    converted: orders.filter(o => o.status === 'converted').length
-  };
-
   return (
-    <div className="min-h-screen bg-slate-50">
-      {/* HERO SECTION - Teal Gradient Header */}
-      <div className="bg-gradient-to-br from-teal-600 to-teal-700 px-4 py-6 md:px-6 md:py-8">
-        <div className="max-w-7xl mx-auto">
-          <div className="flex items-center justify-between mb-4">
+    <div className="min-h-screen bg-slate-50 p-4 md:p-6 lg:p-8">
+      <div className="max-w-7xl mx-auto space-y-6">
+        {/* Header */}
+        <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6">
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
             <div className="flex items-center gap-3">
-              <div className="p-3 bg-white/20 rounded-2xl backdrop-blur-sm">
-                <FileText className="text-white" size={28} />
+              <div className={`p-3 ${theme.classes.bgPrimaryLight} rounded-xl`}>
+                <FileText className={theme.classes.textPrimary} size={28} />
               </div>
               <div>
-                <h1 className="text-2xl md:text-3xl font-bold text-white">Sales Orders</h1>
-                <p className="text-teal-100 text-sm md:text-base">Create and manage pre-sale orders</p>
+                <h1 className="text-2xl font-bold text-slate-900">Sales Orders</h1>
+                <p className="text-slate-600 text-sm mt-0.5">Create and manage sales orders</p>
               </div>
             </div>
-            <button
+            <Button
               onClick={handleAddOrder}
-              className="hidden md:flex items-center gap-2 px-4 py-2.5 bg-white/20 hover:bg-white/30 backdrop-blur-sm text-white font-semibold rounded-xl transition-all border border-white/30"
+              variant="primary"
+              icon={<Plus size={20} />}
             >
-              <Plus size={20} />
-              <span>Add Order</span>
-            </button>
+              Add Order
+            </Button>
           </div>
-          
-          {/* Quick Stats */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-            <div className="bg-white/10 backdrop-blur-sm rounded-xl p-3 md:p-4 border border-white/20">
-              <p className="text-teal-100 text-xs font-medium">Total Orders</p>
-              <p className="text-white text-xl md:text-2xl font-bold mt-1">{stats.total}</p>
-            </div>
-            <div className="bg-white/10 backdrop-blur-sm rounded-xl p-3 md:p-4 border border-white/20">
-              <p className="text-teal-100 text-xs font-medium">Pending</p>
-              <p className="text-white text-xl md:text-2xl font-bold mt-1">{stats.pending}</p>
-            </div>
-            <div className="bg-white/10 backdrop-blur-sm rounded-xl p-3 md:p-4 border border-white/20">
-              <p className="text-teal-100 text-xs font-medium">Confirmed</p>
-              <p className="text-white text-xl md:text-2xl font-bold mt-1">{stats.confirmed}</p>
-            </div>
-            <div className="bg-white/10 backdrop-blur-sm rounded-xl p-3 md:p-4 border border-white/20">
-              <p className="text-teal-100 text-xs font-medium">Converted</p>
-              <p className="text-white text-xl md:text-2xl font-bold mt-1">{stats.converted}</p>
-            </div>
-          </div>
-
-          {/* Mobile Add Button */}
-          <button
-            onClick={handleAddOrder}
-            className="md:hidden w-full mt-4 bg-white/20 hover:bg-white/30 backdrop-blur-sm text-white font-bold py-3 rounded-xl transition-all border border-white/30 flex items-center justify-center gap-2"
-          >
-            <Plus size={20} />
-            <span>Add Order</span>
-          </button>
         </div>
-      </div>
 
-      <div className="max-w-7xl mx-auto px-4 md:px-6 lg:px-8 py-6 space-y-6">
         {/* Search & Filter */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <Card padding="md">
@@ -732,8 +695,8 @@ const SalesOrders = ({ onNavigate }: SalesOrdersProps = {}) => {
                 <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                   <div className="flex-1">
                     <div className="flex items-center gap-3 mb-3">
-                      <div className="p-2 bg-blue-50 rounded-lg">
-                        <FileText className="text-blue-600" size={20} />
+                      <div className={`p-2 ${theme.classes.bgPrimaryLight} rounded-lg`}>
+                        <FileText className={theme.classes.textPrimary} size={20} />
                       </div>
                       <div>
                         <h3 className="font-bold text-slate-900">{order.order_number}</h3>
@@ -751,7 +714,7 @@ const SalesOrders = ({ onNavigate }: SalesOrdersProps = {}) => {
                       </div>
                       <div>
                         <p className="text-slate-500 font-medium">Amount</p>
-                        <p className="text-blue-600 font-bold text-lg">₹{order.total_amount.toLocaleString()}</p>
+                        <p className={`${theme.classes.textPrimary} font-bold text-lg`}>₹{order.total_amount.toLocaleString()}</p>
                       </div>
                       <div>
                         <p className="text-slate-500 font-medium">State</p>
@@ -811,20 +774,20 @@ const SalesOrders = ({ onNavigate }: SalesOrdersProps = {}) => {
       {(showAddModal || showEditModal) && (
         <div className="fixed inset-0 bg-black/20 backdrop-blur-sm flex items-start justify-center p-4 z-50 overflow-y-auto">
           <div className="min-h-screen w-full flex items-center justify-center py-8">
-            <div className="bg-white rounded-3xl shadow-2xl w-full max-w-4xl overflow-hidden">
-              <div className="flex items-center justify-between p-4 border-b border-slate-200 bg-gradient-to-r from-teal-600 to-teal-700 rounded-t-3xl">
-                <h3 className="text-xl font-bold text-white">
+            <Card className="w-full max-w-4xl">
+              <div className="flex items-center justify-between mb-6">
+                <h3 className="text-xl font-bold text-slate-900">
                   {editingOrder ? 'Edit Order' : 'Create Sales Order'}
                 </h3>
                 <button
                   onClick={() => { setShowAddModal(false); setShowEditModal(false); }}
-                  className="p-2 rounded-lg hover:bg-white/20 text-white transition-colors"
+                  className="p-2 rounded-lg hover:bg-slate-100"
                 >
                   <X size={24} />
                 </button>
               </div>
 
-              <div className="p-6 space-y-6">
+              <div className="space-y-6">
                 {/* Customer Details */}
                 <div>
                   <h4 className="font-semibold text-slate-900 mb-3">Customer Details</h4>
@@ -889,7 +852,7 @@ const SalesOrders = ({ onNavigate }: SalesOrdersProps = {}) => {
                     <h4 className="font-semibold text-slate-900">Items</h4>
                     <button
                       onClick={() => setShowBarcodeScanner(true)}
-                      className="flex items-center gap-2 px-3 py-1.5 text-sm font-medium text-blue-700 bg-blue-50 rounded-lg hover:bg-blue-100 transition-colors"
+                      className={`flex items-center gap-2 px-3 py-1.5 text-sm font-medium ${theme.classes.textPrimary} ${theme.classes.bgPrimaryLight} rounded-lg hover:opacity-80 transition-colors`}
                     >
                       <Camera size={16} />
                       Scan
@@ -1031,7 +994,7 @@ const SalesOrders = ({ onNavigate }: SalesOrdersProps = {}) => {
                       )}
                       <div className="flex justify-between pt-2 border-t border-slate-300">
                         <span className="font-bold">Total</span>
-                        <span className="font-bold text-blue-600">₹{totals.total.toFixed(2)}</span>
+                        <span className={`font-bold ${theme.classes.textPrimary}`}>₹{totals.total.toFixed(2)}</span>
                       </div>
                     </div>
                   </div>
@@ -1046,45 +1009,36 @@ const SalesOrders = ({ onNavigate }: SalesOrdersProps = {}) => {
               </div>
 
               <div className="flex gap-3 mt-6">
-                <button
-                  onClick={() => { setShowAddModal(false); setShowEditModal(false); }}
-                  className="flex-1 px-4 py-3 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold rounded-xl transition-colors"
-                >
+                <Button onClick={() => { setShowAddModal(false); setShowEditModal(false); }} variant="secondary" fullWidth>
                   Cancel
-                </button>
-                <button
-                  onClick={() => setShowCreateConfirm(true)}
-                  disabled={saving}
-                  className="flex-1 px-4 py-3 bg-gradient-to-r from-teal-600 to-teal-700 hover:from-teal-700 hover:to-teal-800 disabled:from-slate-400 disabled:to-slate-500 text-white font-semibold rounded-xl transition-all shadow-md"
-                >
-                  {saving ? 'Saving...' : (editingOrder ? 'Update Order' : 'Create Order')}
-                </button>
+                </Button>
+                <Button onClick={() => setShowCreateConfirm(true)} variant="primary" fullWidth loading={saving}>
+                  {editingOrder ? 'Update Order' : 'Create Order'}
+                </Button>
               </div>
-            </div>
+            </Card>
           </div>
         </div>
       )}
 
-      {/* View Modal - Similar to Add/Edit but read-only */}
+      {/* View Modal */}
       {showViewModal && viewingOrder && (
         <div className="fixed inset-0 bg-black/20 backdrop-blur-sm flex items-start justify-center p-4 z-50 overflow-y-auto">
           <div className="min-h-screen w-full flex items-center justify-center py-8">
-            <div className="bg-white rounded-3xl shadow-2xl w-full max-w-4xl overflow-hidden">
-              <div className="flex items-center justify-between p-4 border-b border-slate-200 bg-gradient-to-r from-teal-600 to-teal-700 rounded-t-3xl">
+            <Card className="w-full max-w-4xl">
+              <div className="flex items-center justify-between mb-6">
                 <div>
-                  <h3 className="text-2xl font-bold text-white">{viewingOrder.order_number}</h3>
-                  <div className="mt-2">
-                    <Badge variant={statusColors[viewingOrder.status]}>
-                      {viewingOrder.status}
-                    </Badge>
-                  </div>
+                  <h3 className="text-2xl font-bold text-slate-900">{viewingOrder.order_number}</h3>
+                  <Badge variant={statusColors[viewingOrder.status]} className="mt-2">
+                    {viewingOrder.status}
+                  </Badge>
                 </div>
-                <button onClick={() => setShowViewModal(false)} className="p-2 rounded-lg hover:bg-white/20 text-white transition-colors">
+                <button onClick={() => setShowViewModal(false)} className="p-2 rounded-lg hover:bg-slate-100">
                   <X size={24} />
                 </button>
               </div>
 
-              <div className="p-6 space-y-6">
+              <div className="space-y-6">
                 <div className="bg-slate-50 rounded-xl p-5">
                   <h4 className="font-bold text-slate-900 mb-4">Customer Information</h4>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
@@ -1130,7 +1084,7 @@ const SalesOrders = ({ onNavigate }: SalesOrdersProps = {}) => {
                       {orderItems.map((item, idx) => (
                         <div key={item.id} className="bg-slate-50 rounded-xl p-4 border border-slate-200">
                           <div className="flex items-center gap-3 mb-2">
-                            <span className="flex items-center justify-center w-6 h-6 rounded-full bg-blue-100 text-blue-700 font-bold text-xs">
+                            <span className={`flex items-center justify-center w-6 h-6 rounded-full ${theme.classes.bgPrimaryLight} ${theme.classes.textPrimary} font-bold text-xs`}>
                               {idx + 1}
                             </span>
                             <h5 className="font-semibold text-slate-900">{item.item_name}</h5>
@@ -1154,7 +1108,7 @@ const SalesOrders = ({ onNavigate }: SalesOrdersProps = {}) => {
                             </div>
                             <div>
                               <p className="text-slate-500">Total</p>
-                              <p className="text-blue-600 font-bold">₹{item.total_amount.toFixed(2)}</p>
+                              <p className={`${theme.classes.textPrimary} font-bold`}>₹{item.total_amount.toFixed(2)}</p>
                             </div>
                           </div>
                         </div>
@@ -1196,7 +1150,7 @@ const SalesOrders = ({ onNavigate }: SalesOrdersProps = {}) => {
                     )}
                     <div className="flex justify-between pt-3 border-t-2 border-slate-300">
                       <span className="font-bold text-lg">Total</span>
-                      <span className="font-bold text-2xl text-blue-600">₹{viewingOrder.total_amount.toFixed(2)}</span>
+                      <span className={`font-bold text-2xl ${theme.classes.textPrimary}`}>₹{viewingOrder.total_amount.toFixed(2)}</span>
                     </div>
                   </div>
                 </div>
@@ -1210,14 +1164,11 @@ const SalesOrders = ({ onNavigate }: SalesOrdersProps = {}) => {
               </div>
 
               <div className="mt-6">
-                <button
-                  onClick={() => setShowViewModal(false)}
-                  className="w-full px-4 py-3 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold rounded-xl transition-colors"
-                >
+                <Button onClick={() => setShowViewModal(false)} variant="secondary" fullWidth>
                   Close
-                </button>
+                </Button>
               </div>
-            </div>
+            </Card>
           </div>
         </div>
       )}
