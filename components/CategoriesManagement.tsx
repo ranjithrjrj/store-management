@@ -5,7 +5,7 @@
 import React, { useState, useEffect } from 'react';
 import { FolderOpen, Plus, Edit2, Trash2, X, Search } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
-import { Button, Card, Input, Textarea, EmptyState, LoadingSpinner, ConfirmDialog, useToast } from '@/components/ui';
+import { Badge, Button, Card, Input, Textarea, EmptyState, LoadingSpinner, ConfirmDialog, useToast } from '@/components/ui';
 import { useTheme } from '@/contexts/ThemeContext';
 
 type Category = {
