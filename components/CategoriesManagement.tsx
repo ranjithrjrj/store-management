@@ -1,5 +1,5 @@
 // FILE PATH: components/CategoriesManagement.tsx
-// Categories Management with Select/Textarea components and improved mobile UX
+// Categories Management with consistent theming
 
 'use client';
 import React, { useState, useEffect } from 'react';
@@ -164,163 +164,188 @@ const CategoriesManagement = () => {
   const activeCount = categories.filter(c => c.is_active === true || c.is_active === 'true').length;
   const inactiveCount = categories.filter(c => c.is_active === false || c.is_active === 'false' || c.is_active === null).length;
 
-  if (error && !loading) {
+  if (loading) {
     return (
-      <div className="space-y-6">
-        <div>
-          <h2 className="text-2xl font-bold text-gray-900">Categories Management</h2>
-          <p className="text-gray-600 text-sm mt-1">Organize your items into categories</p>
+      <div className="min-h-screen flex items-center justify-center bg-slate-50">
+        <div className="text-center">
+          <LoadingSpinner size="lg" />
+          <p className="mt-4 text-slate-600 font-medium">Loading categories...</p>
         </div>
-        <Card>
-          <div className="text-center py-8">
-            <div className="text-red-600 mb-4">
-              <FolderOpen size={48} className="mx-auto opacity-50" />
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="min-h-screen bg-slate-50 p-4 md:p-6 lg:p-8">
+        <div className="max-w-7xl mx-auto space-y-6">
+          <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6">
+            <div className="flex items-center gap-3">
+              <div className={`p-3 ${theme.classes.bgPrimaryLight} rounded-xl`}>
+                <FolderOpen className={theme.classes.textPrimary} size={28} />
+              </div>
+              <div>
+                <h1 className="text-2xl font-bold text-slate-900">Categories Management</h1>
+                <p className="text-slate-600 text-sm mt-0.5">Organize your items into categories</p>
+              </div>
             </div>
-            <h3 className="font-bold text-red-800 mb-2">Failed to Load Categories</h3>
-            <p className="text-red-600 text-sm mb-4">{error}</p>
-            <Button onClick={loadCategories} variant="primary">Try Again</Button>
           </div>
-        </Card>
+          <Card>
+            <div className="text-center py-8">
+              <div className="text-red-600 mb-4">
+                <FolderOpen size={48} className="mx-auto opacity-50" />
+              </div>
+              <h3 className="font-bold text-red-800 mb-2">Failed to Load Categories</h3>
+              <p className="text-red-600 text-sm mb-4">{error}</p>
+              <Button onClick={loadCategories} variant="primary">Try Again</Button>
+            </div>
+          </Card>
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <div>
-          <h2 className="text-2xl font-bold text-gray-900">Categories Management</h2>
-          <p className="text-gray-600 text-sm mt-1">Organize your items into categories</p>
+    <div className="min-h-screen bg-slate-50 p-4 md:p-6 lg:p-8">
+      <div className="max-w-7xl mx-auto space-y-6">
+        {/* Header */}
+        <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6">
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <div className="flex items-center gap-3">
+              <div className={`p-3 ${theme.classes.bgPrimaryLight} rounded-xl`}>
+                <FolderOpen className={theme.classes.textPrimary} size={28} />
+              </div>
+              <div>
+                <h1 className="text-2xl font-bold text-slate-900">Categories Management</h1>
+                <p className="text-slate-600 text-sm mt-0.5">Organize your items into categories</p>
+              </div>
+            </div>
+            <Button onClick={handleAddNew} variant="primary" icon={<Plus size={20} />}>
+              Add Category
+            </Button>
+          </div>
         </div>
-        <Button onClick={handleAddNew} variant="primary" size="md" icon={<Plus size={18} />}>
-          Add Category
-        </Button>
-      </div>
 
-      {/* Search & Filter */}
-      <div className="grid grid-cols-1 md:grid-cols-12 gap-4">
-        <div className="md:col-span-9">
-          <Card padding="md">
-            <Input
-              leftIcon={<Search size={18} />}
-              rightIcon={searchTerm ? (
-                <button 
-                  onClick={() => setSearchTerm('')}
-                  className="text-gray-400 hover:text-gray-600"
-                >
-                  <X size={18} />
-                </button>
-              ) : undefined}
-              placeholder="Search categories..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-            />
-          </Card>
-        </div>
-        
-        <div className="md:col-span-3">
-          <Card padding="md">
-            <label className="flex items-center gap-2 cursor-pointer">
-              <input
-                type="checkbox"
-                checked={showInactive}
-                onChange={(e) => setShowInactive(e.target.checked)}
-                className={`rounded ${theme.classes.textPrimary}`}
+        {/* Search & Filter */}
+        <div className="grid grid-cols-1 md:grid-cols-12 gap-4">
+          <div className="md:col-span-9">
+            <Card padding="md">
+              <Input
+                leftIcon={<Search size={18} />}
+                rightIcon={searchTerm ? (
+                  <button 
+                    onClick={() => setSearchTerm('')}
+                    className="text-slate-400 hover:text-slate-600"
+                  >
+                    <X size={18} />
+                  </button>
+                ) : undefined}
+                placeholder="Search categories..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
               />
-              <span className="text-sm font-medium text-gray-700">Show Inactive ({inactiveCount})</span>
-            </label>
-          </Card>
+            </Card>
+          </div>
+          
+          <div className="md:col-span-3">
+            <Card padding="md">
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={showInactive}
+                  onChange={(e) => setShowInactive(e.target.checked)}
+                  className="w-4 h-4 rounded border-slate-300"
+                />
+                <span className="text-sm font-medium text-slate-700">Show Inactive ({inactiveCount})</span>
+              </label>
+            </Card>
+          </div>
         </div>
-      </div>
 
-      {/* Categories List */}
-      <Card padding="none">
-        {loading ? (
-          <div className="p-12">
-            <LoadingSpinner size="lg" text="Loading categories..." />
-          </div>
-        ) : filteredCategories.length === 0 ? (
-          <div className="p-12">
-            <EmptyState
-              icon={<FolderOpen size={48} />}
-              title={searchTerm ? "No categories found" : "No categories yet"}
-              description={
-                searchTerm
-                  ? "Try adjusting your search terms"
-                  : "Get started by creating your first category"
-              }
-              action={
-                !searchTerm ? (
-                  <Button onClick={handleAddNew} variant="primary" icon={<Plus size={18} />}>
-                    Add Your First Category
-                  </Button>
-                ) : (
-                  <Button onClick={() => setSearchTerm('')} variant="secondary">
-                    Clear Search
-                  </Button>
-                )
-              }
-            />
-          </div>
-        ) : (
-          <div className="divide-y divide-gray-200">
-            {filteredCategories.map((category) => (
-              <div
-                key={category.id}
-                className={`p-4 hover:bg-gray-50 transition-colors ${(category.is_active === false || category.is_active === 'false') ? 'opacity-60' : ''}`}
-              >
-                <div className="flex items-start justify-between gap-4">
-                  <div className="flex items-start gap-3 flex-1 min-w-0">
-                    <div className={`p-2 ${theme.classes.bgPrimaryLight} rounded-lg flex-shrink-0`}>
-                      <FolderOpen size={20} className={theme.classes.textPrimary} />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 mb-1">
-                        <h3 className="font-semibold text-gray-900">{category.name}</h3>
-                        {(category.is_active === false || category.is_active === 'false') && (
-                          <span className="text-xs px-2 py-0.5 bg-gray-200 text-gray-600 rounded">Inactive</span>
-                        )}
+        {/* Categories List */}
+        <Card padding="none">
+          {filteredCategories.length === 0 ? (
+            <div className="p-12">
+              <EmptyState
+                icon={<FolderOpen size={64} />}
+                title={searchTerm ? "No categories found" : "No categories yet"}
+                description={
+                  searchTerm
+                    ? "Try adjusting your search terms"
+                    : "Get started by creating your first category"
+                }
+                action={
+                  !searchTerm ? (
+                    <Button onClick={handleAddNew} variant="primary" icon={<Plus size={18} />}>
+                      Add Your First Category
+                    </Button>
+                  ) : (
+                    <Button onClick={() => setSearchTerm('')} variant="secondary">
+                      Clear Search
+                    </Button>
+                  )
+                }
+              />
+            </div>
+          ) : (
+            <div className="divide-y divide-slate-200">
+              {filteredCategories.map((category) => (
+                <div
+                  key={category.id}
+                  className={`p-4 hover:bg-slate-50 transition-colors ${(category.is_active === false || category.is_active === 'false') ? 'opacity-60' : ''}`}
+                >
+                  <div className="flex items-start justify-between gap-4">
+                    <div className="flex items-start gap-3 flex-1 min-w-0">
+                      <div className={`p-2 ${theme.classes.bgPrimaryLight} rounded-lg flex-shrink-0`}>
+                        <FolderOpen size={20} className={theme.classes.textPrimary} />
                       </div>
-                      {category.description && (
-                        <p className="text-sm text-gray-600 mt-1">{category.description}</p>
-                      )}
-                      <p className="text-xs text-gray-500 mt-2">
-                        Created {new Date(category.created_at).toLocaleDateString()}
-                      </p>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 mb-1">
+                          <h3 className="font-semibold text-slate-900">{category.name}</h3>
+                          {(category.is_active === false || category.is_active === 'false') && (
+                            <span className="text-xs px-2 py-0.5 bg-slate-200 text-slate-600 rounded">Inactive</span>
+                          )}
+                        </div>
+                        {category.description && (
+                          <p className="text-sm text-slate-600 mt-1">{category.description}</p>
+                        )}
+                        <p className="text-xs text-slate-500 mt-2">
+                          Created {new Date(category.created_at).toLocaleDateString()}
+                        </p>
+                      </div>
                     </div>
-                  </div>
-                  
-                  <div className="flex items-center gap-3 flex-shrink-0">
-                    <button
-                      onClick={() => handleEdit(category)}
-                      className={`${theme.classes.textPrimary} hover:${theme.classes.bgPrimaryLight} p-2 rounded-lg transition-colors`}
-                      title="Edit category"
-                    >
-                      <Edit2 size={16} />
-                    </button>
-                    <button
-                      onClick={() => handleDeleteClick(category.id, category.name)}
-                      className="text-red-600 hover:bg-red-50 p-2 rounded-lg transition-colors"
-                      title="Delete category"
-                    >
-                      <Trash2 size={16} />
-                    </button>
+                    
+                    <div className="flex items-center gap-2 flex-shrink-0">
+                      <button
+                        onClick={() => handleEdit(category)}
+                        className={`p-2 ${theme.classes.textPrimary} hover:${theme.classes.bgPrimaryLight} rounded-lg transition-colors`}
+                        title="Edit category"
+                      >
+                        <Edit2 size={18} />
+                      </button>
+                      <button
+                        onClick={() => handleDeleteClick(category.id, category.name)}
+                        className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                        title="Delete category"
+                      >
+                        <Trash2 size={18} />
+                      </button>
+                    </div>
                   </div>
                 </div>
-              </div>
-            ))}
+              ))}
+            </div>
+          )}
+        </Card>
+
+        {/* Stats */}
+        {categories.length > 0 && (
+          <div className="text-sm text-slate-600">
+            Showing {filteredCategories.length} of {categories.length} categories • 
+            Active: {activeCount} • Inactive: {inactiveCount}
           </div>
         )}
-      </Card>
-
-      {/* Stats */}
-      {!loading && categories.length > 0 && (
-        <div className="text-sm text-gray-600">
-          Showing {filteredCategories.length} of {categories.length} categories • 
-          Active: {activeCount} • Inactive: {inactiveCount}
-        </div>
-      )}
+      </div>
 
       {/* Add/Edit Modal */}
       {showModal && (
@@ -328,10 +353,10 @@ const CategoriesManagement = () => {
           <div className="min-h-screen w-full flex items-center justify-center py-8">
             <Card className="w-full max-w-md">
               <div className="flex items-center justify-between mb-6">
-                <h3 className="text-xl font-bold text-gray-900">
+                <h3 className="text-xl font-bold text-slate-900">
                   {editingCategory ? 'Edit Category' : 'Add New Category'}
                 </h3>
-                <button onClick={() => setShowModal(false)} className="text-gray-400 hover:text-gray-600">
+                <button onClick={() => setShowModal(false)} className="p-2 rounded-lg hover:bg-slate-100">
                   <X size={24} />
                 </button>
               </div>
@@ -354,25 +379,25 @@ const CategoriesManagement = () => {
                 />
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Status</label>
+                  <label className="block text-sm font-semibold text-slate-700 mb-2">Status</label>
                   <label className="flex items-center gap-2">
                     <input
                       type="checkbox"
                       checked={formData.is_active}
                       onChange={(e) => setFormData({ ...formData, is_active: e.target.checked })}
-                      className="rounded border-gray-300"
+                      className="w-4 h-4 rounded border-slate-300"
                     />
-                    <span className="text-sm text-gray-700">Active</span>
+                    <span className="text-sm text-slate-700">Active</span>
                   </label>
                 </div>
               </div>
 
-              <div className="flex gap-3 mt-6 pt-6 border-t border-gray-200">
+              <div className="flex gap-3 mt-6 pt-6 border-t border-slate-200">
                 <Button onClick={() => setShowModal(false)} variant="secondary" fullWidth>
                   Cancel
                 </Button>
-                <Button onClick={handleSubmit} variant="primary" fullWidth disabled={saving}>
-                  {saving ? 'Saving...' : editingCategory ? 'Update' : 'Create'}
+                <Button onClick={handleSubmit} variant="primary" fullWidth loading={saving}>
+                  {editingCategory ? 'Update' : 'Create'}
                 </Button>
               </div>
             </Card>
