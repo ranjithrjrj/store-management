@@ -74,6 +74,8 @@ const InventoryManagement = () => {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [loadingHistory, setLoadingHistory] = useState(false);
+  const [loadingBatches, setLoadingBatches] = useState(false);
+  const [itemBatches, setItemBatches] = useState<any[]>([]);
   
   const [formData, setFormData] = useState({
     name: '',
@@ -178,11 +180,34 @@ const InventoryManagement = () => {
     }
   }
 
+  async function loadItemBatches(itemId: string) {
+    try {
+      setLoadingBatches(true);
+      const { data, error } = await supabase
+        .from('inventory_batches')
+        .select('*')
+        .eq('item_id', itemId)
+        .gt('quantity', 0)
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+      setItemBatches(data || []);
+    } catch (err: any) {
+      console.error('Error loading batches:', err);
+      toast.error('Failed to load', 'Could not load batch details.');
+    } finally {
+      setLoadingBatches(false);
+    }
+  }
+
   const handleViewItem = async (item: Item) => {
     setSelectedItem(item);
     setActiveTab('details');
     setShowItemModal(true);
-    await loadItemHistory(item.id);
+    await Promise.all([
+      loadItemHistory(item.id),
+      loadItemBatches(item.id)
+    ]);
   };
 
   const handleAddNew = () => {
@@ -904,12 +929,95 @@ const InventoryManagement = () => {
                         </div>
                       ))}
                     </div>
+                    
                     <div className="p-6 bg-amber-50 rounded-xl border-2 border-amber-200">
                       <p className="text-sm text-amber-700 font-medium mb-2">Stock Value</p>
                       <p className="text-3xl font-bold text-amber-900">
                         ₹{(selectedItem.current_stock * selectedItem.retail_price).toLocaleString('en-IN')}
                       </p>
                     </div>
+
+                    {/* Batch Details */}
+                    <div className="border-t border-slate-200 pt-6">
+                      <h4 className="font-bold text-slate-900 mb-4 flex items-center gap-2">
+                        <Package size={20} />
+                        Inventory Batches
+                      </h4>
+                      {loadingBatches ? (
+                        <div className="py-8 text-center"><LoadingSpinner size="md" /></div>
+                      ) : itemBatches.length === 0 ? (
+                        <p className="text-sm text-slate-500 italic py-4 text-center bg-slate-50 rounded-lg">
+                          No active batches found
+                        </p>
+                      ) : (
+                        <div className="space-y-3">
+                          {itemBatches.map((batch) => {
+                            const purchaseRate = batch.purchase_price || batch.purchase_rate || 0;
+                            const margin = selectedItem.retail_price - purchaseRate;
+                            const marginPercent = purchaseRate > 0 ? (margin / purchaseRate) * 100 : 0;
+                            const isExpiring = batch.expiry_date && new Date(batch.expiry_date) < new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+                            const isExpired = batch.expiry_date && new Date(batch.expiry_date) < new Date();
+
+                            return (
+                              <div key={batch.id} className={`p-4 rounded-xl border-2 ${
+                                isExpired ? 'bg-red-50 border-red-300' :
+                                isExpiring ? 'bg-orange-50 border-orange-300' :
+                                batch.status === 'returned' ? 'bg-orange-50 border-orange-300' :
+                                'bg-slate-50 border-slate-200'
+                              }`}>
+                                <div className="flex items-start justify-between mb-3">
+                                  <div>
+                                    <div className="flex items-center gap-2 mb-1">
+                                      {batch.batch_number && (
+                                        <Badge variant="neutral" size="sm">Batch: {batch.batch_number}</Badge>
+                                      )}
+                                      <Badge variant={batch.status === 'returned' ? 'warning' : 'success'} size="sm">
+                                        {batch.status}
+                                      </Badge>
+                                      {isExpired && <Badge variant="danger" size="sm">Expired</Badge>}
+                                      {isExpiring && !isExpired && <Badge variant="warning" size="sm">Expiring Soon</Badge>}
+                                    </div>
+                                    {batch.notes && (
+                                      <p className="text-xs text-slate-600 mt-1">{batch.notes}</p>
+                                    )}
+                                  </div>
+                                  <div className="text-right">
+                                    <p className="text-2xl font-bold text-slate-900">{batch.quantity}</p>
+                                    <p className="text-xs text-slate-500">{selectedItem.unit?.abbreviation}</p>
+                                  </div>
+                                </div>
+
+                                <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
+                                  {batch.expiry_date && (
+                                    <div>
+                                      <p className="text-slate-500">Expiry Date</p>
+                                      <p className={`font-semibold ${isExpired ? 'text-red-600' : isExpiring ? 'text-orange-600' : 'text-slate-900'}`}>
+                                        {new Date(batch.expiry_date).toLocaleDateString()}
+                                      </p>
+                                    </div>
+                                  )}
+                                  <div>
+                                    <p className="text-slate-500">Purchase Rate</p>
+                                    <p className="font-semibold text-slate-900">₹{purchaseRate.toFixed(2)}</p>
+                                  </div>
+                                  <div>
+                                    <p className="text-slate-500">Retail Price</p>
+                                    <p className="font-semibold text-slate-900">₹{selectedItem.retail_price.toFixed(2)}</p>
+                                  </div>
+                                  <div>
+                                    <p className="text-slate-500">Margin</p>
+                                    <p className={`font-semibold ${margin > 0 ? 'text-green-600' : margin < 0 ? 'text-red-600' : 'text-slate-900'}`}>
+                                      ₹{margin.toFixed(2)} ({marginPercent > 0 ? '+' : ''}{marginPercent.toFixed(1)}%)
+                                    </p>
+                                  </div>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                    
                     <div className="flex items-center gap-4">
                       {getStockBadge(selectedItem)}
                       {selectedItem.current_stock <= selectedItem.min_stock_level && (
