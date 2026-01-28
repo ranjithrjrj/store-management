@@ -30,6 +30,7 @@ const CategoriesManagement = () => {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [categoryUsageCounts, setCategoryUsageCounts] = useState<Record<string, number>>({});
   
   const [formData, setFormData] = useState({
     name: '',
@@ -59,6 +60,21 @@ const CategoriesManagement = () => {
 
       if (err) throw err;
       setCategories(data || []);
+      
+      // Load usage counts for all categories
+      if (data && data.length > 0) {
+        const counts: Record<string, number> = {};
+        await Promise.all(
+          data.map(async (category) => {
+            const { count } = await supabase
+              .from('items')
+              .select('*', { count: 'exact', head: true })
+              .eq('category_id', category.id);
+            counts[category.id] = count || 0;
+          })
+        );
+        setCategoryUsageCounts(counts);
+      }
     } catch (err: any) {
       console.error('Error loading categories:', err);
       setError(err.message || 'Failed to load categories');
@@ -134,6 +150,20 @@ const CategoriesManagement = () => {
     if (!deletingCategory) return;
 
     try {
+      // Check if category is assigned to any items
+      const { data: items } = await supabase
+        .from('items')
+        .select('id')
+        .eq('category_id', deletingCategory.id)
+        .limit(1);
+
+      if (items && items.length > 0) {
+        toast.warning('Cannot delete', 'This category is assigned to one or more items.');
+        setShowDeleteConfirm(false);
+        setDeletingCategory(null);
+        return;
+      }
+
       const { error } = await supabase
         .from('categories')
         .update({ is_active: false })
@@ -289,51 +319,64 @@ const CategoriesManagement = () => {
             </div>
           ) : (
             <div className="divide-y divide-slate-200">
-              {filteredCategories.map((category) => (
-                <div
-                  key={category.id}
-                  className={`p-4 hover:bg-slate-50 transition-colors ${(category.is_active === false || category.is_active === 'false') ? 'opacity-60' : ''}`}
-                >
-                  <div className="flex items-start justify-between gap-4">
-                    <div className="flex items-start gap-3 flex-1 min-w-0">
-                      <div className={`p-2 ${theme.classes.bgPrimaryLight} rounded-lg flex-shrink-0`}>
-                        <FolderOpen size={20} className={theme.classes.textPrimary} />
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2 mb-1">
-                          <h3 className="font-semibold text-slate-900">{category.name}</h3>
-                          {(category.is_active === false || category.is_active === 'false') && (
-                            <span className="text-xs px-2 py-0.5 bg-slate-200 text-slate-600 rounded">Inactive</span>
-                          )}
+              {filteredCategories.map((category) => {
+                const itemCount = categoryUsageCounts[category.id] || 0;
+                const isInUse = itemCount > 0;
+                
+                return (
+                  <div
+                    key={category.id}
+                    className={`p-4 hover:bg-slate-50 transition-colors ${(category.is_active === false || category.is_active === 'false') ? 'opacity-60' : ''}`}
+                  >
+                    <div className="flex items-start justify-between gap-4">
+                      <div className="flex items-start gap-3 flex-1 min-w-0">
+                        <div className={`p-2 ${theme.classes.bgPrimaryLight} rounded-lg flex-shrink-0`}>
+                          <FolderOpen size={20} className={theme.classes.textPrimary} />
                         </div>
-                        {category.description && (
-                          <p className="text-sm text-slate-600 mt-1">{category.description}</p>
-                        )}
-                        <p className="text-xs text-slate-500 mt-2">
-                          Created {new Date(category.created_at).toLocaleDateString()}
-                        </p>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 mb-1">
+                            <h3 className="font-semibold text-slate-900">{category.name}</h3>
+                            {(category.is_active === false || category.is_active === 'false') && (
+                              <span className="text-xs px-2 py-0.5 bg-slate-200 text-slate-600 rounded">Inactive</span>
+                            )}
+                            {isInUse && (
+                              <Badge variant="primary" size="sm">{itemCount} item{itemCount !== 1 ? 's' : ''}</Badge>
+                            )}
+                          </div>
+                          {category.description && (
+                            <p className="text-sm text-slate-600 mt-1">{category.description}</p>
+                          )}
+                          <p className="text-xs text-slate-500 mt-2">
+                            Created {new Date(category.created_at).toLocaleDateString()}
+                          </p>
+                        </div>
                       </div>
-                    </div>
-                    
-                    <div className="flex items-center gap-2 flex-shrink-0">
-                      <button
-                        onClick={() => handleEdit(category)}
-                        className={`p-2 ${theme.classes.textPrimary} hover:${theme.classes.bgPrimaryLight} rounded-lg transition-colors`}
-                        title="Edit category"
-                      >
-                        <Edit2 size={18} />
-                      </button>
-                      <button
-                        onClick={() => handleDeleteClick(category.id, category.name)}
-                        className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                        title="Delete category"
-                      >
-                        <Trash2 size={18} />
-                      </button>
+                      
+                      <div className="flex items-center gap-2 flex-shrink-0">
+                        <button
+                          onClick={() => handleEdit(category)}
+                          className={`p-2 ${theme.classes.textPrimary} hover:${theme.classes.bgPrimaryLight} rounded-lg transition-colors`}
+                          title="Edit category"
+                        >
+                          <Edit2 size={18} />
+                        </button>
+                        <button
+                          onClick={() => !isInUse && handleDeleteClick(category.id, category.name)}
+                          className={`p-2 rounded-lg transition-colors ${
+                            isInUse 
+                              ? 'text-slate-300 bg-slate-50 cursor-not-allowed' 
+                              : 'text-red-600 hover:bg-red-50'
+                          }`}
+                          title={isInUse ? `Cannot delete: Used by ${itemCount} item${itemCount !== 1 ? 's' : ''}` : 'Delete category'}
+                          disabled={isInUse}
+                        >
+                          <Trash2 size={18} />
+                        </button>
+                      </div>
                     </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </Card>
