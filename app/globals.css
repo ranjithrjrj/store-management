@@ -1,3 +1,9 @@
+/* EMERGENCY FIX - Remove after debugging */
+* { opacity: 1 !important; visibility: visible !important; color: inherit !important; }
+svg { stroke: currentColor !important; }
+.text-white, .text-white * { color: white !important; }
+.text-slate-900, .text-slate-900 * { color: #0f172a !important; }
+
 @import "tailwindcss";
 
 :root {
@@ -24,5 +30,3 @@ body {
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
 }
-
-
