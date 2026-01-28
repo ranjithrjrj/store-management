@@ -5,7 +5,7 @@
 import React, { useState, useEffect } from 'react';
 import { 
   Package, Search, AlertTriangle, TrendingUp, DollarSign, X, 
-  Plus, Edit2, Trash2, History, Info, Tag, Filter, Camera
+  Plus, Edit2, Trash2, History, Info, Tag, Filter, Badge, Camera
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { Button, Card, Input, Select, Textarea, Badge, EmptyState, LoadingSpinner, ConfirmDialog, useToast } from '@/components/ui';
