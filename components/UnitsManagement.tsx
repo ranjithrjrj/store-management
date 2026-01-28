@@ -4,7 +4,7 @@
 'use client';
 import React, { useState, useEffect } from 'react';
 import { Ruler, Plus, Edit2, Trash2, X, Search } from 'lucide-react';
-import { supabase, unitsAPI } from '@/lib/supabase';
+import { supabase } from '@/lib/supabase';
 import { Button, Card, Input, Badge, EmptyState, LoadingSpinner, ConfirmDialog, useToast } from '@/components/ui';
 import { useTheme } from '@/contexts/ThemeContext';
 
@@ -54,7 +54,13 @@ const UnitsManagement = () => {
       setLoading(true);
       setError(null);
 
-      const data = await unitsAPI.getAll();
+      const { data, error: err } = await supabase
+        .from('units')
+        .select('*')
+        .order('name');
+
+      if (err) throw err;
+
       setUnits(data || []);
       
       // Load usage counts for all units
@@ -114,18 +120,27 @@ const UnitsManagement = () => {
       setSaving(true);
 
       if (editingUnit) {
-        await unitsAPI.update(editingUnit.id, {
-          name: formData.name.trim(),
-          abbreviation: formData.abbreviation.trim(),
-          is_active: formData.is_active
-        } as any);
+        const { error } = await supabase
+          .from('units')
+          .update({
+            name: formData.name.trim(),
+            abbreviation: formData.abbreviation.trim(),
+            is_active: formData.is_active
+          })
+          .eq('id', editingUnit.id);
+
+        if (error) throw error;
         toast.success('Updated!', `Unit "${formData.name}" has been updated.`);
       } else {
-        await unitsAPI.create({
-          name: formData.name.trim(),
-          abbreviation: formData.abbreviation.trim(),
-          is_active: formData.is_active
-        } as any);
+        const { error } = await supabase
+          .from('units')
+          .insert({
+            name: formData.name.trim(),
+            abbreviation: formData.abbreviation.trim(),
+            is_active: formData.is_active
+          });
+
+        if (error) throw error;
         toast.success('Created!', `Unit "${formData.name}" has been created.`);
       }
 
@@ -162,7 +177,11 @@ const UnitsManagement = () => {
         return;
       }
 
-      await unitsAPI.delete(deletingUnit.id);
+      await supabase
+        .from('units')
+        .delete()
+        .eq('id', deletingUnit.id);
+
       await loadUnits();
       toast.success('Deleted', `Unit "${deletingUnit.name}" has been deleted.`);
       setShowDeleteConfirm(false);
