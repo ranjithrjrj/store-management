@@ -1,9 +1,5 @@
 @import "tailwindcss";
 
-/* EMERGENCY FIX - Test only */
-* { opacity: 1 !important; visibility: visible !important; }
-svg { stroke: currentColor !important; color: inherit !important; }
-
 :root {
   --background: #ffffff;
   --foreground: #171717;
