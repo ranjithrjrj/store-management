@@ -1,14 +1,14 @@
 // FILE PATH: components/InventoryManagement.tsx
-// Beautiful Modern Inventory Management - Teal & Gold Theme with Table Layout
+// Inventory Management with consistent theming
 
 'use client';
 import React, { useState, useEffect } from 'react';
 import { 
   Package, Search, AlertTriangle, TrendingUp, DollarSign, X, 
-  Plus, Edit2, Trash2, History, Info, Tag, Filter, ChevronDown, Camera
+  Plus, Edit2, Trash2, History, Info, Tag, Filter, Camera
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
-import { Button, Card, Input, Textarea, Badge, EmptyState, LoadingSpinner, ConfirmDialog, useToast } from '@/components/ui';
+import { Button, Card, Input, Select, Textarea, Badge, EmptyState, LoadingSpinner, ConfirmDialog, useToast } from '@/components/ui';
 import { useTheme } from '@/contexts/ThemeContext';
 import BarcodeScanner from './BarcodeScanner';
 
@@ -66,7 +66,6 @@ const InventoryManagement = () => {
   const [showItemModal, setShowItemModal] = useState(false);
   const [showAddModal, setShowAddModal] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
-  const [showSortDropdown, setShowSortDropdown] = useState(false);
   const [showBarcodeScanner, setShowBarcodeScanner] = useState(false);
   const [selectedItem, setSelectedItem] = useState<Item | null>(null);
   const [activeTab, setActiveTab] = useState<'details' | 'stock' | 'history' | 'settings'>('details');
@@ -112,23 +111,20 @@ const InventoryManagement = () => {
 
       if (itemsError) throw itemsError;
 
-      // Get stock for each item - SUM all inventory_batches records
+      // Get stock for each item
       const itemsWithStock = await Promise.all((itemsData || []).map(async (item) => {
-        // Query for normal stock - SUM all quantities where status = 'normal'
         const { data: normalStockData } = await supabase
           .from('inventory_batches')
           .select('quantity')
           .eq('item_id', item.id)
           .eq('status', 'normal');
 
-        // Query for returned stock - SUM all quantities where status = 'returned'
         const { data: returnedStockData } = await supabase
           .from('inventory_batches')
           .select('quantity')
           .eq('item_id', item.id)
           .eq('status', 'returned');
 
-        // Sum all quantities from all batches
         const normal = (normalStockData || []).reduce((sum, record) => sum + (record.quantity || 0), 0);
         const returned = (returnedStockData || []).reduce((sum, record) => sum + (record.quantity || 0), 0);
 
@@ -289,58 +285,54 @@ const InventoryManagement = () => {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-teal-50 via-white to-amber-50 flex items-center justify-center p-8">
+      <div className="min-h-screen flex items-center justify-center bg-slate-50">
         <div className="text-center">
-          <div className="inline-flex p-6 bg-white/90 backdrop-blur-sm rounded-2xl shadow-xl mb-4">
-            <LoadingSpinner size="lg" />
-          </div>
-          <p className="text-slate-700 font-medium">Loading inventory...</p>
+          <LoadingSpinner size="lg" />
+          <p className="mt-4 text-slate-600 font-medium">Loading inventory...</p>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-teal-50 via-white to-amber-50 p-4 md:p-6 lg:p-8">
+    <div className="min-h-screen bg-slate-50 p-4 md:p-6 lg:p-8">
       <div className="max-w-7xl mx-auto space-y-6">
         
-        {/* Elegant Header */}
-        <div className="bg-white rounded-2xl shadow-lg border border-teal-100 p-6">
-          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-            <div className="flex items-center gap-4">
-              <div className="p-3 bg-gradient-to-br from-teal-500 to-teal-600 rounded-xl shadow-md">
-                <Package className="text-white" size={32} />
+        {/* Header */}
+        <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6">
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <div className="flex items-center gap-3">
+              <div className={`p-3 ${theme.classes.bgPrimaryLight} rounded-xl`}>
+                <Package className={theme.classes.textPrimary} size={28} />
               </div>
               <div>
-                <h1 className="text-3xl font-bold text-slate-900">Inventory & Items</h1>
-                <p className="text-slate-600 mt-1">Unified inventory management</p>
+                <h1 className="text-2xl font-bold text-slate-900">Inventory & Items</h1>
+                <p className="text-slate-600 text-sm mt-0.5">Manage stock and product catalog</p>
               </div>
             </div>
             <Button 
               onClick={handleAddNew} 
               variant="primary" 
-              size="md" 
               icon={<Plus size={20} />}
-              className="bg-gradient-to-r from-teal-600 to-teal-700 hover:from-teal-700 hover:to-teal-800 shadow-md"
             >
-              Add New Item
+              Add Item
             </Button>
           </div>
         </div>
 
-        {/* Stats Cards - Teal & Gold Theme */}
+        {/* Stats Cards */}
         <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
-          <div className="bg-white rounded-xl shadow-md border border-teal-100 p-4 hover:shadow-lg transition-shadow">
+          <Card padding="md" className="hover:shadow-md transition-shadow">
             <div className="flex items-center justify-between mb-2">
-              <div className="p-2 bg-teal-100 rounded-lg">
-                <Package className="text-teal-600" size={20} />
+              <div className={`p-2 ${theme.classes.bgPrimaryLight} rounded-lg`}>
+                <Package className={theme.classes.textPrimary} size={20} />
               </div>
               <span className="text-2xl font-bold text-slate-900">{stats.totalItems}</span>
             </div>
             <p className="text-sm text-slate-600">Total Items</p>
-          </div>
+          </Card>
 
-          <div className="bg-white rounded-xl shadow-md border border-amber-100 p-4 hover:shadow-lg transition-shadow">
+          <Card padding="md" className="hover:shadow-md transition-shadow">
             <div className="flex items-center justify-between mb-2">
               <div className="p-2 bg-amber-100 rounded-lg">
                 <DollarSign className="text-amber-600" size={20} />
@@ -348,9 +340,9 @@ const InventoryManagement = () => {
               <span className="text-2xl font-bold text-slate-900">₹{(stats.totalValue / 1000).toFixed(0)}K</span>
             </div>
             <p className="text-sm text-slate-600">Total Value</p>
-          </div>
+          </Card>
 
-          <div className="bg-white rounded-xl shadow-md border border-orange-100 p-4 hover:shadow-lg transition-shadow">
+          <Card padding="md" className="hover:shadow-md transition-shadow">
             <div className="flex items-center justify-between mb-2">
               <div className="p-2 bg-orange-100 rounded-lg">
                 <AlertTriangle className="text-orange-600" size={20} />
@@ -358,9 +350,9 @@ const InventoryManagement = () => {
               <span className="text-2xl font-bold text-slate-900">{stats.lowStock}</span>
             </div>
             <p className="text-sm text-slate-600">Low Stock</p>
-          </div>
+          </Card>
 
-          <div className="bg-white rounded-xl shadow-md border border-red-100 p-4 hover:shadow-lg transition-shadow">
+          <Card padding="md" className="hover:shadow-md transition-shadow">
             <div className="flex items-center justify-between mb-2">
               <div className="p-2 bg-red-100 rounded-lg">
                 <X className="text-red-600" size={20} />
@@ -368,9 +360,9 @@ const InventoryManagement = () => {
               <span className="text-2xl font-bold text-slate-900">{stats.outOfStock}</span>
             </div>
             <p className="text-sm text-slate-600">Out of Stock</p>
-          </div>
+          </Card>
 
-          <div className="bg-white rounded-xl shadow-md border border-blue-100 p-4 hover:shadow-lg transition-shadow">
+          <Card padding="md" className="hover:shadow-md transition-shadow">
             <div className="flex items-center justify-between mb-2">
               <div className="p-2 bg-blue-100 rounded-lg">
                 <TrendingUp className="text-blue-600" size={20} />
@@ -378,131 +370,79 @@ const InventoryManagement = () => {
               <span className="text-2xl font-bold text-slate-900">{stats.returns}</span>
             </div>
             <p className="text-sm text-slate-600">Has Returns</p>
-          </div>
+          </Card>
         </div>
 
-        {/* Search & Filter Bar */}
-        <div className="bg-white rounded-xl shadow-md border border-slate-200 p-4">
-          <div className="flex flex-col md:flex-row gap-3">
-            {/* Search */}
-            <div className="flex-1">
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={20} />
-                <input
-                  type="text"
-                  placeholder="Search by name, SKU, or barcode..."
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  className="w-full pl-10 pr-10 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-teal-500 transition-all text-slate-900"
-                />
-                {searchTerm && (
+        {/* Search & Filter */}
+        <div className="grid grid-cols-1 md:grid-cols-12 gap-4">
+          <div className="md:col-span-6">
+            <Card padding="md">
+              <Input
+                leftIcon={<Search size={18} />}
+                rightIcon={searchTerm ? (
                   <button 
                     onClick={() => setSearchTerm('')}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                    className="text-slate-400 hover:text-slate-600"
                   >
                     <X size={18} />
                   </button>
-                )}
-              </div>
-            </div>
-
-            {/* Filter Button */}
-            <Button
-              onClick={() => setShowFilterModal(true)}
-              variant="secondary"
-              size="md"
-              icon={<Filter size={18} />}
-              className="relative"
-            >
-              Filters
-              {hasActiveFilters && (
-                <span className="absolute -top-1 -right-1 w-5 h-5 bg-teal-600 text-white text-xs rounded-full flex items-center justify-center">
-                  {[filterStatus !== 'all', filterCategory !== 'all', searchTerm !== ''].filter(Boolean).length}
-                </span>
-              )}
-            </Button>
-
-            {/* Clear Filters */}
-            {hasActiveFilters && (
-              <Button
-                onClick={handleClearFilters}
-                variant="secondary"
-                size="md"
-              >
-                Clear All
-              </Button>
-            )}
-
-            {/* Sort Dropdown - Custom Styled */}
-            <div className="relative">
-              <button
-                onClick={() => setShowSortDropdown(!showSortDropdown)}
-                className="flex items-center gap-2 px-4 py-2.5 bg-white border border-slate-300 rounded-lg hover:bg-slate-50 transition-colors"
-              >
-                <span className="text-sm font-medium text-slate-700">
-                  Sort: {sortBy === 'name' ? 'Name' : sortBy === 'stock' ? 'Stock' : 'Value'}
-                </span>
-                <ChevronDown size={16} className="text-slate-500" />
-              </button>
-
-              {showSortDropdown && (
-                <div className="absolute right-0 mt-2 w-56 bg-white rounded-lg shadow-xl border border-slate-200 py-2 z-50">
-                  <button
-                    onClick={() => { setSortBy('name'); setSortOrder('asc'); setShowSortDropdown(false); }}
-                    className="w-full px-4 py-2 text-left text-sm hover:bg-slate-50 flex items-center justify-between"
-                  >
-                    <span>Name (A-Z)</span>
-                    {sortBy === 'name' && sortOrder === 'asc' && <span className="text-teal-600">✓</span>}
-                  </button>
-                  <button
-                    onClick={() => { setSortBy('name'); setSortOrder('desc'); setShowSortDropdown(false); }}
-                    className="w-full px-4 py-2 text-left text-sm hover:bg-slate-50 flex items-center justify-between"
-                  >
-                    <span>Name (Z-A)</span>
-                    {sortBy === 'name' && sortOrder === 'desc' && <span className="text-teal-600">✓</span>}
-                  </button>
-                  <div className="border-t border-slate-200 my-1"></div>
-                  <button
-                    onClick={() => { setSortBy('stock'); setSortOrder('desc'); setShowSortDropdown(false); }}
-                    className="w-full px-4 py-2 text-left text-sm hover:bg-slate-50 flex items-center justify-between"
-                  >
-                    <span>Stock (High to Low)</span>
-                    {sortBy === 'stock' && sortOrder === 'desc' && <span className="text-teal-600">✓</span>}
-                  </button>
-                  <button
-                    onClick={() => { setSortBy('stock'); setSortOrder('asc'); setShowSortDropdown(false); }}
-                    className="w-full px-4 py-2 text-left text-sm hover:bg-slate-50 flex items-center justify-between"
-                  >
-                    <span>Stock (Low to High)</span>
-                    {sortBy === 'stock' && sortOrder === 'asc' && <span className="text-teal-600">✓</span>}
-                  </button>
-                  <div className="border-t border-slate-200 my-1"></div>
-                  <button
-                    onClick={() => { setSortBy('value'); setSortOrder('desc'); setShowSortDropdown(false); }}
-                    className="w-full px-4 py-2 text-left text-sm hover:bg-slate-50 flex items-center justify-between"
-                  >
-                    <span>Value (High to Low)</span>
-                    {sortBy === 'value' && sortOrder === 'desc' && <span className="text-teal-600">✓</span>}
-                  </button>
-                  <button
-                    onClick={() => { setSortBy('value'); setSortOrder('asc'); setShowSortDropdown(false); }}
-                    className="w-full px-4 py-2 text-left text-sm hover:bg-slate-50 flex items-center justify-between"
-                  >
-                    <span>Value (Low to High)</span>
-                    {sortBy === 'value' && sortOrder === 'asc' && <span className="text-teal-600">✓</span>}
-                  </button>
-                </div>
-              )}
-            </div>
+                ) : undefined}
+                placeholder="Search by name, SKU, or barcode..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+              />
+            </Card>
           </div>
 
-          {/* Active Filters Display */}
-          {hasActiveFilters && (
-            <div className="flex flex-wrap gap-2 mt-3 pt-3 border-t border-slate-200">
+          <div className="md:col-span-3">
+            <Card padding="md">
+              <Button
+                onClick={() => setShowFilterModal(true)}
+                variant="secondary"
+                icon={<Filter size={18} />}
+                fullWidth
+                className="relative"
+              >
+                Filters
+                {hasActiveFilters && (
+                  <span className={`absolute -top-1 -right-1 w-5 h-5 ${theme.classes.bgPrimary} text-white text-xs rounded-full flex items-center justify-center`}>
+                    {[filterStatus !== 'all', filterCategory !== 'all'].filter(Boolean).length}
+                  </span>
+                )}
+              </Button>
+            </Card>
+          </div>
+
+          <div className="md:col-span-3">
+            <Card padding="md">
+              <Select
+                value={`${sortBy}-${sortOrder}`}
+                onChange={(e) => {
+                  const [sort, order] = e.target.value.split('-');
+                  setSortBy(sort);
+                  setSortOrder(order as 'asc' | 'desc');
+                }}
+              >
+                <option value="name-asc">Name (A-Z)</option>
+                <option value="name-desc">Name (Z-A)</option>
+                <option value="stock-desc">Stock (High to Low)</option>
+                <option value="stock-asc">Stock (Low to High)</option>
+                <option value="value-desc">Value (High to Low)</option>
+                <option value="value-asc">Value (Low to High)</option>
+              </Select>
+            </Card>
+          </div>
+        </div>
+
+        {/* Active Filters Display */}
+        {hasActiveFilters && (
+          <Card padding="md">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-sm font-medium text-slate-600">Active filters:</span>
               {filterStatus !== 'all' && (
-                <span className="inline-flex items-center gap-1 px-3 py-1 bg-teal-100 text-teal-700 rounded-full text-sm">
+                <span className={`inline-flex items-center gap-1 px-3 py-1 ${theme.classes.bgPrimaryLight} ${theme.classes.textPrimary} rounded-full text-sm`}>
                   Status: {filterStatus}
-                  <button onClick={() => setFilterStatus('all')} className="hover:text-teal-900">
+                  <button onClick={() => setFilterStatus('all')} className="hover:opacity-70">
                     <X size={14} />
                   </button>
                 </span>
@@ -510,21 +450,24 @@ const InventoryManagement = () => {
               {filterCategory !== 'all' && (
                 <span className="inline-flex items-center gap-1 px-3 py-1 bg-amber-100 text-amber-700 rounded-full text-sm">
                   Category: {categories.find(c => c.id === filterCategory)?.name}
-                  <button onClick={() => setFilterCategory('all')} className="hover:text-amber-900">
+                  <button onClick={() => setFilterCategory('all')} className="hover:opacity-70">
                     <X size={14} />
                   </button>
                 </span>
               )}
+              <Button onClick={handleClearFilters} variant="secondary" size="sm">
+                Clear All
+              </Button>
             </div>
-          )}
-        </div>
+          </Card>
+        )}
 
-        {/* Beautiful Table */}
-        <div className="bg-white rounded-xl shadow-lg border border-slate-200 overflow-hidden">
+        {/* Items Table */}
+        <Card padding="none">
           {filteredItems.length === 0 ? (
             <div className="p-12">
               <EmptyState 
-                icon={<Package size={64} className="text-slate-300" />}
+                icon={<Package size={64} />}
                 title={hasActiveFilters ? "No items found" : "No items yet"}
                 description={hasActiveFilters ? "Try adjusting your filters" : "Add your first item to get started"}
                 action={
@@ -540,7 +483,7 @@ const InventoryManagement = () => {
             <>
               <div className="overflow-x-auto">
                 <table className="w-full">
-                  <thead className="bg-gradient-to-r from-teal-50 to-amber-50 border-b border-slate-200">
+                  <thead className="bg-slate-50 border-b border-slate-200">
                     <tr>
                       <th className="px-6 py-4 text-left text-xs font-bold text-slate-700 uppercase tracking-wider">Item</th>
                       <th className="px-6 py-4 text-left text-xs font-bold text-slate-700 uppercase tracking-wider">Category</th>
@@ -552,10 +495,10 @@ const InventoryManagement = () => {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
-                    {filteredItems.map((item, index) => (
+                    {filteredItems.map((item) => (
                       <tr 
                         key={item.id}
-                        className="hover:bg-teal-50/30 transition-colors cursor-pointer"
+                        className="hover:bg-slate-50 transition-colors cursor-pointer"
                         onClick={() => handleViewItem(item)}
                       >
                         <td className="px-6 py-4">
@@ -570,9 +513,9 @@ const InventoryManagement = () => {
                           </div>
                         </td>
                         <td className="px-6 py-4">
-                          <span className="inline-flex px-3 py-1 bg-slate-100 text-slate-700 rounded-full text-sm font-medium">
+                          <Badge variant="neutral" size="sm">
                             {item.category?.name || 'Uncategorized'}
-                          </span>
+                          </Badge>
                         </td>
                         <td className="px-6 py-4">
                           <div>
@@ -600,14 +543,14 @@ const InventoryManagement = () => {
                           <div className="flex items-center gap-2">
                             <button
                               onClick={() => handleViewItem(item)}
-                              className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                              className="p-2 text-slate-600 hover:bg-slate-100 rounded-lg transition-colors"
                               title="View Details"
                             >
                               <Info size={18} />
                             </button>
                             <button
                               onClick={() => handleEditItem(item)}
-                              className="p-2 text-teal-600 hover:bg-teal-50 rounded-lg transition-colors"
+                              className={`p-2 ${theme.classes.textPrimary} ${theme.classes.bgPrimaryLight} rounded-lg transition-colors hover:opacity-80`}
                               title="Edit"
                             >
                               <Edit2 size={18} />
@@ -627,297 +570,264 @@ const InventoryManagement = () => {
                     Showing <span className="font-semibold text-slate-900">{filteredItems.length}</span> of <span className="font-semibold text-slate-900">{items.length}</span> items
                   </span>
                   <span className="text-slate-600">
-                    Total Value: <span className="font-bold text-teal-700">₹{stats.totalValue.toLocaleString('en-IN')}</span>
+                    Total Value: <span className={`font-bold ${theme.classes.textPrimary}`}>₹{stats.totalValue.toLocaleString('en-IN')}</span>
                   </span>
                 </div>
               </div>
             </>
           )}
-        </div>
+        </Card>
       </div>
 
       {/* Filter Modal */}
       {showFilterModal && (
-        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg">
-            <div className="bg-gradient-to-r from-teal-600 to-teal-700 px-6 py-4 rounded-t-2xl flex items-center justify-between">
-              <h3 className="text-xl font-bold text-white">Filter Items</h3>
-              <button onClick={() => setShowFilterModal(false)} className="text-white hover:bg-white/20 p-1 rounded transition-colors">
-                <X size={24} />
-              </button>
-            </div>
-
-            <div className="p-6 space-y-4">
-              {/* Status Filter */}
-              <div>
-                <label className="block text-sm font-semibold text-slate-700 mb-2">Stock Status</label>
-                <select
-                  value={filterStatus}
-                  onChange={(e) => setFilterStatus(e.target.value as any)}
-                  className="w-full px-4 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-teal-500 text-slate-900"
+        <div className="fixed inset-0 bg-black/20 backdrop-blur-sm flex items-start justify-center p-4 z-50 overflow-y-auto">
+          <div className="min-h-screen w-full flex items-center justify-center py-8">
+            <Card className="w-full max-w-lg">
+              <div className="flex items-center justify-between mb-6">
+                <div className="flex items-center gap-3">
+                  <div className={`p-2.5 ${theme.classes.bgPrimaryLight} rounded-xl`}>
+                    <Filter className={theme.classes.textPrimary} size={24} />
+                  </div>
+                  <h3 className="text-xl font-bold text-slate-900">Filter Items</h3>
+                </div>
+                <button
+                  onClick={() => setShowFilterModal(false)}
+                  className="p-2 rounded-lg hover:bg-slate-100"
                 >
-                  <option value="all">All Status</option>
-                  <option value="in-stock">In Stock</option>
-                  <option value="low-stock">Low Stock</option>
-                  <option value="out-of-stock">Out of Stock</option>
-                  <option value="has-returns">Has Returns</option>
-                </select>
+                  <X size={24} />
+                </button>
               </div>
 
-              {/* Category Filter */}
-              <div>
-                <label className="block text-sm font-semibold text-slate-700 mb-2">Category</label>
-                <select
-                  value={filterCategory}
-                  onChange={(e) => setFilterCategory(e.target.value)}
-                  className="w-full px-4 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-teal-500 text-slate-900"
-                >
-                  <option value="all">All Categories</option>
-                  {categories.map(cat => (
-                    <option key={cat.id} value={cat.id}>{cat.name}</option>
-                  ))}
-                </select>
-              </div>
-            </div>
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-semibold text-slate-700 mb-2">Stock Status</label>
+                  <Select
+                    value={filterStatus}
+                    onChange={(e) => setFilterStatus(e.target.value as any)}
+                  >
+                    <option value="all">All Status</option>
+                    <option value="in-stock">In Stock</option>
+                    <option value="low-stock">Low Stock</option>
+                    <option value="out-of-stock">Out of Stock</option>
+                    <option value="has-returns">Has Returns</option>
+                  </Select>
+                </div>
 
-            <div className="bg-slate-50 px-6 py-4 rounded-b-2xl flex gap-3">
-              <Button
-                onClick={() => { setFilterStatus('all'); setFilterCategory('all'); }}
-                variant="secondary"
-                fullWidth
-              >
-                Clear
-              </Button>
-              <Button
-                onClick={() => setShowFilterModal(false)}
-                variant="primary"
-                fullWidth
-                className="bg-gradient-to-r from-teal-600 to-teal-700"
-              >
-                Apply Filters
-              </Button>
-            </div>
+                <div>
+                  <label className="block text-sm font-semibold text-slate-700 mb-2">Category</label>
+                  <Select
+                    value={filterCategory}
+                    onChange={(e) => setFilterCategory(e.target.value)}
+                  >
+                    <option value="all">All Categories</option>
+                    {categories.map(cat => (
+                      <option key={cat.id} value={cat.id}>{cat.name}</option>
+                    ))}
+                  </Select>
+                </div>
+              </div>
+
+              <div className="flex gap-3 mt-6">
+                <Button
+                  onClick={() => { setFilterStatus('all'); setFilterCategory('all'); }}
+                  variant="secondary"
+                  fullWidth
+                >
+                  Clear
+                </Button>
+                <Button
+                  onClick={() => setShowFilterModal(false)}
+                  variant="primary"
+                  fullWidth
+                >
+                  Apply Filters
+                </Button>
+              </div>
+            </Card>
           </div>
         </div>
       )}
 
       {/* Add/Edit Modal */}
       {showAddModal && (
-        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-3xl max-h-[90vh] overflow-y-auto">
-            <div className="sticky top-0 bg-gradient-to-r from-teal-600 to-teal-700 px-8 py-6 rounded-t-2xl flex items-center justify-between z-10">
-              <h3 className="text-2xl font-bold text-white flex items-center gap-2">
-                {editingItem ? <Edit2 size={24} /> : <Plus size={24} />}
-                {editingItem ? 'Edit Item' : 'Add New Item'}
-              </h3>
-              <button onClick={() => setShowAddModal(false)} disabled={saving} className="text-white hover:bg-white/20 p-2 rounded-lg transition-colors">
-                <X size={24} />
-              </button>
-            </div>
+        <div className="fixed inset-0 bg-black/20 backdrop-blur-sm flex items-start justify-center p-4 z-50 overflow-y-auto">
+          <div className="min-h-screen w-full flex items-center justify-center py-8">
+            <Card className="w-full max-w-3xl">
+              <div className="flex items-center justify-between mb-6">
+                <h3 className="text-xl font-bold text-slate-900">
+                  {editingItem ? 'Edit Item' : 'Add New Item'}
+                </h3>
+                <button onClick={() => setShowAddModal(false)} disabled={saving} className="p-2 rounded-lg hover:bg-slate-100">
+                  <X size={24} />
+                </button>
+              </div>
 
-            <div className="p-8 space-y-6">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-semibold text-slate-700 mb-2">Item Name *</label>
-                  <input
-                    type="text"
+              <div className="space-y-6">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <Input
+                    label="Item Name *"
+                    placeholder="e.g., Premium Widget"
                     value={formData.name}
                     onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                    className="w-full px-4 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-teal-500 text-slate-900"
-                    placeholder="e.g., Premium Widget"
                     required
                   />
-                </div>
 
-                <div>
-                  <label className="block text-sm font-semibold text-slate-700 mb-2">SKU</label>
-                  <input
-                    type="text"
+                  <Input
+                    label="SKU"
+                    placeholder="e.g., SKU-001"
                     value={formData.sku}
                     onChange={(e) => setFormData({ ...formData, sku: e.target.value })}
-                    className="w-full px-4 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-teal-500 text-slate-900"
-                    placeholder="e.g., SKU-001"
                   />
-                </div>
 
-                <div>
-                  <label className="block text-sm font-semibold text-slate-700 mb-2">Barcode</label>
-                  <div className="flex gap-2">
-                    <input
-                      type="text"
-                      value={formData.barcode}
-                      onChange={(e) => setFormData({ ...formData, barcode: e.target.value })}
-                      className="flex-1 px-4 py-2.5 border-2 border-slate-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-teal-500 transition-all text-slate-900"
-                      placeholder="Enter or scan barcode"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => setShowBarcodeScanner(true)}
-                      className="px-4 py-2.5 bg-gradient-to-r from-blue-600 to-blue-700 text-white rounded-lg hover:from-blue-700 hover:to-blue-800 transition-all flex items-center gap-2 shadow-md"
-                    >
-                      <Camera size={18} />
-                      <span className="hidden sm:inline">Scan</span>
-                    </button>
+                  <div>
+                    <label className="block text-sm font-semibold text-slate-700 mb-2">Barcode</label>
+                    <div className="flex gap-2">
+                      <Input
+                        placeholder="Enter or scan barcode"
+                        value={formData.barcode}
+                        onChange={(e) => setFormData({ ...formData, barcode: e.target.value })}
+                        className="flex-1"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowBarcodeScanner(true)}
+                        className={`px-4 py-2.5 ${theme.classes.bgPrimary} text-white rounded-lg hover:opacity-90 transition-all flex items-center gap-2 shadow-md`}
+                      >
+                        <Camera size={18} />
+                        <span className="hidden sm:inline">Scan</span>
+                      </button>
+                    </div>
                   </div>
-                  <p className="text-xs text-slate-500 mt-1">Scan using camera or enter manually</p>
-                </div>
 
-                <div>
-                  <label className="block text-sm font-semibold text-slate-700 mb-2">Category</label>
-                  <select
-                    value={formData.category_id}
-                    onChange={(e) => setFormData({ ...formData, category_id: e.target.value })}
-                    className="w-full px-4 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-teal-500 text-slate-900"
-                  >
-                    <option value="">Select category</option>
-                    {categories.map(cat => <option key={cat.id} value={cat.id}>{cat.name}</option>)}
-                  </select>
-                </div>
+                  <div>
+                    <label className="block text-sm font-semibold text-slate-700 mb-2">Category</label>
+                    <Select
+                      value={formData.category_id}
+                      onChange={(e) => setFormData({ ...formData, category_id: e.target.value })}
+                    >
+                      <option value="">Select category</option>
+                      {categories.map(cat => <option key={cat.id} value={cat.id}>{cat.name}</option>)}
+                    </Select>
+                  </div>
 
-                <div>
-                  <label className="block text-sm font-semibold text-slate-700 mb-2">Unit</label>
-                  <select
-                    value={formData.unit_id}
-                    onChange={(e) => setFormData({ ...formData, unit_id: e.target.value })}
-                    className="w-full px-4 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-teal-500 text-slate-900"
-                  >
-                    <option value="">Select unit</option>
-                    {units.map(unit => <option key={unit.id} value={unit.id}>{unit.name} ({unit.abbreviation})</option>)}
-                  </select>
-                </div>
+                  <div>
+                    <label className="block text-sm font-semibold text-slate-700 mb-2">Unit</label>
+                    <Select
+                      value={formData.unit_id}
+                      onChange={(e) => setFormData({ ...formData, unit_id: e.target.value })}
+                    >
+                      <option value="">Select unit</option>
+                      {units.map(unit => <option key={unit.id} value={unit.id}>{unit.name} ({unit.abbreviation})</option>)}
+                    </Select>
+                  </div>
 
-                <div>
-                  <label className="block text-sm font-semibold text-slate-700 mb-2">MRP *</label>
-                  <input
+                  <Input
+                    label="MRP *"
                     type="number"
                     step="0.01"
+                    placeholder="0.00"
                     value={formData.mrp || ''}
                     onChange={(e) => setFormData({ ...formData, mrp: parseFloat(e.target.value) || 0 })}
-                    className="w-full px-4 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-teal-500 text-slate-900"
-                    placeholder="0.00"
                     required
                   />
-                </div>
 
-                <div>
-                  <label className="block text-sm font-semibold text-slate-700 mb-2">Retail Price *</label>
-                  <input
+                  <Input
+                    label="Retail Price *"
                     type="number"
                     step="0.01"
+                    placeholder="0.00"
                     value={formData.retail_price || ''}
                     onChange={(e) => setFormData({ ...formData, retail_price: parseFloat(e.target.value) || 0 })}
-                    className="w-full px-4 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-teal-500 text-slate-900"
-                    placeholder="0.00"
                     required
                   />
-                </div>
 
-                <div>
-                  <label className="block text-sm font-semibold text-slate-700 mb-2">Wholesale Price *</label>
-                  <input
+                  <Input
+                    label="Wholesale Price *"
                     type="number"
                     step="0.01"
+                    placeholder="0.00"
                     value={formData.wholesale_price || ''}
                     onChange={(e) => setFormData({ ...formData, wholesale_price: parseFloat(e.target.value) || 0 })}
-                    className="w-full px-4 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-teal-500 text-slate-900"
-                    placeholder="0.00"
                     required
                   />
-                </div>
 
-                <div>
-                  <label className="block text-sm font-semibold text-slate-700 mb-2">GST Rate (%) *</label>
-                  <input
+                  <Input
+                    label="GST Rate (%) *"
                     type="number"
+                    placeholder="18"
                     value={formData.gst_rate || ''}
                     onChange={(e) => setFormData({ ...formData, gst_rate: parseFloat(e.target.value) || 0 })}
-                    className="w-full px-4 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-teal-500 text-slate-900"
-                    placeholder="18"
                     required
                   />
-                </div>
 
-                <div>
-                  <label className="block text-sm font-semibold text-slate-700 mb-2">Min Stock Level *</label>
-                  <input
+                  <Input
+                    label="Min Stock Level *"
                     type="number"
+                    placeholder="10"
                     value={formData.min_stock_level || ''}
                     onChange={(e) => setFormData({ ...formData, min_stock_level: parseFloat(e.target.value) || 0 })}
-                    className="w-full px-4 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-teal-500 text-slate-900"
-                    placeholder="10"
                     required
                   />
-                </div>
 
-                <div>
-                  <label className="block text-sm font-semibold text-slate-700 mb-2">Max Stock Level</label>
-                  <input
+                  <Input
+                    label="Max Stock Level"
                     type="number"
+                    placeholder="0"
                     value={formData.max_stock_level || ''}
                     onChange={(e) => setFormData({ ...formData, max_stock_level: parseFloat(e.target.value) || 0 })}
-                    className="w-full px-4 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-teal-500 text-slate-900"
-                    placeholder="0"
                   />
+
+                  <div className="flex items-center gap-3 p-4 bg-slate-50 rounded-lg">
+                    <input
+                      type="checkbox"
+                      id="is_active"
+                      checked={formData.is_active}
+                      onChange={(e) => setFormData({ ...formData, is_active: e.target.checked })}
+                      className="w-5 h-5 rounded border-slate-300"
+                    />
+                    <label htmlFor="is_active" className="text-sm font-medium text-slate-700">Active Item</label>
+                  </div>
                 </div>
 
-                <div className="flex items-center gap-3 p-4 bg-slate-50 rounded-lg">
-                  <input
-                    type="checkbox"
-                    id="is_active"
-                    checked={formData.is_active}
-                    onChange={(e) => setFormData({ ...formData, is_active: e.target.checked })}
-                    className="w-5 h-5 rounded border-slate-300 text-teal-600 focus:ring-teal-500"
-                  />
-                  <label htmlFor="is_active" className="text-sm font-medium text-slate-700">Active Item</label>
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-sm font-semibold text-slate-700 mb-2">Description</label>
-                <textarea
+                <Textarea
+                  label="Description"
+                  placeholder="Product details..."
                   value={formData.description}
                   onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                  className="w-full px-4 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-teal-500 text-slate-900"
                   rows={3}
-                  placeholder="Product details..."
                 />
               </div>
-            </div>
 
-            <div className="sticky bottom-0 bg-slate-50 px-8 py-4 rounded-b-2xl flex gap-3 border-t border-slate-200">
-              <Button onClick={() => setShowAddModal(false)} variant="secondary" fullWidth disabled={saving}>
-                Cancel
-              </Button>
-              <Button 
-                onClick={handleSubmit} 
-                variant="primary" 
-                fullWidth 
-                disabled={saving}
-                className="bg-gradient-to-r from-teal-600 to-teal-700"
-              >
-                {saving ? 'Saving...' : editingItem ? 'Update Item' : 'Add Item'}
-              </Button>
-            </div>
+              <div className="flex gap-3 mt-6">
+                <Button onClick={() => setShowAddModal(false)} variant="secondary" fullWidth disabled={saving}>
+                  Cancel
+                </Button>
+                <Button onClick={handleSubmit} variant="primary" fullWidth loading={saving}>
+                  {editingItem ? 'Update Item' : 'Add Item'}
+                </Button>
+              </div>
+            </Card>
           </div>
         </div>
       )}
 
-      {/* Item Detail Modal - Same structure but with teal theme */}
+      {/* View Item Modal */}
       {showItemModal && selectedItem && (
-        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-5xl max-h-[90vh] overflow-y-auto">
-            <div className="sticky top-0 bg-gradient-to-r from-teal-600 to-teal-700 px-8 py-6 rounded-t-2xl z-10">
-              <div className="flex items-center justify-between mb-4">
+        <div className="fixed inset-0 bg-black/20 backdrop-blur-sm flex items-start justify-center p-4 z-50 overflow-y-auto">
+          <div className="min-h-screen w-full flex items-center justify-center py-8">
+            <Card className="w-full max-w-4xl">
+              <div className="flex items-center justify-between mb-6">
                 <div>
-                  <h3 className="text-2xl font-bold text-white">{selectedItem.name}</h3>
-                  <p className="text-teal-100">{selectedItem.category?.name || 'Uncategorized'}</p>
+                  <h3 className="text-2xl font-bold text-slate-900">{selectedItem.name}</h3>
+                  <p className="text-slate-600">{selectedItem.category?.name || 'Uncategorized'}</p>
                 </div>
-                <button onClick={() => setShowItemModal(false)} className="text-white hover:bg-white/20 p-2 rounded-lg transition-colors">
+                <button onClick={() => setShowItemModal(false)} className="p-2 rounded-lg hover:bg-slate-100">
                   <X size={24} />
                 </button>
               </div>
               
-              <div className="flex gap-2">
+              <div className="flex gap-2 mb-6">
                 {[
                   { id: 'details', label: 'Details', icon: Info },
                   { id: 'stock', label: 'Stock', icon: Package },
@@ -929,8 +839,8 @@ const InventoryManagement = () => {
                     onClick={() => setActiveTab(tab.id as any)}
                     className={`flex items-center gap-2 px-4 py-2 rounded-lg font-medium transition-all ${
                       activeTab === tab.id 
-                        ? 'bg-white text-teal-700 shadow-lg' 
-                        : 'text-white/80 hover:bg-white/20'
+                        ? `${theme.classes.bgPrimary} text-white shadow-md` 
+                        : 'text-slate-600 hover:bg-slate-100'
                     }`}
                   >
                     <tab.icon size={16} />
@@ -938,156 +848,146 @@ const InventoryManagement = () => {
                   </button>
                 ))}
               </div>
-            </div>
 
-            <div className="p-8">
-              {activeTab === 'details' && (
-                <div className="space-y-6">
-                  <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-                    {[
-                      { label: 'SKU', value: selectedItem.sku || 'N/A' },
-                      { label: 'Barcode', value: selectedItem.barcode || 'N/A' },
-                      { label: 'Unit', value: selectedItem.unit?.name || 'N/A' },
-                      { label: 'MRP', value: `₹${selectedItem.mrp}` },
-                      { label: 'Retail', value: `₹${selectedItem.retail_price}` },
-                      { label: 'Wholesale', value: `₹${selectedItem.wholesale_price}` },
-                      { label: 'GST Rate', value: `${selectedItem.gst_rate}%` },
-                      { label: 'Min Stock', value: selectedItem.min_stock_level },
-                      { label: 'Status', value: selectedItem.is_active ? 'Active' : 'Inactive' }
-                    ].map((field, i) => (
-                      <div key={i} className="p-4 bg-slate-50 rounded-xl border border-slate-200">
-                        <p className="text-xs font-semibold text-slate-600 mb-1">{field.label}</p>
-                        <p className="font-bold text-slate-900">{field.value}</p>
-                      </div>
-                    ))}
-                  </div>
-                  {selectedItem.description && (
-                    <div className="p-6 bg-slate-50 rounded-xl border border-slate-200">
-                      <p className="text-sm font-semibold text-slate-600 mb-2">Description</p>
-                      <p className="text-slate-900">{selectedItem.description}</p>
-                    </div>
-                  )}
-                  <Button 
-                    onClick={() => handleEditItem(selectedItem)} 
-                    variant="primary" 
-                    icon={<Edit2 size={18} />}
-                    className="bg-gradient-to-r from-teal-600 to-teal-700"
-                  >
-                    Edit Item
-                  </Button>
-                </div>
-              )}
-
-              {activeTab === 'stock' && (
-                <div className="space-y-6">
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    {[
-                      { label: 'Total Stock', value: selectedItem.current_stock, color: 'from-teal-500 to-teal-600' },
-                      { label: 'Normal Stock', value: selectedItem.normal_stock, color: 'from-green-500 to-green-600' },
-                      { label: 'Returned Stock', value: selectedItem.returned_stock, color: 'from-orange-500 to-orange-600' }
-                    ].map((stat, i) => (
-                      <div key={i} className={`p-6 bg-gradient-to-br ${stat.color} rounded-xl shadow-lg text-white`}>
-                        <Package size={32} className="mb-3 opacity-80" />
-                        <p className="text-4xl font-bold mb-1">{stat.value}</p>
-                        <p className="text-sm opacity-90">{stat.label}</p>
-                      </div>
-                    ))}
-                  </div>
-                  <div className="p-6 bg-amber-50 rounded-xl border-2 border-amber-200">
-                    <p className="text-sm text-amber-700 font-medium mb-2">Stock Value</p>
-                    <p className="text-3xl font-bold text-amber-900">
-                      ₹{(selectedItem.current_stock * selectedItem.retail_price).toLocaleString('en-IN')}
-                    </p>
-                  </div>
-                  <div className="flex items-center gap-4">
-                    {getStockBadge(selectedItem)}
-                    {selectedItem.current_stock <= selectedItem.min_stock_level && (
-                      <div className="flex items-center gap-2 text-orange-600 bg-orange-50 px-4 py-2 rounded-lg border border-orange-200">
-                        <AlertTriangle size={18} />
-                        <span className="text-sm font-medium">Below minimum stock level</span>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              )}
-
-              {activeTab === 'history' && (
-                <div>
-                  {loadingHistory ? (
-                    <div className="py-12 text-center"><LoadingSpinner size="md" /></div>
-                  ) : transactions.length === 0 ? (
-                    <EmptyState icon={<History size={48} className="text-slate-300" />} title="No history yet" description="Transaction history will appear here" />
-                  ) : (
-                    <div className="space-y-3">
-                      {transactions.map((txn) => (
-                        <div 
-                          key={txn.id} 
-                          className={`flex items-center justify-between p-5 rounded-xl border-l-4 ${
-                            txn.type === 'sale' 
-                              ? 'bg-red-50 border-red-500' 
-                              : txn.type === 'purchase' 
-                              ? 'bg-green-50 border-green-500' 
-                              : 'bg-orange-50 border-orange-500'
-                          }`}
-                        >
-                          <div className="flex items-center gap-4">
-                            <div className={`p-3 rounded-lg ${
-                              txn.type === 'sale' ? 'bg-red-100 text-red-600' :
-                              txn.type === 'purchase' ? 'bg-green-100 text-green-600' :
-                              'bg-orange-100 text-orange-600'
-                            }`}>
-                              {txn.type === 'sale' ? <TrendingUp size={20} /> : <Package size={20} />}
-                            </div>
-                            <div>
-                              <p className="font-bold text-slate-900">{txn.reference}</p>
-                              <p className="text-sm text-slate-600">{txn.notes}</p>
-                            </div>
-                          </div>
-                          <div className="text-right">
-                            <p className={`text-xl font-bold ${txn.quantity > 0 ? 'text-green-600' : 'text-red-600'}`}>
-                              {txn.quantity > 0 ? '+' : ''}{txn.quantity}
-                            </p>
-                            <p className="text-xs text-slate-500">{new Date(txn.date).toLocaleDateString('en-IN')}</p>
-                          </div>
+              <div>
+                {activeTab === 'details' && (
+                  <div className="space-y-6">
+                    <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                      {[
+                        { label: 'SKU', value: selectedItem.sku || 'N/A' },
+                        { label: 'Barcode', value: selectedItem.barcode || 'N/A' },
+                        { label: 'Unit', value: selectedItem.unit?.name || 'N/A' },
+                        { label: 'MRP', value: `₹${selectedItem.mrp}` },
+                        { label: 'Retail', value: `₹${selectedItem.retail_price}` },
+                        { label: 'Wholesale', value: `₹${selectedItem.wholesale_price}` },
+                        { label: 'GST Rate', value: `${selectedItem.gst_rate}%` },
+                        { label: 'Min Stock', value: selectedItem.min_stock_level },
+                        { label: 'Status', value: selectedItem.is_active ? 'Active' : 'Inactive' }
+                      ].map((field, i) => (
+                        <div key={i} className="p-4 bg-slate-50 rounded-xl border border-slate-200">
+                          <p className="text-xs font-semibold text-slate-600 mb-1">{field.label}</p>
+                          <p className="font-bold text-slate-900">{field.value}</p>
                         </div>
                       ))}
                     </div>
-                  )}
-                </div>
-              )}
+                    {selectedItem.description && (
+                      <div className="p-6 bg-slate-50 rounded-xl border border-slate-200">
+                        <p className="text-sm font-semibold text-slate-600 mb-2">Description</p>
+                        <p className="text-slate-900">{selectedItem.description}</p>
+                      </div>
+                    )}
+                    <Button onClick={() => handleEditItem(selectedItem)} variant="primary" icon={<Edit2 size={18} />}>
+                      Edit Item
+                    </Button>
+                  </div>
+                )}
 
-              {activeTab === 'settings' && (
-                <div className="space-y-6">
-                  <div className="bg-red-50 border-2 border-red-200 rounded-xl p-6">
-                    <div className="flex items-start gap-4">
-                      <div className="p-3 bg-red-100 rounded-lg">
-                        <AlertTriangle className="text-red-600" size={24} />
+                {activeTab === 'stock' && (
+                  <div className="space-y-6">
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                      {[
+                        { label: 'Total Stock', value: selectedItem.current_stock, bg: theme.classes.bgPrimary, text: 'text-white' },
+                        { label: 'Normal Stock', value: selectedItem.normal_stock, bg: 'bg-green-600', text: 'text-white' },
+                        { label: 'Returned Stock', value: selectedItem.returned_stock, bg: 'bg-orange-600', text: 'text-white' }
+                      ].map((stat, i) => (
+                        <div key={i} className={`p-6 ${stat.bg} rounded-xl shadow-lg ${stat.text}`}>
+                          <Package size={32} className="mb-3 opacity-80" />
+                          <p className="text-4xl font-bold mb-1">{stat.value}</p>
+                          <p className="text-sm opacity-90">{stat.label}</p>
+                        </div>
+                      ))}
+                    </div>
+                    <div className="p-6 bg-amber-50 rounded-xl border-2 border-amber-200">
+                      <p className="text-sm text-amber-700 font-medium mb-2">Stock Value</p>
+                      <p className="text-3xl font-bold text-amber-900">
+                        ₹{(selectedItem.current_stock * selectedItem.retail_price).toLocaleString('en-IN')}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-4">
+                      {getStockBadge(selectedItem)}
+                      {selectedItem.current_stock <= selectedItem.min_stock_level && (
+                        <div className="flex items-center gap-2 text-orange-600 bg-orange-50 px-4 py-2 rounded-lg border border-orange-200">
+                          <AlertTriangle size={18} />
+                          <span className="text-sm font-medium">Below minimum stock level</span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {activeTab === 'history' && (
+                  <div>
+                    {loadingHistory ? (
+                      <div className="py-12 text-center"><LoadingSpinner size="md" /></div>
+                    ) : transactions.length === 0 ? (
+                      <EmptyState icon={<History size={48} />} title="No history yet" description="Transaction history will appear here" />
+                    ) : (
+                      <div className="space-y-3">
+                        {transactions.map((txn) => (
+                          <div 
+                            key={txn.id} 
+                            className={`flex items-center justify-between p-5 rounded-xl border-l-4 ${
+                              txn.type === 'sale' 
+                                ? 'bg-red-50 border-red-500' 
+                                : txn.type === 'purchase' 
+                                ? 'bg-green-50 border-green-500' 
+                                : 'bg-orange-50 border-orange-500'
+                            }`}
+                          >
+                            <div className="flex items-center gap-4">
+                              <div className={`p-3 rounded-lg ${
+                                txn.type === 'sale' ? 'bg-red-100 text-red-600' :
+                                txn.type === 'purchase' ? 'bg-green-100 text-green-600' :
+                                'bg-orange-100 text-orange-600'
+                              }`}>
+                                {txn.type === 'sale' ? <TrendingUp size={20} /> : <Package size={20} />}
+                              </div>
+                              <div>
+                                <p className="font-bold text-slate-900">{txn.reference}</p>
+                                <p className="text-sm text-slate-600">{txn.notes}</p>
+                              </div>
+                            </div>
+                            <div className="text-right">
+                              <p className={`text-xl font-bold ${txn.quantity > 0 ? 'text-green-600' : 'text-red-600'}`}>
+                                {txn.quantity > 0 ? '+' : ''}{txn.quantity}
+                              </p>
+                              <p className="text-xs text-slate-500">{new Date(txn.date).toLocaleDateString('en-IN')}</p>
+                            </div>
+                          </div>
+                        ))}
                       </div>
-                      <div className="flex-1">
-                        <h4 className="font-bold text-red-900 text-lg mb-2">Delete Item</h4>
-                        <p className="text-sm text-red-700 mb-4">Permanently remove this item. This cannot be undone.</p>
-                        <Button 
-                          onClick={() => handleDeleteClick(selectedItem.id, selectedItem.name)} 
-                          variant="danger" 
-                          size="sm" 
-                          icon={<Trash2 size={16} />}
-                        >
-                          Delete Item
-                        </Button>
+                    )}
+                  </div>
+                )}
+
+                {activeTab === 'settings' && (
+                  <div className="space-y-6">
+                    <div className="bg-red-50 border-2 border-red-200 rounded-xl p-6">
+                      <div className="flex items-start gap-4">
+                        <div className="p-3 bg-red-100 rounded-lg">
+                          <AlertTriangle className="text-red-600" size={24} />
+                        </div>
+                        <div className="flex-1">
+                          <h4 className="font-bold text-red-900 text-lg mb-2">Delete Item</h4>
+                          <p className="text-sm text-red-700 mb-4">Permanently remove this item. This cannot be undone.</p>
+                          <Button onClick={() => handleDeleteClick(selectedItem.id, selectedItem.name)} variant="danger" size="sm" icon={<Trash2 size={16} />}>
+                            Delete Item
+                          </Button>
+                        </div>
+                      </div>
+                    </div>
+                    <div className="p-6 bg-slate-50 rounded-xl border border-slate-200">
+                      <h4 className="font-bold text-slate-900 mb-3">Item Information</h4>
+                      <div className="space-y-2 text-sm text-slate-600">
+                        <p>Created: {new Date(selectedItem.created_at).toLocaleString('en-IN')}</p>
+                        <p>Last Updated: {new Date(selectedItem.updated_at).toLocaleString('en-IN')}</p>
+                        <p className="font-mono text-xs text-slate-400">ID: {selectedItem.id}</p>
                       </div>
                     </div>
                   </div>
-                  <div className="p-6 bg-slate-50 rounded-xl border border-slate-200">
-                    <h4 className="font-bold text-slate-900 mb-3">Item Information</h4>
-                    <div className="space-y-2 text-sm text-slate-600">
-                      <p>Created: {new Date(selectedItem.created_at).toLocaleString('en-IN')}</p>
-                      <p>Last Updated: {new Date(selectedItem.updated_at).toLocaleString('en-IN')}</p>
-                      <p className="font-mono text-xs text-slate-400">ID: {selectedItem.id}</p>
-                    </div>
-                  </div>
-                </div>
-              )}
-            </div>
+                )}
+              </div>
+            </Card>
           </div>
         </div>
       )}
@@ -1103,7 +1003,6 @@ const InventoryManagement = () => {
         variant="danger" 
       />
 
-      {/* Barcode Scanner Modal */}
       <BarcodeScanner
         isOpen={showBarcodeScanner}
         onClose={() => setShowBarcodeScanner(false)}
