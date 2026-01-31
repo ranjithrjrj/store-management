@@ -414,7 +414,7 @@ const CustomersManagement = () => {
         
         {/* Header */}
         <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6">
-          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-4">
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-4">
             <div className="flex items-center gap-3">
               <div className={`p-3 ${theme.classes.bgPrimaryLight} rounded-xl`}>
                 <Users className={theme.classes.textPrimary} size={28} />
@@ -428,14 +428,14 @@ const CustomersManagement = () => {
               <Button onClick={handleExportCSV} variant="secondary" icon={<Download size={18} />}>
                 Export
               </Button>
-              <Button onClick={handleAddNew} variant="primary" icon={<Plus size={18} />}>
+              <Button onClick={handleAddNew} variant="primary" icon={<Plus size={20} />}>
                 Add Customer
               </Button>
             </div>
           </div>
 
-          {/* Stats Cards */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          {/* Summary Cards */}
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
             <div className={`${theme.classes.bgPrimaryLight} rounded-xl p-4`}>
               <p className={`text-sm ${theme.classes.textPrimary} font-medium`}>Total Customers</p>
               <p className={`text-2xl font-bold ${theme.classes.textPrimary} mt-1`}>{stats.total}</p>
